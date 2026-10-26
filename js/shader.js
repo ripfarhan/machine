@@ -9,7 +9,8 @@ uniform sampler2D tBase, tOver, tText, tPrev, tPat;
 uniform vec2 uRes;
 uniform float uTime, uPulse, uHue, uCycle, uReps, uSplit, uTear, uPix, uScan, uGrain, uFeed, uRings, uGlow, uWarp, uThresh,
   uPattern, uPatInv, uTextSplit, uMirror, uSeed, uDim, uOverOn, uTextOn, uSat, uCon, uPoster, uLookMix, uSlice, uSort, uRoll, uMelt, uZoom, uShake, uKaleido, uSpin,
-  uEdges, uHalf, uDither, uLookSwap, uBlur, uDisp, uLeak, uBlendAmt, uTone, uTextAlpha, uPolar, uGhost, uBands;
+  uEdges, uHalf, uDither, uLookSwap, uBlur, uDisp, uLeak, uBlendAmt, uTone, uTextAlpha, uPolar, uGhost, uBands,
+  uSmear, uSmearA, uShock, uShockT, uShockN, uTaffy, uSlit, uWeave, uCorrupt, uOil, uContour, uLed, uVeil;
 uniform int uLookA, uLookB, uLook2, uTextMode, uBlendMode;
 uniform vec3 uPalA[4]; uniform vec3 uPalB[4]; uniform vec3 uPal2[4];
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
@@ -61,12 +62,18 @@ void main(){
   if(uSlice>0.){ float sl = floor(uv.y*uRes.y/mix(60.,8.,uSlice)); float hs = hash(vec2(sl,tq+uSeed)); if(hs > 1.-uSlice*.5) uv.x += (hs-.5)*uSlice*.5; }
   // organic tear: feathered noise bands shoved sideways
   if(uTear>0.){ float tn = fbm(vec2(uv.y*5.+uSeed, tq*.9)); float m = smoothstep(1.-uTear*.55, 1.-uTear*.55+.08, tn); uv.x += m*(fbm(vec2(uv.y*25., tq))-.5)*uTear*.5; uv.y += m*(hash(vec2(tq,uSeed))-.5)*uTear*.05; }
+  if(uShock>0. && uShockT<.6){ vec2 ctr = vec2(.25+.5*hash(vec2(uShockN,uSeed)), .25+.5*hash(vec2(uShockN+7.,uSeed))); vec2 dd = uv-ctr; float L = length(dd*vec2(asp,1.))+1e-4;
+    float w = sin(L*46. - uShockT*22.)*exp(-L*4.5)*exp(-uShockT*6.); uv += (dd/L)*w*uShock*.07; }
+  if(uTaffy>0.){ float nb = mix(6.,18.,fract(uSeed*3.7)); float b = floor(uv.y*nb); float h = hash(vec2(b, tq+uSeed)); float c0 = (b+.5)/nb;
+    float k = mix(1., mix(.22, 3.2, h), uTaffy*step(.55,h)); uv.y = clamp(c0 + (uv.y-c0)*k, 0., 1.); }
+  if(uSlit>0.){ float L = mix(.8,.3,fract(uSeed*9.1)) + sin(uTime*.6)*.07; float m2 = smoothstep(0.,.03,uv.y-L); uv.y = mix(uv.y, L, m2*uSlit); }
   if(uPix>1.){ vec2 g = uRes/uPix; uv = (floor(uv*g)+.5)/g; }
   // ---- sample ----
   float s = uSplit*.012*(1.+uPulse*1.5);
   vec2 rdir = normalize((vUv-.5)*vec2(asp,1.)+1e-4); vec2 sdir = mix(vec2(1.,0.), rdir, step(.5, fract(uSeed*3.1)));
   vec3 base = sampleBase(uv, s, sdir);
   if(uBlur>0.){ vec3 acc = base; for(int i=1;i<10;i++){ float k = float(i)/9.; acc += sampleBase(mix(uv, vec2(.5), k*uBlur*.22), s, sdir); } base = acc/10.; }
+  if(uSmear>0.){ vec2 dir = vec2(cos(uSmearA), sin(uSmearA))/uRes*13.; vec3 acc2 = base; for(int i=1;i<12;i++) acc2 += texture(tBase, uv+dir*float(i*i)*.42*uSmear).rgb; base = acc2/12.; }
   base = clamp(base - vec3(max(0., uThresh-.5)*.5) + vec3(max(0., .4-uThresh)*.15), 0., 1.);
   if(uGhost>0.){ vec2 go = vec2(sin(uTime*3.1+uSeed), cos(uTime*2.3))*uGhost*.045; vec3 g1 = texture(tBase, uv+go).rgb, g2 = texture(tBase, uv-go*1.7).rgb; base = mix(base, abs(base-g1)*1.3 + g2*.45, min(1.,uGhost)*.85); }
   if(uSort>0.){ // pixel sort: bright pixels pulled down along their bright run
@@ -81,6 +88,8 @@ void main(){
   col = sat(col, uSat); col = (col-.5)*uCon+.5;
   if(uTone>0.){ float l = luma(col); vec3 ink = mix(uPalA[0], uPalA[3], smoothstep(uThresh-.08, uThresh+.08, l + (fbm(vUv*uRes*.02)-.5)*.25)); col = mix(col, ink, uTone); }
   if(uPoster>0.){ float lv = mix(24.,3.,uPoster); col = mix(col, floor(col*lv+.5)/lv, smoothstep(0.,.1,uPoster)); }
+  if(uCorrupt>0.){ vec2 b2 = floor(uv*uRes/16.); float h1 = hash(b2+tq*.37+uSeed*3.); if(h1 > 1.-uCorrupt*.5){ float h2 = hash(b2+2.3);
+    col = h2<.33 ? col.brg : h2<.66 ? col.gbr : clamp(col + (vec3(hash(b2+3.1),hash(b2+4.2),hash(b2+5.3))-.5)*.85, 0., 1.); } }
   col *= 1.-uDim;
   if(uPattern>0.){ float m = smoothstep(uThresh-.07,uThresh+.07,luma(base)); m = mix(m,1.-m,uPatInv); vec4 pt = texture(tPat, vUv); col = mix(col, mix(pt.rgb, 1.-(1.-col)*(1.-pt.rgb), .5), pt.a*m*uPattern*.85); }
   if(uOverOn>.5){ vec4 ov = texture(tOver, uv); vec3 oc = vec3(texture(tOver,uv+vec2(s*.6,0.)).r, ov.g, texture(tOver,uv-vec2(s*.6,0.)).b);
@@ -93,8 +102,14 @@ void main(){
   if(uGlow>0.){ vec3 gsum = vec3(0.); for(int i=0;i<8;i++){ float a = float(i)*.7854; vec2 off = vec2(cos(a),sin(a)*asp); gsum += max(texture(tBase,uv+off*.012).rgb-.55,0.) + max(texture(tBase,uv+off*.03).rgb-.55,0.); } col += gsum/16.*uGlow*2.2*(1.+uPulse); }
   if(uRings>0.){ vec2 q = (vUv-vec2(.5,.45))*vec2(asp,1.); float d = length(q); float r = smoothstep(.55,1.,.5+.5*sin(d*85.-uTime*7.)); vec3 rc = gmap(fract(d*2.5-uTime*.25), uPalA); col = 1.-(1.-col)*(1.-rc*r*uRings*.55*(1.-smoothstep(.2,.75,d)*.5)); }
   if(uLeak>0.){ vec2 lc = vec2(step(.5,fract(uSeed*7.7)), step(.5,fract(uSeed*3.3))); float d = 1.-smoothstep(0., 1.1, distance(vUv*vec2(asp,1.), lc*vec2(asp,1.))); vec3 lk = gmap(fract(uSeed+uTime*.1), uPalB)*1.4; col = 1.-(1.-col)*(1.-lk*d*d*uLeak); }
+  if(uOil>0.){ vec2 e2 = 2./uRes; float gx = luma(texture(tBase,uv+vec2(e2.x,0.)).rgb)-luma(texture(tBase,uv-vec2(e2.x,0.)).rgb), gy = luma(texture(tBase,uv+vec2(0.,e2.y)).rgb)-luma(texture(tBase,uv-vec2(0.,e2.y)).rgb);
+    float ang = atan(gy, gx), l2 = luma(col); vec3 ir = .5+.5*cos(vec3(0.,2.1,4.2)+ang*2.+l2*9.+uTime*.8); col = mix(col, ir*(.3+l2), uOil*smoothstep(.015,.12,length(vec2(gx,gy)))); }
+  if(uContour>0.){ float l3 = luma(col)*mix(5.,12.,fract(uSeed*2.9)); float line = smoothstep(.14,.03,abs(fract(l3)-.5)); col = mix(col, uPalA[3], line*uContour*.9); }
   if(uHalf>0.){ vec2 g = vUv*uRes/mix(14.,6.,uHalf); vec2 cell = fract(g)-.5; float l = luma(col); float dot_ = smoothstep(l*.8, l*.8-.15, length(cell)); col = mix(col, mix(uPalA[0], col*1.3, dot_), uHalf); }
   if(uDither>0.){ float b = bayer(gl_FragCoord.xy); vec3 d1 = step(vec3(b), col); col = mix(col, d1, uDither); }
+  if(uLed>0.){ float cell = mix(90.,26.,uLed); vec2 g = vUv*vec2(asp,1.)*cell; vec2 cuv = (floor(g)+.5)/cell; vec3 sm2 = texture(tBase, vec2(cuv.x/asp, cuv.y)).rgb;
+    float dot2 = smoothstep(.46,.3,length(fract(g)-.5)); col = mix(col, sm2*dot2*1.55, uLed); }
+  if(uWeave>0.){ float cw = mix(42.,9.,fract(uSeed*5.2)); float colId = floor(vUv.x*cw); if(hash(vec2(colId, uSeed)) < uWeave*.6) col = texture(tPrev, uv).rgb; }
   // ---- feedback / melt ----
   if(uFeed>0. || uMelt>0.){ vec3 pv = texture(tPrev, (vUv-.5)*(1.-.014*uFeed)+.5).rgb; col = mix(col, max(col, pv*.82), uFeed*.9);
     if(uMelt>0.){ float mn = fbm(vec2(vUv.x*4., vUv.y*2.)+tq*.13+uSeed); float m = smoothstep(1.-uMelt*.5, 1.-uMelt*.5+.12, mn); vec3 mv = texture(tPrev, vUv + vec2((fbm(vUv*6.+tq)-.5)*.02, -uMelt*.04*mn)).rgb; col = mix(col, mv, m*.9); } }
@@ -108,6 +123,7 @@ void main(){
   if(uBands>.2){ float nb = floor(mix(3.,14.,fract(uSeed*5.3))); float b = step(.5, fract(vUv.y*nb + hash(vec2(tq,uSeed)))); col = mix(col, 1.-col, b*smoothstep(.25,.55,uBands)); }
   col *= 1.-uScan*.32*(.5+.5*sin(vUv.y*uRes.y*1.5708));
   if(uScan>0. && hash(vec2(floor(vUv.y*90.),tq)) > .985) col = mix(col, vec3(luma(col)*1.3), .6*uScan);
+  if(uVeil>0.){ float lv2 = luma(col); float nz = hash(vUv*uRes + fract(uTime*9.)*113.); col = mix(col, vec3(nz*nz*1.2), uVeil*smoothstep(.5,.06,lv2)); }
   col += (hash(vUv*uRes+fract(uTime*7.)*91.)-.5)*uGrain*.28;
   o = vec4(clamp(col,0.,1.),1.);
 }`;

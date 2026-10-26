@@ -36,7 +36,7 @@ No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 | `js/util.js` | shared helpers |
 | `js/fonts.js` | font library and font sets |
 | `js/motifs.js` | symbol library and arrangements (scatter, mandala, frame, column, giant, trail, wallpaper) |
-| `js/presets.js` | palettes, dial definitions, the 19 styles |
+| `js/presets.js` | palettes, dial definitions, the 58 styles |
 | `js/analysis.js` | audio analysis |
 | `js/shader.js` | GLSL effect chain |
 | `js/mp4.js` | MP4 muxer and codec picker |
@@ -51,6 +51,21 @@ No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 - **A motif**: add a draw function to `MOTIFS` in `js/motifs.js`.
 - **An effect**: add a uniform and a block to the fragment shader in
   `js/shader.js`, a dial row in `PARAMS`, and set the uniform in `renderAt`.
+
+## Drop handling
+
+Two independent toggles under the analysis panel, both keyed to the same
+moment (the cyan line on the timeline):
+
+- **Flashes only after the drop** — before it, clean media cuts only: no
+  invert bursts, white/black flashes, strobe, band-inverts or flash cuts.
+- **Build-up mode** — goes further: the whole effect stack is damped by the
+  *calm* amount (and flashes are held) until the drop, then slams back to
+  full power with nothing changed after it.
+
+**Drop at** overrides the detected moment: leave it empty for the auto-detected
+drop, type a time in reel seconds, or hit *Drop at playhead*. Both toggles, the
+calm amount and the manual time are saved in recipes.
 
 ## Recipes
 

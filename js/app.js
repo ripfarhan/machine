@@ -29,7 +29,7 @@ function randomizeDials(){
    ========================================================= */
 const state = {
   media: [], preset: 'overdrive', seed: 1312, react: 1, intensity: 1, clarity: .6, exSize: 1080, exQ: 16, exporting: false, fontSet: 'auto', lengthSel: 30, fps: 60, clipFrames: 24,
-  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0,
+  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0, preDrop: false, preCalm: .7, dropAt: null,
   dur: 30, A: null, grid: null, off: 0, score: null, flkPattern: 'burst'
 };
 function sig(name, t){
@@ -52,7 +52,7 @@ function val(id, t){
   if (DISTORT.has(id)) v *= 1 - state.clarity * .85; else if (id === 'lookMix') v *= 1 - state.clarity * .55; else if (id === 'feedback' || id === 'lookSwap') v *= 1 - state.clarity * .6;
   return clamp(v, def[3], def[4]);
 }
-const DISTORT = new Set(['warp','displace','tear','melt','pixelSort','kaleido','spin','sliceShift','badTV','pixelate','punchBlur','tone','posterize','pattern','overlapMove','polar','ghost']);
+const DISTORT = new Set(['warp','displace','tear','melt','pixelSort','kaleido','spin','sliceShift','badTV','pixelate','punchBlur','tone','posterize','pattern','overlapMove','polar','ghost','smear','shockwave','taffy','slitscan','weave','corrupt','led','oilslick']);
 const hype = t => sig('hype', t), punch = t => sig('punch', t);
 
 /* =========================================================
@@ -224,7 +224,8 @@ function buildScore(){
   const per = state.grid.per, beats = state.grid.beats;
   // drop gate: the reel-time moment flashes are allowed to start (first drop; else first hype>=.75; else 0 = no gate)
   { let g = 0; const dd = ((state.A.dropTimes) || []).map(d => d - state.off).filter(x => x >= .5 && x < dur); if (dd.length) g = dd[0];
-    else { for (let q = 0; q < dur; q += .1){ if (sig('hype', q) >= .75){ g = q; break; } } } state.gateT = g; }
+    else { for (let q = 0; q < dur; q += .1){ if (sig('hype', q) >= .75){ g = q; break; } } }
+    if (state.dropAt !== null && state.dropAt > 0) g = clamp(state.dropAt, 0, dur); state.gateT = g; }
   const cuts = []; let t = 0, lastM = -1, prevCut = null, flashReturn = null;
   const isClip = i => media[((i % nM) + nM) % nM].type === 'clip';
   const cw = val('clipWeight', dur / 2); // clips weighted up to 5x photos in the pick
@@ -280,7 +281,7 @@ function buildScore(){
     if (!doCut && holdFrames > fps * per * (hy > .6 ? 1 : 2.5) * (1 + clipH * 1.5)) doCut = true;
     // flash cuts: 1-3 frame insert then return
     if (flashReturn !== null){ if (t >= flashReturn){ flashReturn = null; cur.end = t; const back = prevCut; cur = Object.assign({}, back, {start: t, end: t, isFlash: false, clipStart: back.clipStart + 3}); cuts.push(cur); holdFrames = 0; } continue; }
-    if (!doCut && flash > 0 && pu > .7 && hy > .35 && !(state.dropGate && t < state.gateT) && r() < flash * flash * (hy + pu) * .45){ isFlash = true; doCut = true; }
+    if (!doCut && flash > 0 && pu > .7 && hy > .35 && !((state.dropGate || state.preDrop) && t < state.gateT) && r() < flash * flash * (hy + pu) * .45){ isFlash = true; doCut = true; }
     if (doCut && !isFlash && holdFrames < minHold) doCut = false;
     if (doCut){
       cur.end = t; prevCut = cur; const m = other(lastM); cur = newCut(t, m, isFlash); cuts.push(cur); holdFrames = 0; lastM = isFlash ? lastM : m;
@@ -380,12 +381,14 @@ function renderAt(t){
   const S = state.score, c = cutAt(S.cuts, t), media = pool(), dur = Math.max(.001, c.end - c.start);
   const chop = val('chop', t), tq = chop > .02 ? (q => Math.floor(t * q) / q)(lerp(14, 3.5, chop)) : t; // chopped clock for motion only
   const k = ease(clamp((tq - c.start) / dur, 0, 1));
-  const pu = punch(t), hy = hype(t), I = state.intensity, bp = sig('beat', tq), pulse = Math.exp(-bp * 6) * (bp > 0 ? 1 : 0);
+  const preK = state.preDrop && t < (state.gateT || 0) ? state.preCalm : 0; // build-up: damp everything before the drop
+  const pu = punch(t), hy = hype(t), I = state.intensity * (1 - preK * .6), bp = sig('beat', tq), pulse = Math.exp(-bp * 6) * (bp > 0 ? 1 : 0);
   const M = i => media[i % media.length], v = id => val(id, t);
   // clean hits: for a few frames after each kick the effect stack drops away and the raw footage shows
   let fxMul = 1; { const cl = v('cleanHits'); if (cl > 0){ const L = S.trig.kick || []; const i = lastTrig(L, tq); if (i >= 0) fxMul = 1 - cl * .9 * Math.exp(-(tq - L[i]) * 16); } }
+  fxMul *= 1 - preK * .8;
   const clarityOv = 1 - state.clarity * .4;
-  const fGate = state.dropGate && t < (state.gateT || 0) ? 0 : 1; // flashes held back until the drop
+  const fGate = (state.dropGate || state.preDrop) && t < (state.gateT || 0) ? 0 : 1; // flashes held back until the drop
   const zoom = v('zoomPunch') * I, punchZ = 1 + .06 * zoom * pulse;
   xBase.fillStyle = '#000'; xBase.fillRect(0, 0, W, H);
   const fi = clipFrame(c, M(c.m), tq);
@@ -421,7 +424,10 @@ function renderAt(t){
   f1('uThresh', M(c.m).lum || .5); f1('uPattern', pat * fxMul); f1('uPatInv', (M(c.m).lum || .5) > .55 ? 1 : (M(c.m).lum || .5) < .4 ? 0 : (c.seed % 1 < .5 ? 1 : 0)); f1('uTextSplit', ev ? v('wordGlitch') * 1.5 : .3);
   f1('uMirror', v('mirror')); f1('uSeed', c.seed); f1('uDim', c.layout === 'pip' ? .5 : 0); f1('uOverOn', overOn); f1('uTextOn', textOn);
   f1('uSat', v('saturate')); f1('uCon', v('contrast')); f1('uPoster', v('posterize') * fxMul); f1('uLookMix', v('lookMix') * fxMul); f1('uSlice', v('sliceShift') * I * fxMul); f1('uSort', v('pixelSort') * fxMul); f1('uRoll', v('badTV') * fxMul);
-  f1('uMelt', v('melt') * fxMul); f1('uZoom', zoom * pulse); f1('uShake', v('shake') * I * (.3 + pu)); f1('uKaleido', v('kaleido') * fxMul); f1('uSpin', v('spin') * fxMul); f1('uEdges', v('edges') * fxMul); f1('uPolar', v('polar') * fxMul); f1('uGhost', v('ghost') * fxMul); f1('uBands', v('bands') * I * fxMul * fGate); f1('uHalf', v('halftone')); f1('uDither', v('dither')); f1('uLookSwap', lookSwap * fxMul);
+  f1('uMelt', v('melt') * fxMul); f1('uZoom', zoom * pulse); f1('uShake', v('shake') * I * (.3 + pu)); f1('uKaleido', v('kaleido') * fxMul); f1('uSpin', v('spin') * fxMul); f1('uEdges', v('edges') * fxMul); f1('uPolar', v('polar') * fxMul); f1('uGhost', v('ghost') * fxMul); f1('uBands', v('bands') * I * fxMul * fGate);
+  { const L = S.trig.kick || [], ki = lastTrig(L, tq); f1('uShock', v('shockwave') * I * fxMul); f1('uShockT', ki >= 0 ? tq - L[ki] : 9); f1('uShockN', ki); }
+  f1('uSmear', v('smear') * I * fxMul); f1('uSmearA', c.seed * 2.39996); f1('uTaffy', v('taffy') * I * fxMul); f1('uSlit', v('slitscan') * fxMul); f1('uWeave', v('weave') * fxMul);
+  f1('uCorrupt', v('corrupt') * I * fxMul); f1('uOil', v('oilslick') * fxMul); f1('uContour', v('contour') * fxMul); f1('uLed', v('led')); f1('uVeil', v('staticveil') * fxMul); f1('uHalf', v('halftone')); f1('uDither', v('dither')); f1('uLookSwap', lookSwap * fxMul);
   i1('uLookA', c.lookA); i1('uLookB', c.lookB); i1('uLook2', c.look2); i1('uTextMode', ev ? ev.mode : 0);
   gl.uniform3fv(U.uPalA, PAL[c.palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[cur]); gl.viewport(0, 0, W, H); gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -442,7 +448,7 @@ function drawStrip(){
   sx.strokeStyle = '#f2ecf5'; sx.lineWidth = 1; sx.globalAlpha = .7; sx.beginPath(); for (let x = 0; x < w; x += 2){ const v = sig('loud', x / w * state.dur), y = h - 2 - v * (h - 46); x ? sx.lineTo(x, y) : sx.moveTo(x, y); } sx.stroke(); sx.globalAlpha = 1;
   sx.fillStyle = '#ff3d8b'; (state.A.dropTimes || []).forEach(d => { const t = d - state.off; if (t >= 0 && t < state.dur){ sx.fillRect(t / state.dur * w - 1, 0, 3, h); } });
   sx.fillStyle = 'rgba(242,236,245,.5)'; for (const e of S.texts) sx.fillRect(e.start / state.dur * w, 40, 2, 8);
-  if (state.dropGate && state.gateT > 0){ sx.fillStyle = '#41e6ff'; sx.fillRect(state.gateT / state.dur * w - 1, 0, 2, h); }
+  if ((state.dropGate || state.preDrop) && state.gateT > 0){ sx.fillStyle = '#41e6ff'; sx.fillRect(state.gateT / state.dur * w - 1, 0, 2, h); }
   if (typeof drawRegion === 'function') drawRegion();
 }
 const sigC = $('#sigc'), sgx = sigC.getContext('2d');
@@ -657,6 +663,11 @@ $('#setIn').onclick = () => { const t = now(); setRegion(t, state.rOut === null 
 $('#setOut').onclick = () => { const t = now(); setRegion(state.rIn === null || state.rIn >= t ? 0 : state.rIn, t); };
 $('#clearRegion').onclick = () => setRegion(null, null);
 $('#dropGate').onchange = e => { state.dropGate = e.target.checked; rebuild(); };
+$('#preDrop').onchange = e => { state.preDrop = e.target.checked; rebuild(); };
+$('#preCalm').oninput = e => { state.preCalm = +e.target.value; $('#preCalmOut').textContent = state.preCalm.toFixed(2); };
+$('#preCalm').onchange = () => { if (!playing) frame(); };
+$('#dropAt').onchange = e => { state.dropAt = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); e.target.value = state.dropAt === null ? '' : state.dropAt; rebuild(); };
+$('#dropNow').onclick = () => { state.dropAt = +now().toFixed(2); $('#dropAt').value = state.dropAt; rebuild(); };
 $('#rIn').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(v, state.rOut === null && v !== null ? state.dur : state.rOut); };
 $('#rOut').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(state.rIn === null && v !== null ? 0 : state.rIn, v); };
 document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; const k = e.key.toLowerCase(); if (k === 'i') $('#setIn').click(); else if (k === 'o') $('#setOut').click(); else if (k === 'x') $('#clearRegion').click(); });
@@ -664,7 +675,7 @@ document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(doc
 
 
 /* ---- recipes: the whole setup as a small JSON ---- */
-function recipe(){ return {v: 2, app: 'glitch-reel-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate,
+function recipe(){ return {v: 2, app: 'glitch-reel-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate, preDrop: state.preDrop, preCalm: state.preCalm, dropAt: state.dropAt,
   lengthSel: state.lengthSel, fps: state.fps, bpm: state.bpm, beatSeed: state.beatSeed, words: $('#lyrics').value, dials: JSON.parse(JSON.stringify(P))}; }
 function applyRecipe(R){
   if (!R || !R.dials) throw new Error('not a recipe');
@@ -672,6 +683,8 @@ function applyRecipe(R){
   state.flkPattern = FLK_PATTERNS[R.flkPattern] ? R.flkPattern : state.flkPattern; state.fontSet = FONT_SETS[R.fontSet] !== undefined ? R.fontSet : 'auto'; if (R.lengthSel !== undefined) state.lengthSel = +R.lengthSel; if (R.fps) state.fps = +R.fps;
   if (R.bpm) state.bpm = +R.bpm; if (R.beatSeed) state.beatSeed = +R.beatSeed; if (typeof R.words === 'string') $('#lyrics').value = R.words;
   state.dropGate = !!R.dropGate; const dg = $('#dropGate'); if (dg) dg.checked = state.dropGate;
+  state.preDrop = !!R.preDrop; state.preCalm = R.preCalm === undefined ? .7 : clamp(+R.preCalm || 0, 0, 1); state.dropAt = (R.dropAt === undefined || R.dropAt === null) ? null : Math.max(0, +R.dropAt || 0);
+  { const a = $('#preDrop'); if (a) a.checked = state.preDrop; const c = $('#preCalm'); if (c){ c.value = state.preCalm; $('#preCalmOut').textContent = state.preCalm.toFixed(2); } const d = $('#dropAt'); if (d) d.value = state.dropAt === null ? '' : state.dropAt; }
   for (const id in R.dials){ if (P[id] && typeof R.dials[id] === 'object'){ const d = R.dials[id]; P[id] = {base: +d.base || 0, src: SIGNALS.includes(d.src) ? d.src : 'const', depth: +d.depth || 0}; } }
   $('#seed').value = state.seed; $('#react').value = state.react; $('#reactOut').textContent = state.react.toFixed(1); $('#intensity').value = state.intensity; $('#intOut').textContent = state.intensity.toFixed(1); $('#clarity').value = state.clarity; $('#clarOut').textContent = state.clarity.toFixed(2).replace(/0$/, '');
   { const opt = [...$('#length').options].some(o => +o.value === state.lengthSel); $('#length').value = opt ? String(state.lengthSel) : '-1'; $('#lenCustom').hidden = opt; if (!opt){ state.lenCustom = state.lengthSel; $('#lenCustom').value = state.lengthSel; } } $('#fps').value = String(state.fps); $('#fontSet').value = state.fontSet; $('#bpm').value = state.bpm; $('#bpmOut').textContent = state.bpm;
