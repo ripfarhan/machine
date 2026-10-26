@@ -122,18 +122,30 @@ async function addGIF(file, isSample){
 }
 function addVideo(file, isSample){
   // Bursts: short runs of consecutive frames grabbed from random points in the clip, so cuts can land anywhere and still show real motion.
+  // Every wait here is capped: a clip whose metadata, data or seek events never fire must not stall the app.
   return new Promise((res, rej) => {
-    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = URL.createObjectURL(file);
-    const frames = [], BURST = 6, BFPS = 15; let D = 0;
-    const seekTo = t => new Promise(r => { v.onseeked = () => r(); v.currentTime = t; });
-    v.onloadedmetadata = async () => { try { D = v.duration; if (!isFinite(D) || D <= 0){ D = 2; }
-      await new Promise(r => { if (v.readyState >= 2) r(); else v.onloadeddata = r; });
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto';
+    const url = URL.createObjectURL(file); v.src = url;
+    const frames = [], BURST = 6, BFPS = 15; let D = 0, settled = false;
+    const close = () => { try { URL.revokeObjectURL(url); } catch(e){} try { v.src = ''; v.load(); } catch(e){} };
+    const ok = m => { if (settled) return; settled = true; close(); res(m); };
+    const fail = e => { if (settled) return; settled = true; close(); rej(e); };
+    const once = (set, ms) => new Promise(r => { let fired = false; const go = v2 => { if (fired) return; fired = true; clearTimeout(tm); r(v2); }; const tm = setTimeout(() => go(true), ms); set(go); });
+    // resolves true when the seek never landed; two stalls in a row means this clip will not seek at all
+    const seekTo = t => once(go => { v.onseeked = () => go(false); try { v.currentTime = t; } catch(e){ go(true); } }, 2500);
+    let stalls = 0;
+    const metaTimer = setTimeout(() => fail(new Error('timed out reading ' + file.name)), 15000);
+    v.onloadedmetadata = async () => { clearTimeout(metaTimer); try { D = v.duration; if (!isFinite(D) || D <= 0){ D = 2; }
+      if (v.readyState < 2) await once(go => { v.onloadeddata = go; }, 8000);
       const total = Math.max(BURST, Math.min(state.clipFrames, Math.round(D * BFPS))), nB = Math.max(1, Math.round(total / BURST)), span = (BURST - 1) / BFPS;
       let seed = 0; for (const ch of file.name) seed = (seed * 31 + ch.charCodeAt(0)) | 0; const r = mulberry32(seed || 1); const bursts = [];
       for (let b = 0; b < nB; b++){ const lo = b / nB * D, hi = (b + 1) / nB * D; bursts.push(clamp(lo + r() * Math.max(0, hi - lo - span), 0, Math.max(0, D - span - .05))); }
-      for (const t0 of bursts) for (let i = 0; i < BURST; i++){ await seekTo(Math.min(D - .03, t0 + i / BFPS)); frames.push(await fitBitmap(v)); }
-      URL.revokeObjectURL(v.src); res(finish({type: 'clip', frames, name: file.name, kind: 'video', sample: !!isSample, fps: BFPS, burst: BURST, bursts: nB})); } catch(e){ rej(e); } };
-    v.onerror = () => rej(new Error('Could not read ' + file.name));
+      grab: for (const t0 of bursts) for (let i = 0; i < BURST; i++){
+        if (await seekTo(Math.min(D - .03, t0 + i / BFPS))){ if (++stalls >= 2) break grab; } else stalls = 0;
+        try { frames.push(await fitBitmap(v)); } catch(e){ /* one unreadable frame does not sink the clip */ } }
+      if (!frames.length) return fail(new Error('No readable frames in ' + file.name));
+      ok(finish({type: 'clip', frames, name: file.name, kind: 'video', sample: !!isSample, fps: BFPS, burst: BURST, bursts: nB})); } catch(e){ fail(e); } };
+    v.onerror = () => { clearTimeout(metaTimer); fail(new Error('Could not read ' + file.name)); };
   });
 }
 const FALLBACK = (() => { const out = []; const r = mulberry32(99);
@@ -709,8 +721,16 @@ async function boot(){
   try { await Promise.race([Promise.all(FONT_PRELOAD.map(f => document.fonts.load(f).catch(() => {}))), new Promise(r => setTimeout(r, 3000))]); } catch(e){}
   // restore the user's own library first; samples only when it is empty
   let restored = 0; try { const rows = (await IDB.all('media')) || []; rows.sort((a, b) => (a.val.order || 0) - (b.val.order || 0));
-    if (rows.length){ $('#badge').hidden = false; $('#badge').textContent = 'Loading your footage…'; }
-    for (const {key, val} of rows){ try { const f = new File([val.blob], val.name, {type: val.type}); const m = await loadOne(f); m.key = key; state.media.push(m); restored++; } catch(e){ console.warn('restore', val.name, e); IDB.del('media', key); } } } catch(e){ console.warn(e); }
+    if (rows.length){ $('#badge').hidden = false; $('#badge').textContent = 'Loading your footage… 0/' + rows.length; }
+    let n = 0, slow = 0;
+    for (const {key, val} of rows){ $('#badge').textContent = 'Loading your footage… ' + (++n) + '/' + rows.length + ' · ' + val.name;
+      try { const f = new File([val.blob], val.name, {type: val.type});
+        // hard cap per file: a clip that will not decode cannot hold up the whole app
+        const m = await Promise.race([loadOne(f), new Promise((_, rj) => setTimeout(() => rj(new Error('SLOW')), 30000))]);
+        m.key = key; state.media.push(m); restored++; }
+      catch(e){ if (e && e.message === 'SLOW'){ slow++; console.warn('restore timed out, keeping the file:', val.name); } // keep it: the user can retry or remove it
+        else { console.warn('restore', val.name, e); IDB.del('media', key); } } }
+    if (slow) setTimeout(() => toast(slow + ' clip' + (slow > 1 ? 's' : '') + ' would not decode and ' + (slow > 1 ? 'were' : 'was') + ' skipped'), 1200); } catch(e){ console.warn(e); }
   if (!restored) await loadSamples();
   renderThumbs();
   try { const saved = localStorage.getItem('grm.last'); if (saved) applyRecipe(JSON.parse(saved)); } catch(e){}
