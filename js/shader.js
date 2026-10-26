@@ -95,14 +95,15 @@ void main(){
   if(uBlur>0.){ vec3 acc = base; for(int i=1;i<10;i++){ float k = float(i)/9.; acc += sampleBase(mix(uv, vec2(.5), k*uBlur*.22), s, sdir); } base = acc/10.; }
   if(uSmear>0.){ vec2 dir = vec2(cos(uSmearA), sin(uSmearA))/uRes*13.; vec3 acc2 = base; for(int i=1;i<12;i++) acc2 += texture(tBase, uv+dir*float(i*i)*.42*uSmear).rgb; base = acc2/12.; }
   base = clamp(base - vec3(max(0., uThresh-.5)*.5) + vec3(max(0., .4-uThresh)*.15), 0., 1.);
-  if(uGhost>0.){ float fv = floor(V3*3.); vec2 go = vec2(sin(uTime*3.1+uSeed), cos(uTime*2.3))*uGhost*.045;
+  if(uGhost>0.){ float fv = floor(V3*3.); float ga = V7*6.2831 + uTime*.6;
+    vec2 go = vec2(cos(ga), sin(ga))*uGhost*.045*(.55+V8);
     if(fv<1.){ vec3 g1 = texture(tBase, uv+go).rgb, g2 = texture(tBase, uv-go*1.7).rgb; base = mix(base, abs(base-g1)*1.3 + g2*.45, min(1.,uGhost)*.85); }
     else if(fv<2.){ vec3 tr2 = vec3(0.); vec2 dir = normalize(go+1e-4);
       for(int i=1;i<5;i++) tr2 += texture(tBase, uv - dir*float(i)*uGhost*.022).rgb*(1.-float(i)*.18);
       base = mix(base, max(base, tr2*.42), min(1.,uGhost)*.9); }
     else { vec3 d2 = texture(tBase, uv + vec2(go.y,-go.x)*2.1).rgb; base = mix(base, 1.-(1.-base)*(1.-d2*.8), min(1.,uGhost)*.7); } }
   if(uSort>0.){ // pixel sort: bright pixels pulled down along their bright run
-    float th = mix(.72, .26, uSort); vec3 best = base; float bl = luma(base); bool run = true;
+    float th = mix(.72, .26, uSort) + (V6-.5)*.22; vec3 best = base; float bl = luma(base); bool run = true;
     float sv = floor(V4*4.); vec2 sdir2 = sv<1. ? vec2(0.,1.) : sv<2. ? vec2(0.,-1.) : sv<3. ? vec2(1.,0.) : vec2(.7,.7);
     vec2 step_ = sdir2/uRes*mix(3.,11.,uSort);
     for(int i=1;i<34;i++){ if(!run) break; vec3 sm = texture(tBase, uv+step_*float(i)).rgb; float l = luma(sm);
@@ -178,9 +179,9 @@ void main(){
   else { col.r = mix(col.r,1.-col.r,tr.a); col.g = mix(col.g,1.-col.g,tg.a); col.b = mix(col.b,1.-col.b,tb.a); }
   if(uBands>.2){ float nb = floor(mix(3.,14.,B1)); float b = step(.5, fract(vUv.y*nb + hash(vec2(tq,uSeed)))); col = mix(col, 1.-col, b*smoothstep(.25,.55,uBands)); }
   if(uScan>0.){
-    col *= 1.-uScan*.32*(.5+.5*sin(vUv.y*uRes.y*1.5708));
+    col *= 1.-uScan*.32*(.5+.5*sin(vUv.y*uRes.y*mix(.9,2.6,V4)));
     // chroma lags luma the way tape does
-    float cb = uScan*.012*(1.+V2); vec3 bl = texture(tBase, uv+vec2(cb,0.)).rgb;
+    float cb = uScan*.012*(1.+V2*2.5)*mix(-1.,1.,step(.5,V5)); vec3 bl = texture(tBase, uv+vec2(cb,0.)).rgb;
     col = mix(col, vec3(col.r*.65+bl.r*.35, col.g, col.b*.65+bl.b*.35), uScan*.55);
     if(hash(vec2(floor(vUv.y*90.),tq)) > .985) col = mix(col, vec3(luma(col)*1.3), .6*uScan);
     float sw = mix(.02,.11,V3); // head switch: the torn strip at the very bottom of a VHS frame
