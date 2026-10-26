@@ -440,7 +440,7 @@ function renderAt(t){
   f1('uSat', v('saturate')); f1('uCon', v('contrast')); f1('uPoster', v('posterize') * fxMul); f1('uLookMix', v('lookMix') * fxMul); f1('uSlice', v('sliceShift') * I * fxMul); f1('uSort', v('pixelSort') * fxMul); f1('uRoll', v('badTV') * fxMul);
   f1('uMelt', v('melt') * fxMul); f1('uZoom', zoom * pulse); f1('uShake', v('shake') * I * (.3 + pu)); f1('uKaleido', v('kaleido') * fxMul); f1('uSpin', v('spin') * fxMul); f1('uEdges', v('edges') * fxMul); f1('uPolar', v('polar') * fxMul); f1('uGhost', v('ghost') * fxMul); f1('uBands', v('bands') * I * fxMul * fGate);
   { const L = S.trig.kick || [], ki = lastTrig(L, tq); f1('uShock', v('shockwave') * I * fxMul); f1('uShockT', ki >= 0 ? tq - L[ki] : 9); f1('uShockN', ki); }
-  f1('uSmear', v('smear') * I * fxMul); f1('uSmearA', c.seed * 2.39996); f1('uTaffy', v('taffy') * I * fxMul); f1('uSlit', v('slitscan') * fxMul); f1('uWeave', v('weave') * fxMul);
+  f1('uVar', c.seed); f1('uVar2', c.seed + Math.floor(tq * 2.3) * .137); f1('uSmear', v('smear') * I * fxMul); f1('uSmearA', c.seed * 2.39996); f1('uTaffy', v('taffy') * I * fxMul); f1('uSlit', v('slitscan') * fxMul); f1('uWeave', v('weave') * fxMul);
   f1('uCorrupt', v('corrupt') * I * fxMul); f1('uOil', v('oilslick') * fxMul); f1('uContour', v('contour') * fxMul); f1('uLed', v('led')); f1('uVeil', v('staticveil') * fxMul); f1('uHalf', v('halftone')); f1('uDither', v('dither')); f1('uLookSwap', lookSwap * fxMul);
   i1('uLookA', c.lookA); i1('uLookB', c.lookB); i1('uLook2', c.look2); i1('uTextMode', ev ? ev.mode : 0);
   gl.uniform3fv(U.uPalA, PAL[c.palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));

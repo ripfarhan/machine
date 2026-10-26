@@ -52,6 +52,29 @@ No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 - **An effect**: add a uniform and a block to the fragment shader in
   `js/shader.js`, a dial row in `PARAMS`, and set the uniform in `renderAt`.
 
+## Variation
+
+Every effect draws its character from a per-cut value (`uVar`), not from the
+reel seed, so the same dial looks different at each cut instead of once per
+video. Several effects also carry alternate forms chosen the same way:
+
+| effect | forms |
+|---|---|
+| tear | noise bands · vertical rips · chunk displacement |
+| melt | drip down · sideways · upward |
+| ghost | difference · echo trail · double exposure |
+| pixel sort | four run directions |
+| halftone | dots · line screen · cross-hatch, rolling angle |
+| rings | concentric · spiral · moiré |
+| light leak | corner bloom · edge bar · lens flare |
+| glow | bloom · anamorphic streak · vertical bleed |
+| edges | colour sobel · ink outline · glow in the dark |
+| pixelate | square · wide scan blocks · tall mosaic |
+| slice | horizontal · vertical |
+
+Scanlines model tape rather than stripes: chroma lags luma and the torn
+head-switch strip sits at the bottom of the frame.
+
 ## Drop handling
 
 Two independent toggles under the analysis panel, both keyed to the same
