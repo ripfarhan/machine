@@ -226,7 +226,10 @@ function buildScore(){
   { let g = 0; const dd = ((state.A.dropTimes) || []).map(d => d - state.off).filter(x => x >= .5 && x < dur); if (dd.length) g = dd[0];
     else { for (let q = 0; q < dur; q += .1){ if (sig('hype', q) >= .75){ g = q; break; } } } state.gateT = g; }
   const cuts = []; let t = 0, lastM = -1, prevCut = null, flashReturn = null;
-  const other = m => { let o; do { o = (r() * nM) | 0; } while (nM > 1 && o === m); return o; };
+  const isClip = i => media[((i % nM) + nM) % nM].type === 'clip';
+  const cw = val('clipWeight', dur / 2); // clips weighted up to 5x photos in the pick
+  const other = m => { if (nM <= 1) return 0; let tot = 0; const ws = []; for (let i = 0; i < nM; i++){ const w = i === m ? 0 : (isClip(i) ? 1 + cw * 4 : 1); ws.push(w); tot += w; }
+    let x = r() * tot; for (let i = 0; i < nM; i++){ x -= ws[i]; if (x <= 0) return i; } return (m + 1) % nM; };
   function newCut(start, m, isFlash){
     const Pz = getP(), I = (.4 + hype(start)) * state.intensity, col = val('collage', start), coll = (isFlash ? .3 : 1) * col;
     const lay = {full: 1}; for (const k in Pz.layouts) if (k !== 'full') lay[k] = Pz.layouts[k] * coll * 1.2; if (Pz.layouts.full) lay.full = Pz.layouts.full * (1.2 - coll);
@@ -264,7 +267,8 @@ function buildScore(){
   for (t = dt; t < dur; t += dt){
     holdFrames++;
     const hy = hype(t), pu = punch(t), I = state.intensity;
-    const cutRate = val('cutRate', t) * I, flash = val('flashCuts', t) * I, minHold = Math.round(val('minHold', t));
+    const curClip = isClip(cur.m), clipH = curClip ? val('clipHold', t) : 0;
+    const cutRate = val('cutRate', t) * I / (1 + clipH * 1.2), flash = val('flashCuts', t) * I, minHold = Math.round(val('minHold', t) * (1 + clipH * 3));
     let doCut = false, isFlash = false;
     // beat crossings
     while (bi < beats.length && beats[bi] <= t){ const isBar = Math.round((bi - state.grid.downbeatOffset) % 4 + 4) % 4 === 0; if (isBar && r() < .6 + cutRate * .4) doCut = true; else if (r() < cutRate * (.25 + hy * .9)) doCut = true; bi++; }
@@ -273,7 +277,7 @@ function buildScore(){
     // free-running probability, grows with hype
     if (!doCut && r() < cutRate * cutRate * (.02 + hy * hy * .35)) doCut = true;
     // max hold: never sit still longer than this
-    if (!doCut && holdFrames > fps * per * (hy > .6 ? 1 : 2.5)) doCut = true;
+    if (!doCut && holdFrames > fps * per * (hy > .6 ? 1 : 2.5) * (1 + clipH * 1.5)) doCut = true;
     // flash cuts: 1-3 frame insert then return
     if (flashReturn !== null){ if (t >= flashReturn){ flashReturn = null; cur.end = t; const back = prevCut; cur = Object.assign({}, back, {start: t, end: t, isFlash: false, clipStart: back.clipStart + 3}); cuts.push(cur); holdFrames = 0; } continue; }
     if (!doCut && flash > 0 && pu > .7 && hy > .35 && !(state.dropGate && t < state.gateT) && r() < flash * flash * (hy + pu) * .45){ isFlash = true; doCut = true; }
@@ -373,24 +377,26 @@ function clipFrame(c, m, t){ if (m.frames.length < 2) return 0; const sp = val('
 const lastSig = {};
 function renderAt(t){
   if (!state.score || !gl) return;
-  const S = state.score, c = cutAt(S.cuts, t), media = pool(), dur = Math.max(.001, c.end - c.start), k = ease(clamp((t - c.start) / dur, 0, 1));
-  const pu = punch(t), hy = hype(t), I = state.intensity, bp = sig('beat', t), pulse = Math.exp(-bp * 6) * (bp > 0 ? 1 : 0);
+  const S = state.score, c = cutAt(S.cuts, t), media = pool(), dur = Math.max(.001, c.end - c.start);
+  const chop = val('chop', t), tq = chop > .02 ? (q => Math.floor(t * q) / q)(lerp(14, 3.5, chop)) : t; // chopped clock for motion only
+  const k = ease(clamp((tq - c.start) / dur, 0, 1));
+  const pu = punch(t), hy = hype(t), I = state.intensity, bp = sig('beat', tq), pulse = Math.exp(-bp * 6) * (bp > 0 ? 1 : 0);
   const M = i => media[i % media.length], v = id => val(id, t);
   // clean hits: for a few frames after each kick the effect stack drops away and the raw footage shows
-  let fxMul = 1; { const cl = v('cleanHits'); if (cl > 0){ const L = S.trig.kick || []; const i = lastTrig(L, t); if (i >= 0) fxMul = 1 - cl * .9 * Math.exp(-(t - L[i]) * 16); } }
+  let fxMul = 1; { const cl = v('cleanHits'); if (cl > 0){ const L = S.trig.kick || []; const i = lastTrig(L, tq); if (i >= 0) fxMul = 1 - cl * .9 * Math.exp(-(tq - L[i]) * 16); } }
   const clarityOv = 1 - state.clarity * .4;
   const fGate = state.dropGate && t < (state.gateT || 0) ? 0 : 1; // flashes held back until the drop
   const zoom = v('zoomPunch') * I, punchZ = 1 + .06 * zoom * pulse;
   xBase.fillStyle = '#000'; xBase.fillRect(0, 0, W, H);
-  const fi = clipFrame(c, M(c.m), t);
-  if (c.layout === 'tile'){ const cw = W / c.cols, chh = cw * 16 / 9 * .55; let row = 0; for (let y = -((t * 30) % chh); y < H; y += chh, row++) for (let i = -1; i < c.cols + 1; i++) drawCover(xBase, M(c.m), fi, i * cw + (row % 2) * cw / 2, y, cw, chh, 1, 0, 0, (i + row) % 2 === 1); }
+  const fi = clipFrame(c, M(c.m), tq);
+  if (c.layout === 'tile'){ const cw = W / c.cols, chh = cw * 16 / 9 * .55; let row = 0; for (let y = -((tq * 30) % chh); y < H; y += chh, row++) for (let i = -1; i < c.cols + 1; i++) drawCover(xBase, M(c.m), fi, i * cw + (row % 2) * cw / 2, y, cw, chh, 1, 0, 0, (i + row) % 2 === 1); }
   else if (c.layout === 'bands'){ for (const b of c.bands){ xBase.save(); xBase.beginPath(); xBase.rect(0, b.y0, W, b.y1 - b.y0); xBase.clip(); drawCover(xBase, M(b.m), fi, b.dx * k, 0, W, H, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k), lerp(c.py0, c.py1, k), c.flip); xBase.restore(); } }
   else if (c.layout === 'stack'){ const n = c.strips.length; c.strips.forEach((st, i) => { const x = c.stripDir === 'h' ? 0 : i * W / n, y = c.stripDir === 'h' ? i * H / n : 0, w = c.stripDir === 'h' ? W : W / n, h = c.stripDir === 'h' ? H / n : H;
       drawCover(xBase, M(c.m), fi + st.fo, x, y, w, h, st.z * punchZ, lerp(c.px0, c.px1, k) * .5, st.py, st.flip !== c.flip); }); }
   else drawCover(xBase, M(c.m), fi, 0, 0, W, H, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k), lerp(c.py0, c.py1, k), c.flip);
   if (c.layers && c.layers.length){ const mv = v('overlapMove'); for (const L of c.layers){ let a = L.alpha * clarityOv * fxMul * (L.sig === 'const' ? 1 : .35 + .75 * sig(L.sig, t)); if (L.gate && mv > .3 && hash1(Math.floor(t * 20) + L.fo + c.id) < mv * .5) a = 0; if (a <= .02) continue;
       xBase.save(); xBase.globalCompositeOperation = L.mode; xBase.globalAlpha = clamp(a, 0, 1); if (L.filter !== 'none' && 'filter' in xBase) xBase.filter = L.filter;
-      drawCover(xBase, M(L.m), fi + L.fo, 0, 0, W, H, L.z * punchZ, L.px + L.dx * k * mv + Math.sin(t * 2.3 + L.fo) * mv * .15, L.py + L.dy * k * mv, L.flip); xBase.restore(); } }
+      drawCover(xBase, M(L.m), fi + L.fo, 0, 0, W, H, L.z * punchZ, L.px + L.dx * k * mv + Math.sin(tq * 2.3 + L.fo) * mv * .15, L.py + L.dy * k * mv, L.flip); xBase.restore(); } }
   xOver.clearRect(0, 0, W, H); let overOn = 0, blendMode = 0;
   const card = q => { if (q.shadow){ xOver.fillStyle = q.shadow.color; xOver.fillRect(q.x + q.shadow.dx, q.y + q.shadow.dy, q.w, q.h); } drawCover(xOver, M(q.m), fi + 5, q.x, q.y, q.w, q.h, lerp(q.z0, q.z1, k), q.px * (k - .5), q.py * (k - .5), false); };
   if (c.layout === 'pip'){ c.rects.forEach(card); overOn = 1; } else if (c.layout === 'tile'){ card(c.card); overOn = 1; }
@@ -409,7 +415,7 @@ function renderAt(t){
   bindOnly(fboTex[1 - cur], 3); bindOnly(texPat, 4);
   const f1 = (n, x) => U[n] && gl.uniform1f(U[n], x), i1 = (n, x) => U[n] && gl.uniform1i(U[n], x);
   gl.uniform2f(U.uRes, W, H);
-  f1('uTime', t); f1('uPulse', pulse); f1('uHue', c.hue0 + v('hueShift') * 6.28 * (sig('bar', t) + t * .05)); f1('uCycle', c.cyc0 + t * .2 * v('hueShift')); f1('uReps', c.reps);
+  f1('uTime', tq); f1('uPulse', pulse); f1('uHue', c.hue0 + v('hueShift') * 6.28 * (sig('bar', t) + t * .05)); f1('uCycle', c.cyc0 + t * .2 * v('hueShift')); f1('uReps', c.reps);
   f1('uSplit', v('rgbSplit') * I * fxMul); f1('uTear', clamp(v('tear') * I * fxMul, 0, 1)); f1('uPix', v('pixelate') * fxMul > .03 ? 4 + v('pixelate') * 40 : 0); f1('uBlur', v('punchBlur') * I * pulse * fxMul); f1('uDisp', v('displace') * fxMul); f1('uLeak', v('lightLeak') * fxMul); f1('uBlendAmt', c.blendAmt || 1); f1('uTone', v('tone') * fxMul); i1('uBlendMode', blendMode); f1('uTextAlpha', v('wordOpacity'));
   f1('uScan', v('scanlines')); f1('uGrain', v('grain')); f1('uFeed', clamp(v('feedback') * fxMul, 0, 1)); f1('uRings', v('rings') * fxMul); f1('uGlow', v('glow') * fxMul); f1('uWarp', v('warp') * fxMul);
   f1('uThresh', M(c.m).lum || .5); f1('uPattern', pat * fxMul); f1('uPatInv', (M(c.m).lum || .5) > .55 ? 1 : (M(c.m).lum || .5) < .4 ? 0 : (c.seed % 1 < .5 ? 1 : 0)); f1('uTextSplit', ev ? v('wordGlitch') * 1.5 : .3);
@@ -559,7 +565,7 @@ function renderGroups(){
     d.append(list); box.append(d); }
 }
 const fmtVal = st => (+st.base).toFixed(2).replace(/\.?0+$/, '') + (st.src !== 'const' && st.depth ? ' ' + (st.depth > 0 ? '+' : '') + st.depth.toFixed(2) + '×' + st.src : '');
-const SEQ_IDS = new Set(['cutRate','flashCuts','minHold','collage','overlap','clones','motifs','invertFlk','whiteFlash','blackBlink','strobe','wordRate','lookSwap']);
+const SEQ_IDS = new Set(['cutRate','clipWeight','clipHold','flashCuts','minHold','collage','overlap','clones','motifs','invertFlk','whiteFlash','blackBlink','strobe','wordRate','lookSwap']);
 function rebuildIf(id){ if (SEQ_IDS.has(id)) rebuild(); else if (!playing) frame(); }
 function renderThumbs(){ const box = $('#thumbs'); box.innerHTML = '';
   state.media.forEach((m, i) => { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = 'url(' + m.thumb + ')'; const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove');
