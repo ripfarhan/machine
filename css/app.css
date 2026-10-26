@@ -103,3 +103,6 @@ select,.num{background:var(--ink);border:1px solid var(--line);padding:6px 6px;m
 .regionrow .num{padding:5px 6px}
 #dropBtns:empty{display:none}
 [hidden]{display:none!important}
+.thumb.bad{background:repeating-linear-gradient(45deg,#2a1d1d,#2a1d1d 7px,#351f1f 7px,#351f1f 14px);border-color:#7a3b3b;display:flex;align-items:flex-end;justify-content:center}
+.thumb.bad .v{background:#7a3b3b;color:#ffd9d9;font-size:9px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.thumb .x.rt{right:22px;background:#2f6b4a}

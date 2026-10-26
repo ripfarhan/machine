@@ -29,7 +29,7 @@ function randomizeDials(){
    ========================================================= */
 const state = {
   media: [], preset: 'overdrive', seed: 1312, react: 1, intensity: 1, clarity: .6, exSize: 1080, exQ: 16, exporting: false, fontSet: 'auto', lengthSel: 30, fps: 60, clipFrames: 24,
-  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0, preDrop: false, preCalm: .7, dropAt: null,
+  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0, preDrop: false, preCalm: .7, dropAt: null, failed: [], libGen: 0,
   dur: 30, A: null, grid: null, off: 0, score: null, flkPattern: 'burst'
 };
 function sig(name, t){
@@ -143,6 +143,8 @@ function addVideo(file, isSample){
       grab: for (const t0 of bursts) for (let i = 0; i < BURST; i++){
         if (await seekTo(Math.min(D - .03, t0 + i / BFPS))){ if (++stalls >= 2) break grab; } else stalls = 0;
         try { frames.push(await fitBitmap(v)); } catch(e){ /* one unreadable frame does not sink the clip */ } }
+      // seeks stalled before any frame landed: salvage whatever the decoder is showing so the clip still exists
+      if (!frames.length){ try { frames.push(await fitBitmap(v)); } catch(e){} }
       if (!frames.length) return fail(new Error('No readable frames in ' + file.name));
       ok(finish({type: 'clip', frames, name: file.name, kind: 'video', sample: !!isSample, fps: BFPS, burst: BURST, bursts: nB})); } catch(e){ fail(e); } };
     v.onerror = () => { clearTimeout(metaTimer); fail(new Error('Could not read ' + file.name)); };
@@ -599,14 +601,33 @@ function rebuildIf(id){ if (SEQ_IDS.has(id)) rebuild(); else if (!playing) frame
 function renderThumbs(){ const box = $('#thumbs'); box.innerHTML = '';
   state.media.forEach((m, i) => { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = 'url(' + m.thumb + ')'; const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove');
     x.onclick = () => { const [gone] = state.media.splice(i, 1); if (gone && gone.key) IDB.del('media', gone.key); renderThumbs(); rebuild(); }; d.append(x); if (m.type === 'clip'){ const v = document.createElement('span'); v.className = 'v'; v.textContent = m.kind === 'gif' ? 'GIF ' + m.frames.length : 'CLIP ' + (m.bursts || 1) + '×' + (m.burst || m.frames.length); d.append(v); } box.append(d); });
-  $('#mediaCount').textContent = state.media.length ? state.media.length + ' item' + (state.media.length > 1 ? 's' : '') : 'none'; $('#sampleNote').hidden = !state.media.some(m => m.sample); }
+  (state.failed || []).forEach(F => { const d = document.createElement('div'); d.className = 'thumb bad'; d.title = F.name + ' — did not load';
+    const lab = document.createElement('span'); lab.className = 'v'; lab.textContent = F.name.slice(0, 14); d.append(lab);
+    const rt = document.createElement('button'); rt.className = 'x rt'; rt.textContent = '↻'; rt.setAttribute('aria-label', 'Retry ' + F.name);
+    rt.onclick = async () => { rt.textContent = '…'; const gen = state.libGen;
+      try { const rows = await IDB.all('media') || []; const row = rows.find(r => r.key === F.key);
+        if (!row) throw new Error('gone');
+        const m = await loadOne(new File([row.val.blob], row.val.name, {type: row.val.type})); m.key = F.key;
+        if (gen !== state.libGen) return;
+        state.media.push(m); state.failed = state.failed.filter(z => z.key !== F.key); renderThumbs(); rebuild(); toast(F.name + ' loaded'); }
+      catch(e){ rt.textContent = '↻'; toast(F.name + ' still will not decode'); } };
+    const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Delete ' + F.name);
+    x.onclick = () => { state.failed = state.failed.filter(z => z.key !== F.key); IDB.del('media', F.key); renderThumbs(); };
+    d.append(rt, x); box.append(d); });
+  const nf = (state.failed || []).length;
+  $('#mediaCount').textContent = (state.media.length ? state.media.length + ' item' + (state.media.length > 1 ? 's' : '') : 'none') + (nf ? ' · ' + nf + ' not loaded' : '');
+  $('#sampleNote').hidden = !state.media.some(m => m.sample); }
 
 /* ---- local library: footage and song persist across reloads (IndexedDB holds the files themselves) ---- */
 const IDB = {
-  open(){ return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('glitch-reel-machine', 1);
-    q.onupgradeneeded = () => { const d = q.result; if (!d.objectStoreNames.contains('media')) d.createObjectStore('media'); if (!d.objectStoreNames.contains('song')) d.createObjectStore('song'); };
-    q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  _db: null,
+  open(){ if (this._db) return this._db; // one connection, reused: a new one per call leaked handles until writes started failing
+    this._db = new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('glitch-reel-machine', 1);
+      q.onupgradeneeded = () => { const d = q.result; if (!d.objectStoreNames.contains('media')) d.createObjectStore('media'); if (!d.objectStoreNames.contains('song')) d.createObjectStore('song'); };
+      q.onsuccess = () => { q.result.onclose = () => { IDB._db = null; }; res(q.result); }; q.onerror = () => { IDB._db = null; rej(q.error); }; });
+    return this._db; },
   async tx(store, mode, fn){ try { const d = await this.open(); return await new Promise((res, rej) => { const tx = d.transaction(store, mode); const out = fn(tx.objectStore(store)); tx.oncomplete = () => res(out && out.result !== undefined ? out.result : out); tx.onerror = () => rej(tx.error); }); } catch(e){ console.warn('library', e); return null; } },
+  async txStrict(store, mode, fn){ const d = await this.open(); return await new Promise((res, rej) => { const tx = d.transaction(store, mode); const out = fn(tx.objectStore(store)); tx.oncomplete = () => res(out && out.result !== undefined ? out.result : out); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error || new Error('aborted')); }); },
   put(store, key, val){ return this.tx(store, 'readwrite', os => os.put(val, key)); },
   del(store, key){ return this.tx(store, 'readwrite', os => os.delete(key)); },
   clear(store){ return this.tx(store, 'readwrite', os => os.clear()); },
@@ -617,15 +638,31 @@ async function addFiles(files){
   const list = [...files].filter(f => /^(image|video)\//.test(f.type) || /\.(gif|mp4|mov|webm|png|jpe?g|webp)$/i.test(f.name)); if (!list.length) return;
   if (state.media.some(m => m.sample)) state.media = state.media.filter(m => !m.sample);
   toast('Reading ' + list.length + ' file' + (list.length > 1 ? 's' : '') + '…');
-  let n = 0; for (const f of list){ try { const m = await loadOne(f); m.key = Date.now() + '-' + (n++) + '-' + f.name; state.media.push(m); IDB.put('media', m.key, {name: f.name, type: f.type, blob: f, order: Date.now() + n}); }
-    catch(e){ console.warn(e); toast('Skipped ' + f.name + ': the browser could not read it'); } }
-  renderThumbs(); rebuild();
+  const gen = state.libGen;
+  let n = 0; for (const f of list){
+    try { const m = await loadOne(f);
+      if (gen !== state.libGen) return; // footage was cleared while this import was running: drop it, do not resurrect it
+      m.key = Date.now() + '-' + (n++) + '-' + f.name; state.media.push(m);
+      await IDB.put('media', m.key, {name: f.name, type: f.type, blob: f, order: Date.now() + n}); }
+    catch(e){ console.warn(e); toast('Skipped ' + f.name + ': the browser could not read it'); }
+    if (gen !== state.libGen) return;
+    renderThumbs(); }
+  rebuild();
 }
 function rebuild(){ buildScore(); if (!playing) frame(); }
 async function rebuildAll(){ const was = playing; pause(); await rebuildAudio(); offset = Math.min(offset, state.dur - .01); buildScore(); if (was) play(); else frame(); }
 
 $('#mediaIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
-$('#clearMedia').onclick = async () => { state.media = []; await IDB.clear('media'); await loadSamples(); renderThumbs(); rebuild(); toast('Footage cleared; samples loaded'); };
+$('#clearMedia').onclick = async () => {
+  state.libGen++; state.media = []; state.failed = []; renderThumbs();
+  let left = -1;
+  try { await IDB.txStrict('media', 'readwrite', os => os.clear());
+    left = await new Promise(async r => { const d = await IDB.open(); const q = d.transaction('media', 'readonly').objectStore('media').count(); q.onsuccess = () => r(q.result); q.onerror = () => r(-1); });
+  } catch(e){ console.warn('clear', e); }
+  if (left > 0){ toast('Could not clear the library — ' + left + ' left. Close other tabs of this app and try again.'); return; }
+  await loadSamples(); renderThumbs(); rebuild();
+  toast(left === 0 ? 'Footage cleared; samples loaded' : 'Footage cleared from this session');
+};
 [$('#drop'), $('#screen')].forEach(el => { el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag'); }); el.addEventListener('dragleave', () => el.classList.remove('drag')); el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drag'); addFiles(e.dataTransfer.files); }); });
 $('#clipFrames').oninput = e => { state.clipFrames = +e.target.value; $('#cfOut').textContent = e.target.value; };
 $('#play').onclick = () => { if (recording) return; playing ? pause() : play(); };
@@ -713,7 +750,7 @@ setInterval(autosave, 4000);
 $('#recRestore').onclick = async () => { try { const s = localStorage.getItem('grm.last'); if (!s) return toast('Nothing saved in this browser yet'); applyRecipe(JSON.parse(s)); await rebuildAll(); toast('Last session restored'); } catch(e){ toast('Could not restore'); } };
 
 /* boot */
-async function loadSamples(){ for (const [name, url] of SAMPLES){ try { if (url.startsWith('data:image/gif')){ const blob = await (await fetch(url)).blob(); state.media.push(await addGIF(blob, true)); } else { const img = new Image(); img.src = url; await img.decode(); state.media.push(await addImage(img, name, true)); } } catch(e){ console.warn('sample', name, e); } } }
+async function loadSamples(){ for (const [name, url] of SAMPLES){ try { if (url.startsWith('data:image/gif')){ const blob = await (await fetch(url)).blob(); state.media.push(await addGIF(new File([blob], name, {type: 'image/gif'}), true)); } else { const img = new Image(); img.src = url; await img.decode(); state.media.push(await addImage(img, name, true)); } } catch(e){ console.warn('sample', name, e); } } }
 async function boot(){
   if (!gl) return; try { initGL(); } catch(e){ $('#badge').hidden = false; $('#badge').textContent = 'Shader error'; console.error(e); return; }
   applyPreset('overdrive'); state.flkPattern = 'burst'; renderPresets();
@@ -728,9 +765,9 @@ async function boot(){
         // hard cap per file: a clip that will not decode cannot hold up the whole app
         const m = await Promise.race([loadOne(f), new Promise((_, rj) => setTimeout(() => rj(new Error('SLOW')), 30000))]);
         m.key = key; state.media.push(m); restored++; }
-      catch(e){ if (e && e.message === 'SLOW'){ slow++; console.warn('restore timed out, keeping the file:', val.name); } // keep it: the user can retry or remove it
-        else { console.warn('restore', val.name, e); IDB.del('media', key); } } }
-    if (slow) setTimeout(() => toast(slow + ' clip' + (slow > 1 ? 's' : '') + ' would not decode and ' + (slow > 1 ? 'were' : 'was') + ' skipped'), 1200); } catch(e){ console.warn(e); }
+      catch(e){ // never delete the user's footage here: a file that would not decode this time is kept and shown as retryable
+        slow++; console.warn('restore failed, keeping the file:', val.name, e); state.failed.push({key, name: val.name}); } }
+    if (slow) setTimeout(() => toast(slow + ' file' + (slow > 1 ? 's' : '') + ' did not load — still in your library, tap ↻ to retry'), 1200); } catch(e){ console.warn(e); }
   if (!restored) await loadSamples();
   renderThumbs();
   try { const saved = localStorage.getItem('grm.last'); if (saved) applyRecipe(JSON.parse(saved)); } catch(e){}
