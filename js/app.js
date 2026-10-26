@@ -517,17 +517,28 @@ async function exportVideo(){
     const audioP = encodeAudio(ra, rb - ra);
     resizeAll(exW, exH); buildScore();
     for (let k = Math.min(12, Math.round(ra * fps)); k > 0; k--) renderAt(ra - k / fps); // pre-roll primes trails and feedback
-    const samples = []; let avcC = null, err = null;
-    const enc = new VideoEncoder({output: (chunk, meta) => { if (meta && meta.decoderConfig && meta.decoderConfig.description && !avcC){ const d = meta.decoderConfig.description; avcC = new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)); } const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d); samples.push({data: d, key: chunk.type === 'key'}); }, error: e => { err = e; }});
-    enc.configure(cfg);
+    const samples = []; let avcC = null, err = null, encBytes = 0, restarts = 0;
+    const onChunk = (chunk, meta) => { if (meta && meta.decoderConfig && meta.decoderConfig.description && !avcC){ const d = meta.decoderConfig.description; avcC = new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)); } const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d); encBytes += d.length; samples.push({data: d, key: chunk.type === 'key'}); };
+    const mkEnc = soft => { const c2 = Object.assign({}, cfg, soft ? {hardwareAcceleration: 'prefer-software'} : {}); const e2 = new VideoEncoder({output: onChunk, error: e => { err = err || e; }}); e2.configure(c2); return e2; };
+    let enc = mkEnc(false);
     const t0 = performance.now();
     for (let i = 0; i < n; i++){
       renderAt(ra + i / fps);
       const vf = new VideoFrame(glc, {timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps)});
-      enc.encode(vf, {keyFrame: i % (fps * 2) === 0}); vf.close();
-      if (err) throw err;
+      let key = i % (fps * 2) === 0;
+      if (err || enc.state === 'closed'){ // the encoder died mid-run: restart it (software) on a keyframe and keep going
+        const why = String((err && err.message) || err || 'closed'); err = null; restarts++;
+        if (restarts > 3){ vf.close(); throw new Error('the video encoder kept failing: ' + why); }
+        try { enc.close(); } catch(e2){}
+        enc = mkEnc(true); key = true; badge.textContent = 'Encoder hiccup — restarted, continuing (' + why.slice(0, 48) + ')';
+      }
+      try { enc.encode(vf, {keyFrame: key}); }
+      catch(e1){ restarts++; if (restarts > 3){ vf.close(); throw e1; } err = null; try { enc.close(); } catch(e2){} enc = mkEnc(true); enc.encode(vf, {keyFrame: true}); }
+      vf.close();
+      if (encBytes > 15e8) throw new Error('this export passed 1.5 GB of video: use a shorter region, 30 fps, or a lower quality');
       if (i % 4 === 0){ const el = (performance.now() - t0) / 1000, eta = el / (i + 1) * (n - i - 1); badge.textContent = 'Rendering ' + (i + 1) + ' / ' + n + '  ·  ' + Math.round(eta) + ' s left'; $('#head').style.left = ((ra + i / fps) / state.dur * 100) + '%'; }
       while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 2));
+      if (i % 600 === 599) await enc.flush(); // periodic drain keeps long hardware encodes from souring
       if (i % 2 === 0) await new Promise(r => requestAnimationFrame(r));
     }
     badge.textContent = 'Encoding…'; await enc.flush(); enc.close(); const audio = await audioP;
