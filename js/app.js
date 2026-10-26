@@ -29,7 +29,7 @@ function randomizeDials(){
    ========================================================= */
 const state = {
   media: [], preset: 'overdrive', seed: 1312, react: 1, intensity: 1, clarity: .6, exSize: 1080, exQ: 16, exporting: false, fontSet: 'auto', lengthSel: 30, fps: 60, clipFrames: 24,
-  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1,
+  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20,
   dur: 30, A: null, grid: null, off: 0, score: null, flkPattern: 'burst'
 };
 function sig(name, t){
@@ -432,6 +432,7 @@ function drawStrip(){
   sx.strokeStyle = '#f2ecf5'; sx.lineWidth = 1; sx.globalAlpha = .7; sx.beginPath(); for (let x = 0; x < w; x += 2){ const v = sig('loud', x / w * state.dur), y = h - 2 - v * (h - 46); x ? sx.lineTo(x, y) : sx.moveTo(x, y); } sx.stroke(); sx.globalAlpha = 1;
   sx.fillStyle = '#ff3d8b'; (state.A.dropTimes || []).forEach(d => { const t = d - state.off; if (t >= 0 && t < state.dur){ sx.fillRect(t / state.dur * w - 1, 0, 3, h); } });
   sx.fillStyle = 'rgba(242,236,245,.5)'; for (const e of S.texts) sx.fillRect(e.start / state.dur * w, 40, 2, 8);
+  if (typeof drawRegion === 'function') drawRegion();
 }
 const sigC = $('#sigc'), sgx = sigC.getContext('2d');
 function drawSig(){ const w = sigC.width, h = sigC.height, A = state.A; if (!A) return; sgx.fillStyle = '#0d0a11'; sgx.fillRect(0, 0, w, h);
@@ -446,12 +447,14 @@ function drawSig(){ const w = sigC.width, h = sigC.height, A = state.A; if (!A) 
    ========================================================= */
 let playing = false, startAt = 0, offset = 0, recording = null;
 const now = () => playing ? AC.currentTime - startAt : offset;
-function play(){ ensureAC(); if (!state.buffer) return; srcNode = AC.createBufferSource(); srcNode.buffer = state.buffer; srcNode.connect(master); startAt = AC.currentTime - offset; srcNode.start(0, state.off + offset); playing = true; $('#play').innerHTML = '&#10074;&#10074;'; $('#play').setAttribute('aria-label', 'Pause'); }
+const region = () => { const a = state.rIn === null ? 0 : clamp(state.rIn, 0, state.dur), b = state.rOut === null ? state.dur : clamp(state.rOut, 0, state.dur); return b - a > .1 ? [a, b] : [0, state.dur]; };
+function play(){ ensureAC(); if (!state.buffer) return; { const [a, b] = region(); if (offset < a || offset >= b - .02) offset = a; } srcNode = AC.createBufferSource(); srcNode.buffer = state.buffer; srcNode.connect(master); startAt = AC.currentTime - offset; srcNode.start(0, state.off + offset); playing = true; $('#play').innerHTML = '&#10074;&#10074;'; $('#play').setAttribute('aria-label', 'Pause'); }
 function pause(){ if (playing){ offset = now(); try { srcNode.stop(); } catch(e){} srcNode.disconnect(); } playing = false; $('#play').innerHTML = '&#9654;'; $('#play').setAttribute('aria-label', 'Play'); }
 function seek(t){ const was = playing; if (was) pause(); offset = clamp(t, 0, state.dur - .01); if (was) play(); else frame(); }
 function frame(){ if (recording && recording.stopping) return; let t = now();
-  if (t >= state.dur){ if (recording){ finishRecording(); t = state.dur - .001; } else { pause(); offset = 0; t = 0; } }
-  renderAt(t); $('#time').textContent = fmt(t) + ' / ' + fmt0(state.dur); $('#head').style.left = (t / state.dur * 100) + '%'; if (recording) $('#badge').textContent = 'Recording ' + fmt(t) + ' / ' + fmt0(state.dur); }
+  const [ra, rb] = region();
+  if (t >= (recording ? state.dur : rb)){ if (recording){ finishRecording(); t = state.dur - .001; } else { pause(); offset = ra; play(); t = ra; } }
+  renderAt(t); $('#time').textContent = fmt(t) + ' / ' + fmt0(state.dur) + (rb - ra < state.dur - .05 ? '  ·  region ' + fmt(ra) + '–' + fmt(rb) : ''); $('#head').style.left = (t / state.dur * 100) + '%'; if (recording) $('#badge').textContent = 'Recording ' + fmt(t) + ' / ' + fmt0(state.dur); }
 function loop(){ if (playing || recording) frame(); requestAnimationFrame(loop); }
 let dl = null; (async () => { try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch(e){ dl = null; } })();
 function toast(msg){ const el = $('#toast'); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 3400); }
@@ -476,8 +479,8 @@ function showResult(blob, name, ext){ const box = $('#result'); box.hidden = fal
 /* =========================================================
    8b. OFFLINE EXPORT: WebCodecs H.264 (+AAC or PCM) -> flat MP4, written here (no library)
    ========================================================= */
-async function encodeAudio(){
-  const b = state.buffer, sr = b.sampleRate, s0 = Math.floor(state.off * sr), n = Math.floor(state.dur * sr), ch = 2;
+async function encodeAudio(t0 = 0, len = state.dur){
+  const b = state.buffer, sr = b.sampleRate, s0 = Math.floor((state.off + t0) * sr), n = Math.floor(len * sr), ch = 2;
   const L = b.getChannelData(0), R = b.numberOfChannels > 1 ? b.getChannelData(1) : L;
   let aacOK = false; try { aacOK = window.AudioEncoder && (await AudioEncoder.isConfigSupported({codec: 'mp4a.40.2', sampleRate: sr, numberOfChannels: ch, bitrate: 192000})).supported; } catch(e){}
   if (aacOK){
@@ -495,23 +498,24 @@ async function encodeAudio(){
 async function exportVideo(){
   if (state.exporting || recording) return;
   if (!window.VideoEncoder || !window.VideoFrame){ toast('No frame encoder in this browser; recording live instead'); return startRecording(); }
-  ensureAC(); pause(); const fps = state.fps, exW = state.exSize === 1080 ? 1080 : 720, exH = exW * 16 / 9, n = Math.round(state.dur * fps);
+  ensureAC(); pause(); const [ra, rb] = region(); const fps = state.fps, exW = state.exSize === 1080 ? 1080 : 720, exH = exW * 16 / 9, n = Math.round((rb - ra) * fps);
   const cfg = await pickVideoCodec(exW, exH, fps, state.exQ * 1e6); if (!cfg){ toast('H.264 encoding not available here; recording live instead'); return startRecording(); }
   state.exporting = true; $('#export').disabled = true; const badge = $('#badge'); badge.hidden = false; badge.classList.add('rec'); badge.textContent = 'Preparing…';
   const prevW = W, prevH = H, prevOffset = offset; let blob = null; $('#exNote').textContent = 'Rendering ' + exW + '×' + exH + ' at ' + fps + ' fps. The preview shows each frame as it is encoded.';
   try {
-    const audioP = encodeAudio();
+    const audioP = encodeAudio(ra, rb - ra);
     resizeAll(exW, exH); buildScore();
+    for (let k = Math.min(12, Math.round(ra * fps)); k > 0; k--) renderAt(ra - k / fps); // pre-roll primes trails and feedback
     const samples = []; let avcC = null, err = null;
     const enc = new VideoEncoder({output: (chunk, meta) => { if (meta && meta.decoderConfig && meta.decoderConfig.description && !avcC){ const d = meta.decoderConfig.description; avcC = new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength)); } const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d); samples.push({data: d, key: chunk.type === 'key'}); }, error: e => { err = e; }});
     enc.configure(cfg);
     const t0 = performance.now();
     for (let i = 0; i < n; i++){
-      renderAt(i / fps);
+      renderAt(ra + i / fps);
       const vf = new VideoFrame(glc, {timestamp: Math.round(i * 1e6 / fps), duration: Math.round(1e6 / fps)});
       enc.encode(vf, {keyFrame: i % (fps * 2) === 0}); vf.close();
       if (err) throw err;
-      if (i % 4 === 0){ const el = (performance.now() - t0) / 1000, eta = el / (i + 1) * (n - i - 1); badge.textContent = 'Rendering ' + (i + 1) + ' / ' + n + '  ·  ' + Math.round(eta) + ' s left'; $('#head').style.left = (i / n * 100) + '%'; }
+      if (i % 4 === 0){ const el = (performance.now() - t0) / 1000, eta = el / (i + 1) * (n - i - 1); badge.textContent = 'Rendering ' + (i + 1) + ' / ' + n + '  ·  ' + Math.round(eta) + ' s left'; $('#head').style.left = ((ra + i / fps) / state.dur * 100) + '%'; }
       while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 2));
       if (i % 2 === 0) await new Promise(r => requestAnimationFrame(r));
     }
@@ -521,7 +525,7 @@ async function exportVideo(){
   } catch(e){ console.error(e); toast('Export failed: ' + (e.message || e)); }
   resizeAll(prevW, prevH); buildScore(); offset = prevOffset; frame();
   badge.hidden = true; badge.classList.remove('rec'); $('#export').disabled = false; state.exporting = false;
-  if (blob){ const name = 'reel-' + state.preset + '-' + state.seed + '-' + exW + 'p.mp4'; showResult(blob, name, 'mp4'); await saveBlob(name, blob); }
+  if (blob){ const name = 'reel-' + state.preset + '-' + state.seed + '-' + exW + 'p' + (rb - ra < state.dur - .05 ? '-' + ra.toFixed(1) + '-' + rb.toFixed(1) + 's' : '') + '.mp4'; showResult(blob, name, 'mp4'); await saveBlob(name, blob); }
 }
 /* =========================================================
    9. UI
@@ -591,7 +595,8 @@ $('#react').oninput = e => { state.react = +e.target.value; $('#reactOut').textC
 $('#clarity').oninput = e => { state.clarity = +e.target.value; $('#clarOut').textContent = state.clarity.toFixed(2).replace(/0$/, ''); }; $('#clarity').onchange = () => { if (!playing) frame(); };
 $('#intensity').oninput = e => { state.intensity = +e.target.value; $('#intOut').textContent = state.intensity.toFixed(1); }; $('#intensity').onchange = rebuild;
 $('#randDials').onclick = () => { randomizeDials(); rebuild(); }; $('#resetDials').onclick = () => { applyPreset(state.preset === 'chaos' ? 'overdrive' : state.preset); rebuild(); };
-$('#length').onchange = e => { state.lengthSel = +e.target.value; rebuildAll(); };
+$('#length').onchange = e => { const v = +e.target.value; $('#lenCustom').hidden = v !== -1; state.lengthSel = v === -1 ? state.lenCustom : v; setRegion(null, null); rebuildAll(); };
+$('#lenCustom').onchange = e => { state.lenCustom = clamp(+e.target.value || 20, 3, 600); e.target.value = state.lenCustom; state.lengthSel = state.lenCustom; setRegion(null, null); rebuildAll(); };
 $('#fps').onchange = e => { state.fps = +e.target.value; rebuild(); };
 $('#exSize').onchange = e => { state.exSize = +e.target.value; };
 $('#pvSize').onchange = e => { if (state.exporting) return; const w = +e.target.value; resizeAll(w, w * 16 / 9); state.pvSize = w; rebuild(); }; $('#exQ').onchange = e => { state.exQ = +e.target.value; };
@@ -604,16 +609,34 @@ $('#songIn').onchange = async e => { const f = e.target.files[0]; e.target.value
 async function loadSongFile(f){
   try { ensureAC(); toast('Decoding…'); const buf = await AC.decodeAudioData(await f.arrayBuffer()); state.songBuffer = buf; state.songName = f.name.replace(/\.[^.]+$/, ''); state.songStart = 0; state.bpmMul = 1;
     const badge = $('#badge'); badge.hidden = false; badge.textContent = 'Analyzing 0%'; state.songAn = await analyzeBuffer(buf, p => badge.textContent = 'Analyzing ' + Math.round(p * 100) + '%'); badge.hidden = true;
-    $('#songStart').max = Math.max(0, Math.floor(buf.duration - 5)); $('#songStart').value = 0; $('#startOut').textContent = '0:00'; $('#startWrap').hidden = false; $('#tempoFix').hidden = false; $('#toDrop').hidden = !state.songAn.dropTimes.length;
+    $('#songStart').max = Math.max(0, Math.floor(buf.duration - 3)); $('#songStart').value = 0; $('#startNum').value = '0.0'; $('#startOut').textContent = '0:00'; renderDropBtns(); $('#startWrap').hidden = false; $('#tempoFix').hidden = false; $('#toDrop').hidden = !state.songAn.dropTimes.length;
     setSrc('song'); offset = 0; await rebuildAll(); toast('Analyzed: ' + Math.round(state.songAn.bpm) + ' BPM, ' + state.songAn.dropTimes.length + ' drop' + (state.songAn.dropTimes.length === 1 ? '' : 's') + ' found');
   } catch(err){ console.warn(err); $('#badge').hidden = true; toast('Could not read that file. Try an mp3, wav or m4a.'); } }
-$('#songStart').oninput = e => { $('#startOut').textContent = fmt0(+e.target.value); }; $('#songStart').onchange = e => { state.songStart = +e.target.value; offset = 0; rebuildAll(); };
+function setSongStart(v){ if (!state.songBuffer) return; const max = Math.max(0, state.songBuffer.duration - 3); state.songStart = clamp(+(+v).toFixed(2), 0, max); $('#songStart').value = state.songStart; $('#startNum').value = state.songStart.toFixed(1); $('#startOut').textContent = fmt(state.songStart); offset = 0; setRegion(null, null); rebuildAll(); }
+$('#songStart').oninput = e => { $('#startOut').textContent = fmt(+e.target.value); $('#startNum').value = (+e.target.value).toFixed(1); }; $('#songStart').onchange = e => setSongStart(e.target.value);
+$('#startNum').onchange = e => setSongStart(e.target.value);
+document.querySelectorAll('[data-nudge]').forEach(b => b.onclick = () => { const n = b.dataset.nudge, per = 60 / ((state.songAn ? state.songAn.bpm : state.bpm) * state.bpmMul); setSongStart(state.songStart + (n === 'beat' ? per : n === '-beat' ? -per : +n)); });
+function renderDropBtns(){ const box = $('#dropBtns'); box.innerHTML = ''; const D = (state.songAn && state.songAn.dropTimes) || []; D.slice(0, 6).forEach((d, i) => { const b = document.createElement('button'); b.className = 'btn ghost sm'; b.textContent = 'Drop ' + (i + 1) + ' @ ' + fmt0(d) + ' (start 8 s before)'; b.onclick = () => setSongStart(Math.max(0, d - 8)); box.append(b); }); }
 $('#half').onclick = () => { state.bpmMul /= 2; rebuildAll(); }; $('#double').onclick = () => { state.bpmMul *= 2; rebuildAll(); };
-$('#toDrop').onclick = () => { const d = state.songAn.dropTimes[0]; state.songStart = Math.max(0, d - 8); $('#songStart').value = state.songStart; $('#startOut').textContent = fmt0(state.songStart); offset = 0; rebuildAll(); };
+$('#toDrop').onclick = () => { const d = state.songAn.dropTimes[0]; setSongStart(Math.max(0, d - 8)); };
 $('#export').onclick = () => exportVideo();
 $('#still').onclick = () => { renderAt(now()); glc.toBlob(b => b && saveBlob('frame-' + state.seed + '-' + now().toFixed(1) + 's.png', b), 'image/png'); };
-const strip = $('#strip'); let scrubbing = false; const scrubTo = e => { const r = strip.getBoundingClientRect(); seek(clamp((e.clientX - r.left) / r.width, 0, 1) * state.dur); };
-strip.addEventListener('pointerdown', e => { if (recording) return; scrubbing = true; strip.setPointerCapture(e.pointerId); scrubTo(e); }); strip.addEventListener('pointermove', e => scrubbing && scrubTo(e)); strip.addEventListener('pointerup', () => scrubbing = false);
+const strip = $('#strip'); let scrubbing = false, marking = null; const tAt = e => { const r = strip.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1) * state.dur; }; const scrubTo = e => seek(tAt(e));
+strip.addEventListener('pointerdown', e => { if (recording || state.exporting) return; strip.setPointerCapture(e.pointerId); if (e.shiftKey){ marking = tAt(e); setRegion(marking, marking); } else { scrubbing = true; scrubTo(e); } });
+strip.addEventListener('pointermove', e => { if (marking !== null){ const t = tAt(e); setRegion(Math.min(marking, t), Math.max(marking, t), true); } else if (scrubbing) scrubTo(e); });
+strip.addEventListener('pointerup', () => { if (marking !== null){ marking = null; const [a, b] = region(); if (b - a < .15) setRegion(null, null); else seek(a); } scrubbing = false; });
+function setRegion(a, b, live){ state.rIn = a === null ? null : +(+a).toFixed(2); state.rOut = b === null ? null : +(+b).toFixed(2); if (state.rIn !== null && state.rOut !== null && state.rOut < state.rIn){ const x = state.rIn; state.rIn = state.rOut; state.rOut = x; } drawRegion(); }
+function drawRegion(){ const has = state.rIn !== null || state.rOut !== null, [a, b] = region(), real = has && b - a < state.dur - .05;
+  $('#shadeL').style.width = real ? (a / state.dur * 100) + '%' : '0'; $('#shadeR').style.width = real ? ((state.dur - b) / state.dur * 100) + '%' : '0';
+  $('#shadeL').style.borderRightWidth = real ? '2px' : '0'; $('#shadeR').style.borderLeftWidth = real ? '2px' : '0';
+  if (document.activeElement !== $('#rIn')) $('#rIn').value = real ? a.toFixed(1) : ''; if (document.activeElement !== $('#rOut')) $('#rOut').value = real ? b.toFixed(1) : '';
+  $('#regionInfo').textContent = real ? (b - a).toFixed(1) + ' s · ' + Math.round((b - a) * state.fps) + ' frames' : 'whole reel'; }
+$('#setIn').onclick = () => { const t = now(); setRegion(t, state.rOut === null || state.rOut <= t ? state.dur : state.rOut); };
+$('#setOut').onclick = () => { const t = now(); setRegion(state.rIn === null || state.rIn >= t ? 0 : state.rIn, t); };
+$('#clearRegion').onclick = () => setRegion(null, null);
+$('#rIn').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(v, state.rOut === null && v !== null ? state.dur : state.rOut); };
+$('#rOut').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(state.rIn === null && v !== null ? 0 : state.rIn, v); };
+document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; const k = e.key.toLowerCase(); if (k === 'i') $('#setIn').click(); else if (k === 'o') $('#setOut').click(); else if (k === 'x') $('#clearRegion').click(); });
 document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if (e.code === 'Space'){ e.preventDefault(); $('#play').click(); } if (e.key === 'r' || e.key === 'R') $('#reroll').click(); });
 
 
@@ -627,7 +650,7 @@ function applyRecipe(R){
   if (R.bpm) state.bpm = +R.bpm; if (R.beatSeed) state.beatSeed = +R.beatSeed; if (typeof R.words === 'string') $('#lyrics').value = R.words;
   for (const id in R.dials){ if (P[id] && typeof R.dials[id] === 'object'){ const d = R.dials[id]; P[id] = {base: +d.base || 0, src: SIGNALS.includes(d.src) ? d.src : 'const', depth: +d.depth || 0}; } }
   $('#seed').value = state.seed; $('#react').value = state.react; $('#reactOut').textContent = state.react.toFixed(1); $('#intensity').value = state.intensity; $('#intOut').textContent = state.intensity.toFixed(1); $('#clarity').value = state.clarity; $('#clarOut').textContent = state.clarity.toFixed(2).replace(/0$/, '');
-  $('#length').value = String(state.lengthSel); $('#fps').value = String(state.fps); $('#fontSet').value = state.fontSet; $('#bpm').value = state.bpm; $('#bpmOut').textContent = state.bpm;
+  { const opt = [...$('#length').options].some(o => +o.value === state.lengthSel); $('#length').value = opt ? String(state.lengthSel) : '-1'; $('#lenCustom').hidden = opt; if (!opt){ state.lenCustom = state.lengthSel; $('#lenCustom').value = state.lengthSel; } } $('#fps').value = String(state.fps); $('#fontSet').value = state.fontSet; $('#bpm').value = state.bpm; $('#bpmOut').textContent = state.bpm;
   renderPresets(); renderGroups(); $('#flkPat') && ($('#flkPat').value = state.flkPattern);
 }
 const recipeCode = () => btoa(unescape(encodeURIComponent(JSON.stringify(recipe())))).replace(/=+$/, '');

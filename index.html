@@ -31,8 +31,16 @@
         <button class="btn ghost" id="still">Save frame</button>
         <span class="time" id="time">0:00.0 / 0:30</span>
       </div>
-      <div class="strip" id="strip"><canvas id="stripc" width="1120" height="128"></canvas><div class="head" id="head"></div></div>
-      <div class="legend"><span>Top: cuts. Green: hype. Pink ticks: drops. Grey: words.</span><span id="bpmInfo"></span></div>
+      <div class="strip" id="strip"><canvas id="stripc" width="1120" height="128"></canvas><div class="shade" id="shadeL"></div><div class="shade" id="shadeR"></div><div class="head" id="head"></div></div>
+      <div class="legend"><span>Top: cuts. Green: hype. Pink ticks: drops. Grey: words. Shift-drag to mark a render region.</span><span id="bpmInfo"></span></div>
+      <div class="row regionrow">
+        <span class="note" style="color:var(--fg);font-weight:600">Render region</span>
+        <input class="num" id="rIn" type="number" step="0.1" min="0" placeholder="in" style="width:72px" aria-label="Region in, seconds">
+        <span class="note">→</span>
+        <input class="num" id="rOut" type="number" step="0.1" min="0" placeholder="out" style="width:72px" aria-label="Region out, seconds">
+        <button class="btn sm" id="setIn" title="I">In at playhead</button><button class="btn sm" id="setOut" title="O">Out at playhead</button><button class="btn sm ghost" id="clearRegion" title="X">Whole reel</button>
+        <span class="note" id="regionInfo"></span>
+      </div>
     </div>
     <div class="result" id="result" hidden></div>
   </section>
@@ -62,7 +70,12 @@
       <div id="songBox" hidden>
         <label class="drop" id="songDrop">Pick a song (mp3, wav, m4a, or a video with sound)
           <input type="file" id="songIn" accept="audio/*,video/*"></label>
-        <label class="f" id="startWrap" hidden><span>Start from <output id="startOut">0:00</output></span><input type="range" id="songStart" min="0" max="60" step="0.5" value="0"></label>
+        <div id="startWrap" hidden style="display:flex;flex-direction:column;gap:6px">
+          <label class="f"><span>Song starts at <output id="startOut">0:00</output></span><input type="range" id="songStart" min="0" max="60" step="0.1" value="0"></label>
+          <div class="row"><input class="num" id="startNum" type="number" min="0" step="0.1" value="0" style="width:84px" aria-label="Start in seconds"><span class="note">s</span>
+            <button class="btn ghost sm" data-nudge="-1">−1 s</button><button class="btn ghost sm" data-nudge="-beat">−1 beat</button><button class="btn ghost sm" data-nudge="beat">+1 beat</button><button class="btn ghost sm" data-nudge="1">+1 s</button></div>
+          <div class="row" id="dropBtns"></div>
+        </div>
         <div class="row" id="tempoFix" hidden><button class="btn ghost sm" id="half">Half tempo</button><button class="btn ghost sm" id="double">Double</button><button class="btn ghost sm" id="toDrop">Start 8 s before first drop</button></div>
       </div>
       <div class="analysis" id="analysis">
@@ -120,7 +133,8 @@ DOOBE RAHO</textarea>
       <h2>Output</h2>
       <div class="two">
         <label class="f"><span>Length</span>
-          <select id="length"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="0">Whole song</option></select></label>
+          <select id="length"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="0">Whole song</option><option value="-1">Custom…</option></select>
+          <input class="num" id="lenCustom" type="number" min="3" max="600" step="0.5" value="20" hidden aria-label="Custom length in seconds"></label>
         <label class="f"><span>Frame rate</span><select id="fps"><option value="30">30 fps</option><option value="60" selected>60 fps</option></select></label>
         <label class="f"><span>Preview size</span><select id="pvSize"><option value="540">540 × 960 (fast)</option><option value="720" selected>720 × 1280</option></select></label>
         <label class="f"><span>Export size</span><select id="exSize"><option value="720">720 × 1280</option><option value="1080" selected>1080 × 1920</option></select></label>

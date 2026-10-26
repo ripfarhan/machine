@@ -78,6 +78,6 @@ function beatGrid(S, from, to){
   // beat / bar phase curves (relative to window start)
   const n = Math.round((to - from) * AFPS), beat = new Float32Array(n), bar = new Float32Array(n);
   for (let i = 0; i < n; i++){ const t = from + i / AFPS, ph = ((t - from - bo) / per); beat[i] = ph < 0 ? 0 : ph - Math.floor(ph); const bp = (ph - dOff) / 4; bar[i] = ph < 0 ? 0 : bp - Math.floor(bp); }
-  return {beats, downbeatOffset: dOff, beat, bar, per};
+  return {beats: beats.map(t => t - from), downbeatOffset: dOff, beat, bar, per};
 }
 
