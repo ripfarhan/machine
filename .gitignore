@@ -1,0 +1,10 @@
+# exports and scratch
+*.mp4
+*.webm
+*.mov
+*.zip
+*.log
+Thumbs.db
+.DS_Store
+node_modules/
+render/
