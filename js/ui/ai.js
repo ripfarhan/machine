@@ -32,6 +32,7 @@ class AwaazTaste {
   next(curWorld, mode){ const A = this.A; let world, why;
     if (mode === 'surprise'){ const ws = A.WORLD_LIST.filter(w => w !== curWorld).sort((a, b) => this.s.worlds[a].plays - this.s.worlds[b].plays); world = ws[Math.floor(this.rand() * Math.min(3, ws.length))]; why = 'surprise — something you have heard least'; }
     else if (mode === 'similar' && curWorld){ world = curWorld; why = 'more like this — same world, new seed, your settings'; }
+    else if (!curWorld && this.s.total === 0){ const first = ['EMERGENCE', 'FELT', 'REPETITION', 'CRESCENDO']; world = first[Math.floor(this.rand() * first.length)]; why = 'first time — starting with one of the strongest worlds'; }
     else { const sc = A.WORLD_LIST.map(w => [w, this.score(w, curWorld)]).sort((a, b) => b[1].total - a[1].total); world = sc[0][0]; const s = sc[0][1], st = this.s.worlds[world];
       why = st.likes ? `you liked ${A.WORLDS[world].name} ${st.likes}× (taste ${(s.th * 100 | 0)}%)` : s.nov > 0 ? `exploring — not heard ${A.WORLDS[world].name} recently` : `taste ${(s.th * 100 | 0)}%`; }
     const g = this.genomeFor(world, mode); if (mode === 'similar' && this.s.recent[0]){ const r = this.s.recent[0]; if (this.rand() < .6) g.mode = r.mode; if (this.rand() < .5) g.family = r.family; g.patches = Object.assign({}, g.patches); if (this.rand() < .5) Object.assign(g.patches, r.patches); }

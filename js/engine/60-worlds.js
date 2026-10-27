@@ -75,7 +75,7 @@ function AWZ_WORLDS(A){
   const W = A.WORLDS = {};
   const drumBus = o => Object.assign({bus: 'drums'}, o);
   W.EMERGENCE = {name: 'EMERGENCE', desc: 'rain becomes rhythm', ref: 'Order from Chaos',
-    tempo: [112, 122], swing: [0, .06], modes: {aeolian: 3, dorian: 2, phrygian: 1}, families: {pedal: 1.5, oscillate: 1.5, three: 1, resyn: 1, planing: 2, flip: 2}, colour: [.3, .7], spread: [.5, .8], form: ['emergence'],
+    tempo: [112, 122], swing: [0, .06], modes: {aeolian: 3, dorian: 2, phrygian: 1}, families: {pedal: 1.5, oscillate: 1.5, three: 1, resyn: 1, planing: 2, flip: 2}, colour: [.25, .6], spread: [.5, .8], form: ['emergence'],
     alpha: (prog, S, sp) => S.tag === 'outro' ? 1 - sp : clamp((prog - .04) / .5, 0, 1),
     tracks: {
       perc:  drumBus({patch: ['perc_click', 'perc_wood'], db: -13, hp: 400, plate: .25, hall: .2, delay: .12}),
@@ -86,7 +86,7 @@ function AWZ_WORLDS(A){
       hat:   drumBus({patch: ['hat_808', 'hat_dark'], db: -15, hp: 3000, plate: .08, pan: .15}),
       snare: drumBus({patch: ['snare_rim', 'snare_clap'], db: -13, plate: .18, hall: .1}),
       lead:  {patch: ['lead_glass', 'lead_soft'], db: -6, hp: 200, plate: .2, hall: .3, delay: .25},
-      pluck: {patch: ['glass', 'kalimba', 'vibes'], voices: 8, db: -11, hp: 300, plate: .25, hall: .3, delay: .2},
+      pluck: {patch: ['glass', 'vibes', 'marimba'], voices: 8, db: -13, hp: 300, plate: .25, hall: .3, delay: .2},
       click: drumBus({patch: ['perc_click'], db: -17, hp: 900, plate: .1, delay: .15})},
     parts: [
       {part: 'rain', slot: 'perc', opts: {pitchSlot: 'pluck'}, on: 0, core: true, tight: true},
@@ -102,10 +102,10 @@ function AWZ_WORLDS(A){
     macros: {chaos: .15}};
 
   W.PRIME = {name: 'PRIME TILING', desc: 'interlocking prime loops that never repeat', ref: 'Penrose Tiling', aeqFrom: .2,
-    tempo: [114, 122], swing: [0, .03], modes: {lydian: 2, ionian: 1.5, dorian: 2, mixolydian: 1}, families: {drone: 1, oscillate: 2, three: 1, pedal: 1.5, sus: 2}, colour: [.4, .85], spread: [.55, .9], form: ['swell', 'ambient'],
+    tempo: [114, 122], swing: [0, .03], modes: {lydian: 2, ionian: 1.5, dorian: 2, mixolydian: 1}, families: {drone: 1, oscillate: 2, three: 1, pedal: 1.5, sus: 2}, colour: [.35, .65], spread: [.55, .9], form: ['swell', 'ambient'],
     tracks: {
-      pluck: {patch: ['marimba', 'kalimba'], voices: 12, db: -4, hp: 160, plate: .25, hall: .22, delay: .1, haas: {ms: 7, amount: .3}},
-      pluck2:{patch: ['pluck_soft', 'arp_round', 'vibes'], voices: 10, db: -7, hp: 220, chorus: {mode: 2, mix: .4}, plate: .3, hall: .3, delay: .25},
+      pluck: {patch: ['marimba', 'pluck_soft'], voices: 12, db: -4, hp: 160, plate: .25, hall: .22, delay: .1, haas: {ms: 7, amount: .3}},
+      pluck2:{patch: ['pluck_soft', 'arp_round'], voices: 10, db: -7, hp: 220, chorus: {mode: 2, mix: .4}, plate: .3, hall: .3, delay: .25},
       pad:   {patch: ['pad_glass', 'pad_breath', 'pad_string'], voices: 12, db: -5, hp: 150, chorus: {mode: 1, mix: .5}, plate: .25, hall: .45},
       bass:  {patch: ['bass_sub'], bus: 'bass', db: -3},
       click: drumBus({patch: ['perc_click', 'perc_wood'], db: -14, hp: 700, plate: .15, delay: .12}),
@@ -153,9 +153,9 @@ function AWZ_WORLDS(A){
     macros: {chaos: .2}};
 
   W.DRIFT = {name: 'DRIFT', desc: 'every note at its own tempo', ref: 'My Mind Is Slipping', aeqFrom: .15,
-    tempo: [64, 86], swing: [0, 0], modes: {aeolian: 2, dorian: 2, ionian: 1, lydian: 1.5}, families: {oscillate: 2, drone: 1.5, three: 1, pedal: 1, sus: 1}, colour: [.4, .8], spread: [.6, .95], form: ['ambient'],
+    tempo: [64, 86], swing: [0, 0], modes: {aeolian: 2, dorian: 2, ionian: 1, lydian: 1.5}, families: {oscillate: 2, drone: 1.5, three: 1, pedal: 1, sus: 1}, colour: [.35, .65], spread: [.6, .95], form: ['ambient'],
     tracks: {
-      phase: {patch: ['felt', 'ep', 'pluck_soft', 'kalimba'], voices: 16, db: -3, hp: 120, plate: .3, hall: .45, delay: .15, haas: {ms: 8, amount: .3}},
+      phase: {patch: ['felt', 'ep', 'pluck_soft'], voices: 16, db: -3, hp: 120, plate: .3, hall: .45, delay: .15, haas: {ms: 8, amount: .3}},
       pad:   {patch: ['pad_string', 'pad_glass', 'pad_breath'], voices: 12, db: -7, hp: 140, chorus: {mode: 1, mix: .55}, plate: .2, hall: .55},
       tex:   {patch: ['tex_hiss', 'tex_crackle'], db: -24},
       drone: {patch: ['tex_drone'], db: -16, hall: .4},
@@ -176,7 +176,7 @@ function AWZ_WORLDS(A){
     macros: {chaos: .1, motion: .5, space: .65}};
 
   W.RETRO = {name: 'WARM RETRO', desc: 'arps, tape and old electric piano', ref: 'Waves',
-    tempo: [104, 116], swing: [.05, .14], modes: {mixolydian: 2, ionian: 1.5, lydian: 2, dorian: 2}, families: {poploop: 2, three: 1.5, cinematic: 1, tetra: 1, sus: 1}, colour: [.45, .85], spread: [.5, .8], form: ['swell'],
+    tempo: [104, 116], swing: [.03, .1], modes: {mixolydian: 2, ionian: 1.5, lydian: 2, dorian: 2}, families: {poploop: 2, three: 1.5, cinematic: 1, tetra: 1, sus: 1}, colour: [.35, .6], spread: [.5, .8], form: ['swell'],
     tracks: {
       arp:   {patch: ['arp_pulse', 'arp_round', 'arp_saw'], voices: 10, db: -4, hp: 200, chorus: {mode: 2, mix: .55}, plate: .2, hall: .15, delay: .32},
       keys:  {patch: ['ep'], voices: 12, db: -5, hp: 130, chorus: {mode: 1, mix: .5}, plate: .25, hall: .2},
@@ -231,7 +231,7 @@ function AWZ_WORLDS(A){
     macros: {chaos: .2}};
 
   W.FELT = {name: 'FELT', desc: 'felt piano over minimal techno', ref: 'Kiasmos',
-    tempo: [118, 124], swing: [.02, .08], modes: {aeolian: 3, dorian: 2, ionian: 1}, families: {three: 2, oscillate: 2, pedal: 1, cinematic: 1, flip: 1.5, swing2: 1}, colour: [.35, .7], spread: [.5, .8], form: ['swell'],
+    tempo: [118, 124], swing: [.02, .08], modes: {aeolian: 3, dorian: 2, ionian: 1}, families: {three: 2, oscillate: 2, pedal: 1, cinematic: 1, flip: 1.5, swing2: 1}, colour: [.3, .6], spread: [.5, .8], form: ['swell'],
     tracks: {
       lead:  {patch: ['felt', 'piano'], inst: 'modal', voices: 10, db: -3, hp: 110, plate: .3, hall: .35, delay: .12},
       keys:  {patch: ['felt'], voices: 12, db: -8, hp: 100, plate: .25, hall: .3},
