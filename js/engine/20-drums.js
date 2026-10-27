@@ -10,7 +10,7 @@ function AWZ_DRUMS(A){
   A.Pool = class { constructor(make, n){ this.v = []; for (let i = 0; i < n; i++){ const x = make(i); x.age = 0; x.on = false; this.v.push(x); } this.clock = 0; }
     get(){ let best = null; for (const x of this.v) if (!x.on){ best = x; break; }
       if (!best){ let old = Infinity; for (const x of this.v) if (x.age < old){ old = x.age; best = x; } }
-      best.age = ++this.clock; best.on = true; return best; }
+      best.age = ++this.clock; best.on = true; best.gl = 1; best.gr = 1; return best; }
     render(L, R, n){ let any = false; for (const x of this.v) if (x.on){ x.on = x.render(L, R, n); any = true; } return any; }
     each(fn){ for (const x of this.v) fn(x); }
     activeCount(){ let c = 0; for (const x of this.v) if (x.on) c++; return c; } };
@@ -37,7 +37,7 @@ function AWZ_DRUMS(A){
         let y = drive > 1.01 || asym ? (tanh(x * drive + asym) - ta) / dn : x;
         if (sub) y = y * (1 - sub) + body * sub;
         y = this.lp.tick(y); y = y - this.hp.lp(y);
-        const o = y * g; L[s] += o; R[s] += o;
+        const o = y * g; L[s] += o * this.gl; R[s] += o * this.gr;
         if (i > this.len) return false; }
       return true; } };
 
@@ -65,7 +65,7 @@ function AWZ_DRUMS(A){
         else { const imp = i < .0005 * sr ? (1 - i / (.0005 * sr)) * 8 : 0; this.r1.tick(imp); this.r2.tick(imp); x = this.r1.bp * .6 + this.r2.bp * .5; }
         let y = drv > 1.01 ? tanh(x * drv) / this.dn : x;
         this.hp.tick(y); y = this.hp.hp; y = this.lp.tick(y);
-        const o = y * g; L[s] += o; R[s] += o;
+        const o = y * g; L[s] += o * this.gl; R[s] += o * this.gr;
         if (i > this.len) return false; }
       return true; } };
 
@@ -87,7 +87,7 @@ function AWZ_DRUMS(A){
         let y = this.hp2.hp + this.bp2.bp * body;
         y = this.lp.tick(y); const a = i < .0003 * sr ? i / (.0003 * sr) : 1;
         if (this.choked) this.e *= this.kc; else this.e *= this.k;
-        const o = y * a * this.e * g * 1.6; L[s] += o; R[s] += o;
+        const o = y * a * this.e * g * 1.6; L[s] += o * this.gl; R[s] += o * this.gr;
         if (i > this.len || this.e < 1e-4) return false; }
       return true; } };
 
@@ -97,7 +97,7 @@ function AWZ_DRUMS(A){
       this.bp.reset(); this.bp.set((p.f || 6500) * (1 + (r() * 2 - 1) * .03), .9, sr); this.hp.reset(); this.hp.set(p.hp || 4000, .7, sr); this.len = Math.ceil(this.atk + (p.tau || .045) * 7 * sr); }
     render(L, R, n){ const g = this.vel; let i0 = this.off; this.off = 0;
       for (let s = i0; s < n; s++){ const i = this.i++; this.bp.tick(this.nz.white()); this.hp.tick(this.bp.bp); let a; if (i < this.atk) a = i / this.atk; else { this.e *= this.k; a = this.e; }
-        const o = this.hp.hp * a * g * 1.4; L[s] += o; R[s] += o; if (i > this.len) return false; }
+        const o = this.hp.hp * a * g * 1.4; L[s] += o * this.gl; R[s] += o * this.gr; if (i > this.len) return false; }
       return true; } };
 
   // ---------------------------------------------------------------- tuned membrane: toms / congas / bongo (sine with pitch env + noise)
@@ -110,7 +110,7 @@ function AWZ_DRUMS(A){
       for (let s = i0; s < n; s++){ const i = this.i++; const f = this.f * (1 + ratio * this.ep); this.ep *= this.kp; this.ph += f / sr; if (this.ph >= 1) this.ph -= 1;
         const a = i < .0008 * sr ? i / (.0008 * sr) : 1; this.bp.tick(this.nz.white());
         let y = A.sin1(this.ph) * this.e * a + this.bp.bp * this.en * nzA; this.e *= this.k; this.en *= this.kn;
-        y = this.lp.tick(tanh(y * 1.3) / .86); const o = y * g; L[s] += o; R[s] += o; if (i > this.len) return false; }
+        y = this.lp.tick(tanh(y * 1.3) / .86); const o = y * g; L[s] += o * this.gl; R[s] += o * this.gr; if (i > this.len) return false; }
       return true; } };
 
   // ---------------------------------------------------------------- resonant perc: clave / woodblock / metal tick (high-Q resonators struck by an impulse)
@@ -122,7 +122,7 @@ function AWZ_DRUMS(A){
     render(L, R, n){ const p = this.p, sr = this.sr, g = this.vel, gains = p.gains || [1, .45, .2]; let i0 = this.off; this.off = 0;
       for (let s = i0; s < n; s++){ const i = this.i++; const imp = i < .0005 * sr ? (1 - i / (.0005 * sr)) * 6 + this.nz.white() * (p.noise || .3) : 0;
         let y = 0; for (let k = 0; k < 3; k++){ if (!gains[k]) continue; this.r[k].tick(imp); y += this.r[k].bp * gains[k]; }
-        this.hp.tick(tanh(y * this.e * 1.5)); this.e *= this.k; const o = this.hp.hp * g; L[s] += o; R[s] += o; if (i > this.len) return false; }
+        this.hp.tick(tanh(y * this.e * 1.5)); this.e *= this.k; const o = this.hp.hp * g; L[s] += o * this.gl; R[s] += o * this.gr; if (i > this.len) return false; }
       return true; } };
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = AWZ_DRUMS;

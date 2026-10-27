@@ -58,7 +58,7 @@ function AWZ_THEORY(A){
     const mids = ch.pcs.filter(p => p !== ch.root && p !== ch.fifth); const midTone = ch.third !== null ? ch.third : (mids[0] !== undefined ? mids[0] : ch.root);
     roles.push(['mid', midTone]); const cols = ch.pcs.filter(p => p !== ch.root && p !== ch.fifth && p !== midTone);
     cols.forEach(c => roles.push(['high', c])); if (cols.length === 0) roles.push(['high', spread > .5 && ch.fifth !== null ? ch.fifth : ch.root]);
-    const ranges = {lowmid: [50, 62], mid: [55 + Math.round(spread * 3), 71], high: [64 + Math.round(spread * 4), 82]};
+    const ranges = {lowmid: [52, 64], mid: [55 + Math.round(spread * 3), 71], high: [64 + Math.round(spread * 4), 82]};
     const prevNotes = prev ? prev.notes : null; const out = [];
     roles.forEach(([slot, pc], k) => { const [lo, hi] = ranges[slot]; let target = prevNotes && prevNotes[k] !== undefined ? prevNotes[k] : (lo + hi) / 2 + (slot === 'high' ? 3 : 0);
       let m = near(pc, lo, hi, target); if (m === null) m = near(pc, lo - 6, hi + 6, target); if (m !== null) out.push(m); });
@@ -80,6 +80,12 @@ function AWZ_THEORY(A){
     poploop: r => ({loop: [0, 5, 2, 6].map(d => ({deg: d, bars: 4})), pedal: r.chance(.7) ? 0 : null}),
     riff: r => ({loop: r.pick([[0, 4, 5, 3], [0, 5, 3, 4], [5, 3, 0, 4]]).map((d, i) => ({deg: d, bars: 2, type: i === 3 && d === 4 ? 'sus4' : undefined})), pedal: null}),
     drone: r => ({loop: [{deg: 0, bars: 16}], pedal: 0}),
+    // measured in the reference set (research/06): parallel power chords dominate (I5, ♭III5, ♭VI5, IV5, V5), runs ≈ 1–2 bars,
+    // the same root flips between open fifth and minor/major (I5 ↔ i), sus4 → 5 resolutions (Four Tones Reflected: I5–Isus4–IV5)
+    planing: r => ({loop: r.pick([[0, 2, 5, 4], [0, 5, 2, 4], [0, 2, 3, 4], [5, 2, 0, 4], [0, 3, 2, 3]]).map((d, i) => ({deg: d, bars: r.pick([1, 2, 2]), type: i === 3 && r.chance(.5) ? 'sus4' : 'open'})), pedal: null}),
+    flip: r => { const b = r.pick([1, 2, 2]); const second = r.pick([3, 5, 2]); return {loop: [{deg: 0, bars: b, type: 'open'}, {deg: 0, bars: b, type: 'tri'}, {deg: second, bars: b, type: 'open'}, {deg: 0, bars: b, type: r.pick(['sus4', 'open'])}], pedal: null}; },
+    sus: r => ({loop: [{deg: 0, bars: 2, type: 'open'}, {deg: 0, bars: 2, type: 'sus4'}, {deg: 3, bars: 2, type: 'open'}, {deg: 0, bars: 2, type: 'sus4'}], pedal: r.chance(.3) ? 0 : null}),
+    swing2: r => { const pair = r.pick([[0, 3], [0, 4], [0, 6], [0, 2]]); return {loop: [{deg: pair[0], bars: 1}, {deg: pair[1], bars: 1, type: pair[1] === 3 ? 'sev' : undefined}], pedal: null}; },
     three: r => ({loop: r.pick([[0, 5, 3], [0, 3, 6], [0, 5, 6], [0, 2, 5]]).map((d, i) => ({deg: d, bars: i === 0 ? 4 : 2})), pedal: r.chance(.5) ? 0 : null})};
   A.FAMILIES = Object.keys(FAM);
   // chord colour per degree, biased by a `colour` amount 0..1 (0 = open fifths/sus, 1 = add9/nine/quartal) — never root-position plain sevenths up front
@@ -87,7 +93,7 @@ function AWZ_THEORY(A){
     const fourth = (key.pc(deg + 3) - key.pc(deg) + 12) % 12, sixth = (key.pc(deg + 6) - key.pc(deg + 3) + 12) % 12;
     if (fifth !== 7) return fourth === 5 && sixth === 5 ? 'quartal' : 'sus2';   // diminished-ish degree: avoid the tritone triad
     const okSus4 = fourth === 5, okQuart = fourth === 5 && sixth === 5;
-    const w = colour < .25 ? {open: 4, sus2: 3, no3add9: 2, sus4: 1} : colour < .5 ? {sus2: 3, add9: 3, no3add9: 2, open: 1.5, tri: 1, sus4: 1} : colour < .75 ? {add9: 4, sus2: 2, nine: 1.5, six9: 1, quartal: 1, no3add9: 1.5} : {nine: 3, add9: 2.5, quartal: 2, six9: 1.5, m11: 1};
+    const w = colour < .25 ? {open: 5, sus4: 2, sus2: 2, no3add9: 1.5} : colour < .5 ? {open: 3, sus2: 2.5, sus4: 1.5, add9: 2, no3add9: 2, tri: 1.2} : colour < .75 ? {add9: 3, open: 1.5, sus2: 2, nine: 1.2, six9: 1, quartal: 1, no3add9: 1.5, tri: 1} : {nine: 2.5, add9: 2.5, quartal: 2, six9: 1.5, m11: 1, open: 1};
     if (!okSus4){ w.sus2 = (w.sus2 || 0) + (w.sus4 || 0); delete w.sus4; }
     if (!okQuart){ w.add9 = (w.add9 || 0) + (w.quartal || 0); delete w.quartal; }
     return r.weighted(w); };
