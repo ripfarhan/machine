@@ -22,20 +22,27 @@
   $s('stGen').onclick = () => regen(true);
 
   const COL = {intro: '#2b3a55', build: '#6a4a16', peak: '#b0134f', break: '#1f4d4a', build2: '#6a4a16', peak2: '#d11a5e', outro: '#2b3a55'};
-  function drawArc(M){ const c = $s('stArc'), x = c.getContext('2d'), w = c.width, h = c.height; x.clearRect(0, 0, w, h);
-    M.sections.forEach(s => { const x0 = s.start / M.bars * w, x1 = (s.start + s.bars) / M.bars * w; x.fillStyle = COL[s.name]; x.fillRect(x0, 0, x1 - x0 - 1, h); x.fillStyle = 'rgba(255,255,255,.75)'; x.font = '600 13px system-ui'; x.fillText(s.name + ' ' + s.bars, x0 + 6, 20); });
+  function drawArc(M, posOverride){ const c = $s('stArc'), x = c.getContext('2d'), w = c.width, h = c.height; x.clearRect(0, 0, w, h);
+    M.sections.forEach(s => { const x0 = s.start / M.bars * w, x1 = (s.start + s.bars) / M.bars * w; x.fillStyle = COL[s.name]; x.fillRect(x0, 0, x1 - x0 - 1, h); x.fillStyle = 'rgba(255,255,255,.75)'; x.font = '600 20px system-ui'; x.fillText(s.name + ' ' + s.bars, x0 + 8, 26); });
     // layer lanes
-    const lanes = ['kick', 'hat', 'perc', 'bass', 'arp', 'pad']; lanes.forEach((L, i) => { for (let b = 0; b < M.bars; b++){ const on = S.sectionAt(M, b).on[L]; if (on > 0){ x.fillStyle = 'rgba(255,255,255,' + (.15 + on * .35) + ')'; x.fillRect(b / M.bars * w, 30 + i * 6, w / M.bars - 1, 4); } } });
-    { const t = S.playhead(), tot = M.bars * 16 * 60 / M.p.bpm / 4; x.fillStyle = '#41e6ff'; x.fillRect(t / tot * w - 1, 0, 2, h); x.fillStyle = 'rgba(0,0,0,.6)'; x.fillRect(Math.min(w - 64, t / tot * w + 4), h - 18, 60, 16); x.fillStyle = '#41e6ff'; x.font = '600 12px system-ui'; x.fillText(fmt(t) + ' / ' + fmt0(tot), Math.min(w - 62, t / tot * w + 6), h - 5); } }
-  // scrub: click or drag anywhere on the arc
-  { const c = $s('stArc'); let drag = false; const at = e => { const r = c.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * S.duration(); };
-    c.style.cursor = 'ew-resize'; c.addEventListener('pointerdown', e => { if (!S.model()) regen(); c.setPointerCapture(e.pointerId); drag = true; S.seek(at(e)); drawArc(S.model()); });
-    c.addEventListener('pointermove', e => { if (drag){ S.seek(at(e)); drawArc(S.model()); } }); c.addEventListener('pointerup', () => drag = false); c.addEventListener('pointercancel', () => drag = false); }
-  function regen(announce){ const M = S.generate(); $s('stInfo').textContent = S.describe(M); drawArc(M); if (S.playing()){ S.stop(); S.play(); } if (announce) toast('Generated · seed ' + P.seed); }
+    const lanes = ['kick', 'hat', 'perc', 'bass', 'arp', 'pad']; lanes.forEach((L, i) => { for (let b = 0; b < M.bars; b++){ const on = S.sectionAt(M, b).on[L]; if (on > 0){ x.fillStyle = 'rgba(255,255,255,' + (.15 + on * .35) + ')'; x.fillRect(b / M.bars * w, 40 + i * 8, w / M.bars - 1, 5); } } });
+    { const t = posOverride !== undefined ? posOverride : S.playhead(), tot = M.bars * 16 * 60 / M.p.bpm / 4; x.fillStyle = '#41e6ff'; x.fillRect(t / tot * w - 2, 0, 4, h); x.beginPath(); x.moveTo(t / tot * w - 9, 0); x.lineTo(t / tot * w + 9, 0); x.lineTo(t / tot * w, 12); x.fill(); } }
+  // scrub: the arc and the slider both seek. While playing, dragging only moves the playhead; audio restarts once on release
+  let scrubT = null; const seekTo = (sec, commit) => { if (S.playing() && !commit){ scrubT = sec; drawArc(S.model(), sec); syncPos(sec); return; } scrubT = null; S.seek(sec); drawArc(S.model()); syncPos(); };
+  { const wrap = $s('stArcWrap'), c = $s('stArc'); let drag = false; const at = e => { const r = c.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width))) * S.duration(); };
+    wrap.style.cursor = 'ew-resize';
+    wrap.addEventListener('pointerdown', e => { if (e.button > 0) return; if (!S.model()) regen(); drag = true; seekTo(at(e), !S.playing()); try { wrap.setPointerCapture(e.pointerId); } catch(err){} e.preventDefault(); });
+    wrap.addEventListener('pointermove', e => { if (drag) seekTo(at(e), false); });
+    const end = e => { if (!drag) return; drag = false; seekTo(at(e), true); };
+    wrap.addEventListener('pointerup', end); wrap.addEventListener('pointercancel', () => { drag = false; if (scrubT !== null) seekTo(scrubT, true); });
+    wrap.addEventListener('lostpointercapture', () => { if (drag){ drag = false; if (scrubT !== null) seekTo(scrubT, true); } }); }
+  { const sl = $s('stSeek'); sl.addEventListener('input', () => seekTo(+sl.value / 1000 * S.duration(), false)); sl.addEventListener('change', () => seekTo(+sl.value / 1000 * S.duration(), true)); }
+  function syncPos(override){ const d = S.duration(), t = override !== undefined ? override : S.playhead(); $s('stPos').textContent = fmt(t) + ' / ' + fmt0(d); if (document.activeElement !== $s('stSeek')) $s('stSeek').value = d ? Math.round(t / d * 1000) : 0; }
+  function regen(announce){ const M = S.generate(); $s('stInfo').textContent = S.describe(M); drawArc(M); syncPos(); if (S.playing()){ S.stop(); S.play(); } if (announce) toast('Generated · seed ' + P.seed); }
   $s('stPlay').onclick = () => { if (S.playing()){ S.stop(); $s('stPlay').innerHTML = '&#9654;'; } else { if (!S.model()) regen(); S.play(); $s('stPlay').innerHTML = '&#10074;&#10074;'; } };
-  setInterval(() => { const M = S.model(); if (M && S.playing()) drawArc(M); else if (M && $s('stPlay').innerHTML.includes('10074')) { $s('stPlay').innerHTML = '&#9654;'; drawArc(M); } }, 120);
+  setInterval(() => { const M = S.model(); if (M && S.playing() && scrubT === null){ drawArc(M); syncPos(); } else if (M && $s('stPlay').innerHTML.includes('10074')) { $s('stPlay').innerHTML = '&#9654;'; drawArc(M); } }, 120);
   document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if (!S.model()) return;
-    if (e.key === 'Home'){ S.seek(0); drawArc(S.model()); } if (e.key === 'ArrowLeft' && e.altKey){ S.seek(S.playhead() - 4 * 60 / S.P.bpm * 4); drawArc(S.model()); } if (e.key === 'ArrowRight' && e.altKey){ S.seek(S.playhead() + 4 * 60 / S.P.bpm * 4); drawArc(S.model()); } });
+    if (e.key === 'Home') seekTo(0, true); if (e.key === 'ArrowLeft' && e.altKey) seekTo(S.playhead() - 16 * 60 / S.P.bpm, true); if (e.key === 'ArrowRight' && e.altKey) seekTo(S.playhead() + 16 * 60 / S.P.bpm, true); });
 
   async function renderBlob(){ const st = $s('stStatus'); st.textContent = 'Rendering…'; const buf = await S.render(p => st.textContent = 'Rendering ' + Math.round(p * 100) + '%'); st.textContent = 'Encoding…'; const blob = S.toWav(buf); st.textContent = ''; return blob; }
   $s('stExport').onclick = async () => { try { const blob = await renderBlob(); saveBlob('studio-' + S.NOTE[P.tonic].replace('#', 's') + P.mode + '-' + P.bpm + '-seed' + P.seed + '.wav', blob); toast('WAV saved'); } catch(e){ console.error(e); toast('Render failed: ' + e.message); } };

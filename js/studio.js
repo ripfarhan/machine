@@ -81,12 +81,16 @@ const STUDIO = (() => {
   }
 
   // ---------------------------------------------------------------- audio graph
+  const BUFS = new WeakMap();   // noise and reverb impulse are built once per AudioContext, not on every restart/seek
   function graph(ctx, M){
     const g = {ctx}; const p = M.p;
-    const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const nd = noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1; g.noise = noise;
-    // reverb IR: exponentially decaying noise, slightly decorrelated per channel
-    const ir = ctx.createBuffer(2, ctx.sampleRate * 2.8, ctx.sampleRate);
-    for (let c = 0; c < 2; c++){ const d = ir.getChannelData(c); for (let i = 0; i < d.length; i++){ const t = i / ctx.sampleRate; d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 2.4) * (1 - Math.exp(-t * 60)); } }
+    let B = BUFS.get(ctx); if (!B){ B = {};
+      B.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const nd = B.noise.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      // reverb IR: exponentially decaying noise, slightly decorrelated per channel
+      B.ir = ctx.createBuffer(2, ctx.sampleRate * 2.8, ctx.sampleRate);
+      for (let c = 0; c < 2; c++){ const d = B.ir.getChannelData(c); for (let i = 0; i < d.length; i++){ const t = i / ctx.sampleRate; d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 2.4) * (1 - Math.exp(-t * 60)); } }
+      BUFS.set(ctx, B); }
+    const noise = B.noise, ir = B.ir; g.noise = noise;
     g.master = ctx.createGain(); g.master.gain.value = 1.15;
     g.comp = ctx.createDynamicsCompressor(); g.comp.threshold.value = -16; g.comp.ratio.value = 1.8; g.comp.attack.value = .008; g.comp.release.value = .08; g.comp.knee.value = 12;   // glue, not a pump: the kick must not duck the whole mix
     g.drive = ctx.createWaveShaper(); { const n = 1024, c = new Float32Array(n), k = .4 + p.drive * 4; for (let i = 0; i < n; i++){ const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(x * k) / Math.tanh(k); } g.drive.curve = c; g.drive.oversample = '2x'; }
@@ -101,7 +105,7 @@ const STUDIO = (() => {
     g.padLP = ctx.createBiquadFilter(); g.padLP.type = 'lowpass'; g.padLP.frequency.value = 900; g.padLP.Q.value = .7; g.padLP.connect(g.tonal); g.padLP.connect(g.verbSend);
     g.lfo = ctx.createOscillator(); g.lfo.frequency.value = M.pad.lfo; g.lfoG = ctx.createGain(); g.lfoG.gain.value = 320; g.lfo.connect(g.lfoG); g.lfoG.connect(g.padLP.frequency); g.lfo.start();
     g.texBP = ctx.createBiquadFilter(); g.texBP.type = 'bandpass'; g.texBP.Q.value = 5; g.texG = ctx.createGain(); g.texG.gain.value = 0; g.texBP.connect(g.texG); g.texG.connect(g.tonal); g.texG.connect(g.verbSend);
-    { const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; src.connect(lp); lp.connect(g.texBP); src.start(); }
+    { const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; src.connect(lp); lp.connect(g.texBP); src.start(); g.texSrc = src; }
     return g;
   }
 
@@ -202,7 +206,7 @@ const STUDIO = (() => {
     if (step % 16 !== 0){ const bar = Math.floor(step / 16), sec = sectionAt(model, bar); if (sec.on.pad > 0){ const ci = Math.floor(bar / model.chordHold) % model.chordCycle.length, root = model.chordCycle[ci]; const tri = [root, root + 2, root + 4].map(d => deg2midi(d, model.scale, model.p.tonic, 1)); padChord(g, next, tri, stepDur * (16 - step % 16), model.pad.detune); } }
     const timer = setInterval(() => { while (next < ctx.currentTime + .15 && step < total){ scheduleStep(g, model, step, next); step++; next += stepDur; } if (step >= total && ctx.currentTime > next + 2) stop(); }, 25);
     live = {g, timer, start, stepDur}; return live; }
-  function stop(){ if (!live) return; pausedAt = playhead(); clearInterval(live.timer); try { live.g.master.gain.setTargetAtTime(0, live.g.ctx.currentTime, .05); const g = live.g; setTimeout(() => { try { g.master.disconnect(); g.lfo.stop(); } catch(e){} }, 400); } catch(e){} live = null; }
+  function stop(){ if (!live) return; pausedAt = playhead(); clearInterval(live.timer); try { live.g.master.gain.setTargetAtTime(0, live.g.ctx.currentTime, .05); const g = live.g; setTimeout(() => { try { g.master.disconnect(); g.lfo.stop(); if (g.texSrc) g.texSrc.stop(); } catch(e){} }, 400); } catch(e){} live = null; }
   const playing = () => !!live;
   const playhead = () => live ? Math.max(0, live.g.ctx.currentTime - live.start) : pausedAt;
   const duration = () => model ? model.bars * 16 * 60 / model.p.bpm / 4 : 0;

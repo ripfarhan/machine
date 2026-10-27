@@ -185,7 +185,11 @@ DOOBE RAHO</textarea>
         <input class="num" id="stSeed" type="number" min="1" max="999999" value="7" style="width:84px" aria-label="Studio seed">
         <span class="note" id="stInfo" style="flex:1"></span>
       </div>
-      <div class="strip" style="height:34px"><canvas id="stArc" width="1120" height="68" style="width:100%;height:100%"></canvas></div>
+      <div class="strip" id="stArcWrap" style="height:48px;touch-action:none"><canvas id="stArc" width="1120" height="96" style="width:100%;height:100%"></canvas></div>
+      <div class="row" style="gap:10px;align-items:center">
+        <span class="note" id="stPos" style="font-family:var(--mono);min-width:92px">0:00.0 / 0:00</span>
+        <input type="range" id="stSeek" min="0" max="1000" step="1" value="0" style="flex:1" aria-label="Studio playback position">
+      </div>
       <div class="two" style="grid-template-columns:1fr 1fr 1fr 1fr">
         <label class="f"><span>Tempo <output id="stTempoOut">118</output></span><input type="range" id="stTempo" min="90" max="150" step="1" value="118"></label>
         <label class="f"><span>Key</span><select id="stKey"></select></label>
