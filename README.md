@@ -92,32 +92,64 @@ to *Max hold*. Cues save into recipes.
 
 ## Studio
 
-A math-based synthesiser. Every sample is computed, nothing is sampled:
+A math-based synthesiser. Every sample is computed, nothing is sampled, and
+nothing is a loop: the music comes from systems that evolve.
 
-- **Voices** — FM operators (bells, e-piano, bass, pads, leads), Karplus–Strong
-  strings with fractional-delay tuning, modal resonator banks using physical
-  mode ratios (circular membrane, marimba bar, glass, metal plate), PolyBLEP
-  saw/square oscillators through TPT state-variable filters, additive pads whose
-  partials drift independently, granular clouds on the chord tones, Lorenz-driven
-  FM drones, just-intonation drones.
-- **Space** — an 8-line feedback-delay-network reverb (Hadamard matrix, damped
-  lines), a ping-pong delay, sidechain from the actual kick times, mono low end
-  with adjustable width above.
-- **Composition** — Markov harmony over scale degrees with voice leading,
-  harmonic colour from triads to 9ths and quartal stacks; a motif that develops
-  every phrase (invert, retrograde, fragment, augment, lift) and mutates so the
-  changes accumulate; elementary cellular automata rewriting hat, percussion,
-  kick and arp gates every bar; two polymetric percussion lines; logistic-map
-  chaos on velocities and gates and a Lorenz attractor on filters and textures.
-  Forms: arc, rise (chaos decays into order), twin peaks, ambient.
+**Sounds** — FM operators (bells, e-piano, bass, pads, leads), a two-pair FM
+piano with key-tracked decay and three detuned strings per note (felt, e-piano,
+glass), Karplus–Strong strings with fractional-delay tuning and a body
+resonance, modal resonator banks using physical mode ratios (circular membrane,
+marimba bar, glass, metal plate), PolyBLEP saw/square oscillators through TPT
+state-variable filters, a 5-voice unison pad with a 24 dB filter and stereo
+chorus, additive pads whose partials drift independently, granular clouds on
+the chord tones, Lorenz-driven FM drones, just-intonation drones, Shepard-tone
+risers that climb forever.
+
+**Space and master** — an 8-line feedback-delay-network reverb (Hadamard
+matrix, damped lines, high-passed send, low-passed return), a ping-pong delay,
+sidechain from the actual kick times, a separate mono bass bus with tape-style
+warmth, a high-passed music bus, a low shelf and an air shelf, a glue
+compressor and a look-ahead limiter at −1 dBFS. No soft clipping anywhere.
+The role levels were solved numerically so that the median spectral balance of
+a piece lands on the balance measured across the reference tracks in
+`music/analysis/profile.json`.
+
+**Composition (the evolving engine)** —
+- harmony from a progression grammar per mode (the loops people have loved for
+  decades: i–VI–III–VII, i–VII–VI–VII, I–V–vi–IV, dorian i–IV…), one chord-colour
+  palette per piece (triads → 7ths/add9 → 9ths/11ths/quartal), voice leading by
+  search, and a voicing rule that puts a 9th a major seventh above the third,
+  never a semitone;
+- a motif that lives on chord-tone *rungs*, so the same shape re-harmonises
+  itself under every chord, with passing tones on weak sixteenths;
+- motif rhythm from Euclidean patterns, a Fibonacci word (the L-system A→AB,
+  B→A) or a rule-90 cellular automaton; pitch from a 1/f (Voss) walk, an
+  L-system, a Lorenz slice or a weighted random walk — the *Melody math* dial;
+- development as A A′ B A phrase schemes (tail change, inversion, lift,
+  retrograde, thinning, augmentation) rather than scrambling: the theme stays
+  recognisable, and from the second peak on it has moved;
+- two polymetric percussion lines on chord tones, a polymetric arpeggio cycle
+  (3, 5, 6 or 7 against the bar) with 1/f accents and chaos-driven ratchets,
+  a felt piano that plays broken chords in the breakdown and the intro;
+- roles enter one at a time (every few bars in the intro, faster in the second
+  build), the break keeps pad + keys (+ one or two others), the outro removes
+  them in reverse;
+- chaos (logistic map) drives velocities, ghosts, ratchets and timbre, not the
+  grid; Lorenz attractors drive filters and textures.
+
+Forms: arc, rise (chaos decays into order), twin peaks, ambient. Styles for
+*New piece* / *Randomize*: emergence (Max Cooper-leaning), cinematic, broken
+beat / IDM, deep house, techno, downtempo, ambient — all on the evolving
+engine. The genre loop styles (house, dub techno, acid, electro, garage, D&B,
+lo-fi, trap, synthwave, amapiano) remain in the dropdown as a pattern engine.
 
 *New piece* changes everything; *Variation* keeps harmony, sounds and form and
 rewrites the parts. Rendering runs in a background thread; changing a dial
 re-renders while the current audio keeps playing. A 4-minute track takes
-roughly 10–15 s. The same engine runs in Node:
+roughly 15–25 s. The same engine runs in Node:
 
     const S = require('./js/synth.js')();
-    const {L, R, sr, meta} = S.render({seed: 7, bars: 112});
+    const {L, R, sr, meta} = S.render({seed: 7, bars: 112, style: 'cooper'});
 
 Re-run the analysis on new material:
 

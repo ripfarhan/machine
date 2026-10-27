@@ -23,6 +23,11 @@ button,input,select,textarea{font:inherit;color:inherit}
   body{height:100vh;margin:0;overflow:hidden;display:flex;flex-direction:column;padding-bottom:12px}
   .grid{flex:1;min-height:0;align-items:stretch}
   .stage,.rack{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  /* the preview, transport and timeline stay put; only what sits under them scrolls */
+  .stage{overflow:hidden}
+  .stage .screen{width:min(100%,max(200px,calc((100vh - 455px) * 9 / 16)),440px)}
+  .stage > .stagescroll{flex:1 1 auto;min-height:110px;overflow-y:auto;overscroll-behavior:contain;width:100%;display:flex;flex-direction:column;gap:10px;align-items:center;padding-right:6px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+  .stagescroll > .sec{align-self:stretch}
 }
 @media (max-width:1100px){
   .grid{grid-template-columns:minmax(280px,400px) minmax(0,1fr)}
@@ -32,8 +37,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)} .stage{grid-row:auto} #visualRack,#audioRack{grid-column:auto}}
 .stage{display:flex;flex-direction:column;gap:10px;align-items:center;min-width:0}
 @media (max-width:1100px) and (min-width:761px){.stage{position:sticky;top:10px}}
-.stage > .sec{align-self:stretch}
+.stage > .sec,.stagescroll > .sec{align-self:stretch}
 .stage > *,.rack > *{flex-shrink:0}
+.stagescroll{display:flex;flex-direction:column;gap:10px;align-items:center;width:100%}
 .screen{position:relative;width:min(100%,calc(64vh * 9 / 16),440px);aspect-ratio:9/16;max-width:100%;background:#000;border:1px solid var(--line);overflow:hidden}
 .screen canvas{width:100%;height:100%;display:block}
 .screen.drag{outline:3px dashed var(--hot);outline-offset:-10px}
@@ -129,3 +135,7 @@ select,.num{background:var(--ink);border:1px solid var(--line);padding:6px 6px;m
 .cue .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}
 .cue.next .txt{color:var(--hot);font-weight:600}
 .cue.unset .txt{color:var(--muted)}
+details.more>summary{cursor:pointer;list-style:none;padding:4px 0}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::before{content:'+ ';color:var(--hot)}
+details.more[open]>summary::before{content:'− '}

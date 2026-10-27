@@ -1,9 +1,11 @@
 /* Maut ki machine — SYNTH: a math-based generative synthesiser.
    Every sample is computed: FM operators, Karplus–Strong strings, modal resonator banks (membrane, bar, glass, metal
-   mode ratios), PolyBLEP oscillators through TPT state-variable filters, granular clouds, a feedback-delay-network reverb.
-   The music comes from systems that evolve rather than loop: Markov harmony with voice leading, a motif that develops
-   (invert, retrograde, fragment, augment, mutate — mutations accumulate), elementary cellular automata rewriting rhythms
-   every bar, logistic-map and Lorenz-attractor modulation. Same parameters → same audio.
+   mode ratios), PolyBLEP oscillators through TPT state-variable filters, unison pads with stereo chorus, FM felt pianos,
+   granular clouds, Shepard risers, a feedback-delay-network reverb, a glue compressor and a look-ahead limiter.
+   The music comes from systems that evolve rather than loop: a curated progression grammar with voice leading, motifs that
+   re-harmonise themselves against every chord (chord-tone roles, not fixed pitches) and develop as A A' B A, Fibonacci-word
+   and Euclidean rhythms, 1/f (Voss) and L-system melodic walks, polymetric arpeggio cycles, cellular automata, logistic-map
+   and Lorenz-attractor modulation. Same parameters → same audio.
    Self-contained so it runs in a Web Worker (via SYNTH_CORE.toString()) and in Node for testing. */
 'use strict';
 function SYNTH_CORE(){
@@ -19,6 +21,10 @@ function SYNTH_CORE(){
   const rr = (r, a, b) => a + r() * (b - a);
   const pickW = (r, o) => { let s = 0; for (const k in o) s += Math.max(0, o[k]); let x = r() * s; for (const k in o){ x -= Math.max(0, o[k]); if (x <= 0) return k; } return Object.keys(o)[0]; };
   function euclid(k, n, rot){ const o = []; for (let i = 0; i < n; i++) o.push(Math.floor((i + 1) * k / n) - Math.floor(i * k / n) ? 1 : 0); return o.map((_, i) => o[((i - (rot | 0)) % n + n) % n]); }
+  // Fibonacci word (L-system A→AB, B→A): an aperiodic long/short rhythm that still feels ordered
+  function fibWord(n){ let s = 'A'; while (s.length < n) s = s.replace(/A|B/g, c => c === 'A' ? 'AB' : 'A'); return s.slice(0, n); }
+  // 1/f "Voss" noise: a few dice re-rolled at halving rates — melodies drawn from it sound neither random nor mechanical
+  function voss(r, n, dice){ const d = Array.from({length: dice}, () => r()), o = []; for (let i = 0; i < n; i++){ for (let k = 0; k < dice; k++) if (i % (1 << k) === 0) d[k] = r(); o.push(d.reduce((a, b) => a + b, 0) / dice); } return o; }
   // sine by table, phase in cycles
   const SN = 4096, SIN = new Float32Array(SN + 1); for (let i = 0; i <= SN; i++) SIN[i] = Math.sin(i / SN * TAU);
   function sin1(ph){ ph -= Math.floor(ph); const x = ph * SN, i = x | 0; return SIN[i] + (SIN[i + 1] - SIN[i]) * (x - i); }
@@ -34,6 +40,11 @@ function SYNTH_CORE(){
       const w = TAU * f / sr, r = Math.exp(-1 / (decays[k] * sr)), c = 2 * r * Math.cos(w), r2 = r * r, lim = Math.min(n, Math.ceil(decays[k] * sr * 7) + 2);
       let y2 = 0, y1 = amps[k] * gain * r * Math.sin(w); if (n > 1) out[1] += y1;
       for (let i = 2; i < lim; i++){ const y = c * y1 - r2 * y2; out[i] += y; y2 = y1; y1 = y; } } }
+  // stereo chorus applied in place to a finished stereo buffer: two modulated delay lines, opposite phase per side
+  function chorusST(sr, l, r, depthMs, rate, mix, seed){ const n = l.length, N = Math.round(.04 * sr), bl = new Float32Array(N), br = new Float32Array(N); let i = 0, ph = (seed % 97) / 97;
+    const base = .012 * sr, dep = depthMs * .001 * sr, rd = (b, pos) => { let x = pos; while (x < 0) x += N; const i0 = x | 0, f = x - i0; return b[i0 % N] + (b[(i0 + 1) % N] - b[i0 % N]) * f; };
+    for (let s = 0; s < n; s++){ bl[i] = l[s]; br[i] = r[s]; ph += rate / sr; const d1 = base + dep * sin1(ph), d2 = base + dep * sin1(ph + .5), d3 = base * .7 + dep * sin1(ph * 1.31 + .25);
+      const yl = rd(bl, i - d1) * .7 + rd(br, i - d3) * .3, yr = rd(br, i - d2) * .7 + rd(bl, i - d3 * 1.1) * .3; i = (i + 1) % N; l[s] = l[s] * (1 - mix * .5) + yl * mix; r[s] = r[s] * (1 - mix * .5) + yr * mix; } }
 
   const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const MODES = {minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10], phrygian: [0, 1, 3, 5, 7, 8, 10], harmonicMinor: [0, 2, 3, 5, 7, 8, 11],
@@ -47,48 +58,51 @@ function SYNTH_CORE(){
     bar: {r: [1, 3.932, 9.538], a: [1, .32, .1], d: [.7, .22, .07]},                 // tuned marimba bar 1 : 3.9 : 9.5
     metal: {r: [1, 1.414, 2.233, 2.756, 3.702, 4.467], a: [1, .75, .6, .42, .3, .2], d: [1.6, 1.2, .9, .65, .45, .3]}};
   const METAL6 = [2, 3, 4.16, 5.43, 6.79, 8.21];
+  const panLR = pan => { const p = clamp(pan, -1, 1); return [Math.cos((p + 1) * Math.PI / 4), Math.sin((p + 1) * Math.PI / 4)]; };
 
   // =========================================================== instruments (each returns {m} mono or {l, r} stereo)
   const I = {};
+  // kick: sine with a two-stage pitch drop, a 3 ms click, gentle saturation (never a square), low-passed so it stays round
   I.kick = (sr, e) => { const P = e.p, n = Math.ceil((P.decay * 5 + .08) * sr), m = new Float32Array(n), nz = rngOf(e.seed);
-    let ph = 0, amp = 1, pe = 1; const ak = Math.exp(-1 / (P.decay * sr)), pk = Math.exp(-1 / (P.pitchT * sr)), atk = .0012 * sr, clk = .005 * sr, dr = P.drive, dn = Math.tanh(dr);
+    let ph = 0, amp = 1, pe = 1; const ak = Math.exp(-1 / (P.decay * sr)), pk = Math.exp(-1 / (P.pitchT * sr)), atk = .0012 * sr, clk = .003 * sr, dr = clamp(P.drive, 1, 1.9), dn = Math.tanh(dr), lp = svf(); svfSet(lp, 6500, .6, sr);
     for (let i = 0; i < n; i++){ const f = P.f1 + (P.f0 - P.f1) * pe; pe *= pk; ph += f / sr; let x = sin1(ph) * amp; amp *= ak; if (i < atk) x *= i / atk;
-      if (i < clk) x += (nz() * 2 - 1) * (1 - i / clk) * P.click; m[i] = Math.tanh(x * dr) / dn; }
+      if (i < clk) x += (nz() * 2 - 1) * (1 - i / clk) * P.click * .7; m[i] = svfTick(lp, Math.tanh(x * dr) / dn); }
     fadeTail(m, sr, .02); return {m}; };
   I.snare = (sr, e) => { const P = e.p, n = Math.ceil((Math.max(P.tone, P.noise) * 6 + .03) * sr), m = new Float32Array(n), nz = rngOf(e.seed);
     if (!P.clap) modal(sr, m, P.f0, MEMBRANE, [1, .6, .45, .35, .3, .22, .18, .14], MEMBRANE.map((r, k) => P.tone / (1 + k * .55)), .55 * P.body);
-    const s = svf(); svfSet(s, P.nf, P.clap ? 1.4 : .8, sr);
+    const s = svf(); svfSet(s, P.nf, P.clap ? 1.2 : .7, sr); const h = svf(); svfSet(h, 9500, .7, sr);
     const bursts = P.clap ? [0, .0095, .0195, .031] : [0], tail = P.noise;
     for (let i = 0; i < n; i++){ const t = i / sr; let env = 0;
       if (P.clap){ for (let b = 0; b < 3; b++){ const d = t - bursts[b]; if (d >= 0) env += Math.exp(-d / .0055) * .8; } const d = t - bursts[3]; if (d >= 0) env += Math.exp(-d / tail); }
       else env = Math.exp(-t / tail) * Math.min(1, t / .0007);
-      svfTick(s, nz() * 2 - 1); m[i] += (P.clap ? s.bp : s.bp * .7 + s.hp * .3) * env * P.snap; }
+      svfTick(s, nz() * 2 - 1); const x = P.clap ? s.bp : s.bp * .6 + s.hp * .4; m[i] += svfTick(h, x) * env * P.snap; }
     fadeTail(m, sr, .01); return {m}; };
+  // hat: filtered noise blended with six square partials at metallic ratios (the 808 recipe), high-passed, short
   I.hat = (sr, e) => { const P = e.p, d = e.open ? P.open : P.closed, n = Math.ceil((d * 6 + .01) * sr), m = new Float32Array(n), nz = rngOf(e.seed);
-    const ph = new Float64Array(6), inc = METAL6.map(r => r * P.base / sr), h1 = svf(), h2 = svf(), bp = svf(); svfSet(h1, P.hp, .6, sr); svfSet(h2, P.hp, .6, sr); svfSet(bp, P.ring, 2.5, sr);
-    let a = 1; const ak = Math.exp(-1 / (d * sr)), atk = .0006 * sr;
+    const ph = new Float64Array(6), inc = METAL6.map(r => r * P.base / sr), h1 = svf(), h2 = svf(), bp = svf(); svfSet(h1, P.hp, .6, sr); svfSet(h2, P.hp * .9, .6, sr); svfSet(bp, P.ring, 2, sr);
+    const lp = svf(); svfSet(lp, 15500, .5, sr); let a = 1; const ak = Math.exp(-1 / (d * sr)), atk = .0006 * sr, nzA = clamp(P.noisy, .3, .95);
     for (let i = 0; i < n; i++){ let x = 0; for (let k = 0; k < 6; k++){ ph[k] += inc[k]; if (ph[k] >= 1) ph[k] -= 1; x += ph[k] < .5 ? 1 : -1; }
-      x = x / 6 * (1 - P.noisy) + (nz() * 2 - 1) * P.noisy; svfTick(h1, x); svfTick(h2, h1.hp); svfTick(bp, h2.hp);
-      m[i] = (h2.hp * .75 + bp.bp * .45) * a * (i < atk ? i / atk : 1); a *= ak; }
+      x = x / 6 * (1 - nzA) + (nz() * 2 - 1) * nzA; svfTick(h1, x); svfTick(h2, h1.hp); svfTick(bp, h2.hp);
+      m[i] = svfTick(lp, h2.hp * .7 + bp.bp * .35) * a * (i < atk ? i / atk : 1); a *= ak; }
     fadeTail(m, sr, .004); return {m}; };
   I.perc = (sr, e) => { const B = BODIES[e.body] || BODIES.wood, dm = e.decay || 1, n = Math.ceil((Math.max.apply(null, B.d) * dm * 6 + .02) * sr), m = new Float32Array(n), nz = rngOf(e.seed);
     modal(sr, m, e.f, B.r, B.a, B.d.map(x => x * dm), .5);
     const s = svf(); svfSet(s, Math.min(e.f * 3.5, 9000), .7, sr); const sn = Math.min(n, (.005 * sr) | 0);
     for (let i = 0; i < sn; i++){ svfTick(s, nz() * 2 - 1); m[i] += s.bp * (1 - i / sn) * .3 * (e.hard || .5); }
     fadeTail(m, sr, .01); return {m}; };
-  // Karplus–Strong with fractional-delay allpass tuning and decay stretch
+  // Karplus–Strong with fractional-delay allpass tuning and decay stretch; a small body resonance warms the pluck
   I.string = (sr, e) => { const f = e.f, P = e.p, n = Math.ceil((e.dur + P.rel * 4 + .05) * sr), m = new Float32Array(n), nz = rngOf(e.seed);
     const N = sr / f, L = Math.max(2, Math.floor(N - 1.6)), frac = N - 1.5 - L, buf = new Float32Array(L + 1);
     let lp = 0; const bc = clamp(P.bright * (e.bright || 1), .04, 1); for (let i = 0; i <= L; i++){ lp += (nz() * 2 - 1 - lp) * bc; buf[i] = lp; }
     let mean = 0; for (let i = 0; i <= L; i++) mean += buf[i]; mean /= L + 1; for (let i = 0; i <= L; i++) buf[i] -= mean;
     const rho = Math.pow(10, -3 / (P.t60 * f)), C = (1 - frac) / (1 + frac), S = .5; let apx = 0, apy = 0, prev = 0, idx = 0, g = 1, dx = 0, dy = 0;
-    const gN = e.dur * sr, rk = Math.exp(-1 / (P.rel * sr));
+    const gN = e.dur * sr, rk = Math.exp(-1 / (P.rel * sr)), body = svf(); svfSet(body, clamp(f * 2.5, 180, 900), 1.6, sr);
     for (let i = 0; i < n; i++){ const x = buf[idx], y = rho * ((1 - S) * x + S * prev); prev = x; const ap = C * y + apx - C * apy; apx = y; apy = ap; buf[idx] = ap; if (++idx > L) idx = 0;
-      if (i > gN) g *= rk; const o = x * g, dco = o - dx + .995 * dy; dx = o; dy = dco; m[i] = dco * 1.6; }
+      if (i > gN) g *= rk; const o = x * g, dco = o - dx + .995 * dy; dx = o; dy = dco; svfTick(body, dco); m[i] = (dco + body.bp * .35) * 1.4; }
     fadeTail(m, sr, .01); return {m}; };
-  // FM: carrier + modulator (+ optional second modulator), decaying index, feedback
+  // FM: carrier + modulator (+ optional second modulator), decaying index, feedback. Index is capped so it never turns to noise.
   I.fm = (sr, e) => { const P = e.p, f = e.f, n = Math.ceil((e.dur + P.rel * 5 + .02) * sr), m = new Float32Array(n);
-    const iScale = Math.sqrt(clamp(440 / f, .2, 2.2)) * (e.bright || 1), I0 = P.index * iScale, Is = P.indexSus * iScale;
+    const iScale = Math.sqrt(clamp(440 / f, .2, 2.2)) * (e.bright || 1), I0 = Math.min(P.index * iScale, 4.5), Is = Math.min(P.indexSus * iScale, 2.5);
     const fm = f * P.ratio, fm2 = f * (P.ratio2 || 0); let pc = 0, pm = 0, pm2 = 0, fb = 0, ie = 1, d = 1, rel = 1, vp = 0;
     const ik = Math.exp(-1 / (P.idecay * sr)), atk = Math.max(1, P.atk * sr), dk = Math.exp(-1 / (P.dec * sr)), rk = Math.exp(-1 / (P.rel * sr)), gN = e.dur * sr, vibF = 5.1 / sr, vibA = P.vib || 0;
     for (let i = 0; i < n; i++){ let env; if (i < atk) env = i / atk; else { d *= dk; env = P.sus + (1 - P.sus) * d; } if (i > gN) rel *= rk;
@@ -106,33 +120,53 @@ function SYNTH_CORE(){
       let x = 2 * t1 - 1 - blep(t1, dt); x += P.sq ? ((t2 < .5 ? 1 : -1) + blep(t2, dt2) - blep((t2 + .5) % 1, dt2)) * .6 : (2 * t2 - 1 - blep(t2, dt2)) * .5;
       if ((i & 15) === 0) svfSet(s, f * (P.cut + P.famt * fe) * br, P.res, sr); fe *= fk; svfTick(s, x);
       let env; if (i < atk) env = i / atk; else { d *= dk; env = P.sus + (1 - P.sus) * d; } if (i > gN) rel *= rk;
-      m[i] = s.lp * env * rel * .5 + (P.sub ? sin1(i * f * .5 / sr) * env * rel * P.sub : 0); }
+      m[i] = s.lp * env * rel * .5 + (P.sub ? sin1(i * f * (f < 70 ? 1 : .5) / sr) * env * rel * P.sub : 0); }
     fadeTail(m, sr, .01); return {m}; };
   // mallet = modal bar/glass struck at pitch
   I.mallet = (sr, e) => I.perc(sr, {f: e.f, body: e.p.body, decay: e.p.decay * (e.dur > .4 ? 1.2 : 1), hard: .4 + .5 * (e.bright || .5), seed: e.seed});
+  // keys: a two-pair FM piano (tone pair at 1:1, hammer pair at 1:14), key-tracked decay, three slightly detuned strings per note,
+  // velocity opens the tone. kind: 'felt' (dark, close-miked upright with a soft thump), 'epiano' (tine), 'glass' (bright, long)
+  I.keys = (sr, e) => { const P = e.p, notes = e.notes || [Math.round(69 + 12 * Math.log2(e.f / 440))], nn = notes.length, kind = P.kind || 'felt', vel = clamp(e.vel === undefined ? .8 : e.vel, .15, 1), br = clamp(e.bright === undefined ? .55 : e.bright, .1, 1.3);
+    const maxDec = kind === 'glass' ? 5 : kind === 'epiano' ? 3.2 : 2.8, n = Math.ceil((Math.min(e.dur, 6) + (P.rel || .4) * 5 + .05) * sr), l = new Float32Array(n), r = new Float32Array(n), nz = rngOf(e.seed), gN = e.dur * sr;
+    const lp = svf(), lpR = svf(); const fc = kind === 'felt' ? 2600 * (.5 + br) : kind === 'epiano' ? 3600 * (.5 + br) : 6500 * (.5 + br); svfSet(lp, fc, .55, sr); svfSet(lpR, fc * 1.05, .55, sr);
+    notes.forEach((mn, j) => { const f = mtof(mn), [gl, gr] = panLR(clamp((mn - 64) / 30, -.55, .55) + (nn > 1 ? (j / (nn - 1) - .5) * .3 : 0));
+      const dec = clamp(maxDec * Math.pow(220 / f, .55), .35, maxDec), dk = Math.exp(-1 / (dec * sr)), rk = Math.exp(-1 / ((P.rel || .4) * sr)), atk = Math.max(1, .0025 * sr);
+      const I0 = (kind === 'epiano' ? 1.2 : kind === 'glass' ? 1.7 : 1.0) * (.45 + .9 * vel) * (.6 + .6 * br) * Math.sqrt(clamp(330 / f, .3, 2)), ik = Math.exp(-1 / ((kind === 'glass' ? .9 : .32) * sr)), hamI = (kind === 'felt' ? .5 : .3) * vel, hk = Math.exp(-1 / (.02 * sr));
+      const strings = kind === 'epiano' ? [[0, 1]] : [[-1.8, .5], [0, 1], [1.9, .5]];
+      for (const [cents, g] of strings){ const fv = f * Math.pow(2, cents / 1200); let pc = nz(), pm = nz(), ph = nz(), ie = 1, he = 1, a = 1, rel = 1, fb = 0;
+        for (let i = 0; i < n; i++){ const env = (i < atk ? i / atk : 1) * a; a *= dk; if (i > gN) rel *= rk; if (rel < 1e-4) break;
+          pc += fv / sr; pm += fv / sr; ph += fv * 14 / sr; const mod = sin1(pm + fb * .12 / TAU); fb = mod; const hm = sin1(ph) * hamI * he; he *= hk;
+          const x = sin1(pc + (I0 * ie * mod + hm) / TAU) * env * rel * g * .5; ie *= ik; l[i] += x * gl; r[i] += x * gr; } }
+      if (kind === 'felt'){ const th = svf(); svfSet(th, 420 + 200 * nz(), 1.1, sr); const tn = Math.min(n, (.014 * sr) | 0); for (let i = 0; i < tn; i++){ svfTick(th, nz() * 2 - 1); const x = th.bp * (1 - i / tn) * .35 * vel; l[i] += x * gl; r[i] += x * gr; } } });
+    for (let i = 0; i < n; i++){ l[i] = svfTick(lp, l[i]); r[i] = svfTick(lpR, r[i]); }
+    fadeTail(l, sr, .01); fadeTail(r, sr, .01); return {l, r}; };
 
   // ---------- chord-holding stereo voices
   function lzAt(e, t){ const a = e.mod; if (!a) return 0; const x = t / e.modT, i = Math.floor(x); if (i <= 0) return a[0]; if (i >= a.length - 1) return a[a.length - 1]; return a[i] + (a[i + 1] - a[i]) * (x - i); }
   I.pad = (sr, e) => { const P = e.p, notes = e.notes, n = Math.ceil((e.dur + P.rel * 4 + .05) * sr), l = new Float32Array(n), r = new Float32Array(n), nz = rngOf(e.seed);
-    const atk = Math.max(1, P.atk * sr), gN = e.dur * sr, rk = Math.exp(-1 / (P.rel * sr)), nn = notes.length;
-    if (P.kind === 'supersaw'){ const V = nn > 4 ? 2 : 3;
+    const atk = Math.max(1, P.atk * sr), gN = e.dur * sr, rk = Math.exp(-1 / (P.rel * sr)), nn = notes.length, br = e.bright === undefined ? .5 : e.bright;
+    if (P.kind === 'supersaw' || P.kind === 'lush'){ const lush = P.kind === 'lush', V = lush ? (nn > 4 ? 4 : 5) : (nn > 4 ? 2 : 3), g0 = (lush ? .34 : .3) / Math.sqrt(V);
       notes.forEach((mn, j) => { const f = mtof(mn), pj = nn > 1 ? (j / (nn - 1) - .5) * 1.5 : 0;
-        for (let v = 0; v < V; v++){ const cents = (v - (V - 1) / 2) * P.det, fv = f * Math.pow(2, cents / 1200), dt = fv / sr; let t = nz(); const pan = clamp(pj + (v - (V - 1) / 2) * .35, -1, 1), gl = Math.cos((pan + 1) * Math.PI / 4), gr = Math.sin((pan + 1) * Math.PI / 4);
-          for (let i = 0; i < n; i++){ t += dt; if (t >= 1) t -= 1; const x = (2 * t - 1 - blep(t, dt)) * .3; l[i] += x * gl; r[i] += x * gr; } } });
-      const sl = svf(), sR = svf();
-      for (let i = 0; i < n; i++){ if ((i & 31) === 0){ const z = lzAt(e, i / sr), fc = P.cut * (.45 + (e.bright || .5)) * (1 + .55 * z); svfSet(sl, fc, P.res, sr); svfSet(sR, fc * 1.04, P.res, sr); } l[i] = svfTick(sl, l[i]); r[i] = svfTick(sR, r[i]); } }
+        for (let v = 0; v < V; v++){ const cents = (v - (V - 1) / 2) * P.det * (lush ? .8 : 1), fv = f * Math.pow(2, cents / 1200), dt = fv / sr; let t = nz(); const [gl, gr] = panLR(pj + (v - (V - 1) / 2) * .35);
+          for (let i = 0; i < n; i++){ t += dt; if (t >= 1) t -= 1; const x = (2 * t - 1 - blep(t, dt)) * g0; l[i] += x * gl; r[i] += x * gr; } } });
+      const sl = svf(), sR = svf(), sl2 = svf(), sR2 = svf(); const fAtk = Math.max(1, (lush ? P.atk * 1.6 : P.atk * .8) * sr);
+      for (let i = 0; i < n; i++){ if ((i & 31) === 0){ const z = lzAt(e, i / sr), fe = Math.min(1, i / fAtk), fc = P.cut * (.45 + br) * (1 + .55 * z) * (lush ? (.35 + .65 * fe) : 1); svfSet(sl, fc, P.res, sr); svfSet(sR, fc * 1.04, P.res, sr); if (lush){ svfSet(sl2, fc * 1.6, .6, sr); svfSet(sR2, fc * 1.5, .6, sr); } }
+        l[i] = svfTick(sl, l[i]); r[i] = svfTick(sR, r[i]); if (lush){ l[i] = svfTick(sl2, l[i]); r[i] = svfTick(sR2, r[i]); } }
+      if (lush) chorusST(sr, l, r, 2.6, .55, .5, e.seed); }
     else if (P.kind === 'fmpad'){
       notes.forEach((mn, j) => { const f = mtof(mn), pj = nn > 1 ? (j / (nn - 1) - .5) * 1.4 : 0; for (let side = 0; side < 2; side++){ const fv = f * Math.pow(2, (side ? 1 : -1) * P.det / 1200); let pc = nz(), pm = nz(); const lf = P.lfo * (1 + j * .13 + side * .07), ph0 = nz();
           const g = .22 * (side ? Math.sin((pj + 1) * Math.PI / 4) : Math.cos((pj + 1) * Math.PI / 4)), out = side ? r : l;
-          const bI = P.index * (.6 + (e.bright || .5) * .8) / TAU; let Ii = 0;
-          for (let i = 0; i < n; i++){ if ((i & 63) === 0) Ii = bI * (.55 + .45 * sin1(ph0 + i * lf / sr)); pc += fv / sr; pm += fv * P.ratio / sr; out[i] += sin1(pc + Ii * sin1(pm)) * g; } } }); }
+          const bI = Math.min(P.index * (.6 + br * .8), 2.2) / TAU; let Ii = 0;
+          for (let i = 0; i < n; i++){ if ((i & 63) === 0) Ii = bI * (.55 + .45 * sin1(ph0 + i * lf / sr)); pc += fv / sr; pm += fv * P.ratio / sr; out[i] += sin1(pc + Ii * sin1(pm)) * g; } } });
+      chorusST(sr, l, r, 1.8, .4, .35, e.seed); }
     else { // additive: harmonic partials with independent slow amplitude drift — the timbre breathes
-      notes.forEach((mn, j) => { const f = mtof(mn), K = 6; for (let k = 1; k <= K; k++){ const fk = f * k * (1 + P.stretch * (k - 1) * (k - 1)); if (fk > sr * .42) break;
+      notes.forEach((mn, j) => { const f = mtof(mn), K = 8; for (let k = 1; k <= K; k++){ const fk = f * k * (1 + P.stretch * (k - 1) * (k - 1)); if (fk > sr * .42) break;
           const a0 = .2 / Math.pow(k, P.tilt), rate = P.shimmer * (.3 + nz()), ph0 = nz(), side = (k + j) & 1, out = side ? r : l, other = side ? l : r;
           const w = TAU * fk / sr, cw = Math.cos(w), sw = Math.sin(w), p0 = nz() * TAU; let c = Math.cos(p0), sn = Math.sin(p0);
           for (let b = 0; b < n; b += 64){ const e0 = Math.min(n, b + 64), amp0 = a0 * (.55 + .45 * sin1(ph0 + b * rate / sr)), amp1 = a0 * (.55 + .45 * sin1(ph0 + e0 * rate / sr)), da = (amp1 - amp0) / (e0 - b); let amp = amp0;
             for (let i = b; i < e0; i++){ const c2 = c * cw - sn * sw; sn = sn * cw + c * sw; c = c2; const x = sn * amp; amp += da; out[i] += x * .8; other[i] += x * .25; }
-            const g = 1.5 - .5 * (c * c + sn * sn); c *= g; sn *= g; } } }); }
+            const g = 1.5 - .5 * (c * c + sn * sn); c *= g; sn *= g; } } });
+      chorusST(sr, l, r, 2, .3, .3, e.seed); }
     for (let i = 0; i < n; i++){ const env = Math.min(1, i / atk) * (i > gN ? Math.pow(rk, i - gN) : 1); l[i] *= env; r[i] *= env; }
     if (e.gate){ let gv = 0; const gk = 1 - Math.exp(-1 / (.004 * sr)); for (let i = 0; i < n; i++){ const tg = e.gate[Math.floor(i / sr / e.gateST) % 16] ? 1 : .06; gv += (tg - gv) * gk; l[i] *= gv; r[i] *= gv; } }
     const f = Math.min(n, (.05 * sr) | 0); for (let i = 0; i < f; i++){ l[n - 1 - i] *= i / f; r[n - 1 - i] *= i / f; }
@@ -143,26 +177,31 @@ function SYNTH_CORE(){
     parts.forEach(([ratio, a], k) => { let pl = k * .13, pr = k * .29; const fl = f * ratio, fr = f * ratio + beat * (k + 1) * .5;
       for (let i = 0; i < n; i++){ pl += fl / sr; pr += fr / sr; l[i] += sin1(pl) * a; r[i] += sin1(pr) * a; } });
     for (let i = 0; i < n; i++){ const env = Math.min(1, i / atk) * (i > gN ? Math.max(0, 1 - (i - gN) / rel) : 1); l[i] *= env * .5; r[i] *= env * .5; } return {l, r}; };
-  // texture: granular cloud on chord tones / resonant wind / Lorenz-driven FM drone
+  // texture: granular cloud on chord tones / resonant wind / Lorenz-driven FM drone / vinyl crackle
   I.tex = (sr, e) => { const n = Math.ceil((e.dur + 2) * sr), l = new Float32Array(n), r = new Float32Array(n), nz = rngOf(e.seed), P = e.p, gN = e.dur * sr;
-    if (P.kind === 'grains'){ let t = 0; while (t < e.dur){ const z = lzAt(e, t), dens = P.density * (.4 + .6 * (z * .5 + .5)), ch = e.chordAt(e.t + t), mn = ch[(nz() * ch.length) | 0] + 12 * ((nz() * 3) | 0);
-        const f = mtof(mn), glen = (.03 + nz() * .14) * sr, s0 = (t * sr) | 0, pan = nz() * 2 - 1, gl = Math.cos((pan + 1) * Math.PI / 4), gr = Math.sin((pan + 1) * Math.PI / 4), idx = P.fm * nz(); let ph = nz(), pm = 0;
+    if (P.kind === 'grains'){ let t = 0; while (t < e.dur){ const z = lzAt(e, t), dens = P.density * (.4 + .6 * (z * .5 + .5)), ch = e.chordAt(e.t + t), mn = ch[(nz() * ch.length) | 0] + 12 * ((nz() * 2) | 0);
+        const f = mtof(mn), glen = (.04 + nz() * .18) * sr, s0 = (t * sr) | 0, [gl, gr] = panLR(nz() * 2 - 1), idx = Math.min(P.fm, 1) * nz(); let ph = nz(), pm = 0;
         for (let i = 0; i < glen && s0 + i < n; i++){ const w = .5 - .5 * Math.cos(TAU * i / glen); ph += f / sr; pm += f * 2 / sr; const x = sin1(ph + idx * sin1(pm) / TAU) * w * .16; l[s0 + i] += x * gl; r[s0 + i] += x * gr; }
         t += 1 / Math.max(1, dens) * (.4 + nz() * 1.2); } }
     else if (P.kind === 'wind'){ const a = svf(), b = svf(); for (let i = 0; i < n; i++){ if ((i & 63) === 0){ const z = lzAt(e, i / sr); svfSet(a, 300 + 2600 * (z * .5 + .5), P.q, sr); svfSet(b, 360 + 2400 * (.5 - z * .5), P.q, sr); }
         svfTick(a, nz() * 2 - 1); svfTick(b, nz() * 2 - 1); l[i] = a.bp * .5; r[i] = b.bp * .5; } }
     else if (P.kind === 'crackle'){ const h = svf(); svfSet(h, 2400, .6, sr); let pop = 0, hiss = 0; const pr = 7 * (P.rate || 1) / sr;
       for (let i = 0; i < n; i++){ if (nz() < pr) pop = (nz() * 2 - 1) * (nz() < .12 ? 1 : .3); else pop *= .25; hiss = (nz() * 2 - 1) * .012; svfTick(h, pop + hiss); const x = h.hp * .6; l[i] = x; r[i] = nz() < .5 ? x : x * .7; } }
-    else { const f = mtof(e.root); let pc = 0, pm = 0; for (let i = 0; i < n; i++){ const z = lzAt(e, i / sr), ratio = 1.5 + z * 1.2, idx = 1.2 + (z * .5 + .5) * 2.5; pc += f / sr; pm += f * ratio / sr; const x = sin1(pc + idx * sin1(pm) / TAU) * .18; l[i] = x * (.6 + .4 * z); r[i] = x * (.6 - .4 * z); } }
+    else { const f = mtof(e.root); let pc = 0, pm = 0; for (let i = 0; i < n; i++){ const z = lzAt(e, i / sr), ratio = 1.5 + z * 1.2, idx = .8 + (z * .5 + .5) * 1.6; pc += f / sr; pm += f * ratio / sr; const x = sin1(pc + idx * sin1(pm) / TAU) * .18; l[i] = x * (.6 + .4 * z); r[i] = x * (.6 - .4 * z); } }
     for (let i = 0; i < n; i++){ const env = Math.min(1, i / (1.5 * sr)) * (i > gN ? Math.max(0, 1 - (i - gN) / (1.5 * sr)) : 1); l[i] *= env; r[i] *= env; } return {l, r}; };
   I.riser = (sr, e) => { const n = Math.ceil((e.dur + .05) * sr), l = new Float32Array(n), r = new Float32Array(n), nz = rngOf(e.seed), a = svf(), b = svf(); let ph = 0;
     for (let i = 0; i < n; i++){ const k = i / n, fc = 250 * Math.pow(36, k); if ((i & 31) === 0){ svfSet(a, fc, 2.2, sr); svfSet(b, fc * 1.07, 2.2, sr); } svfTick(a, nz() * 2 - 1); svfTick(b, nz() * 2 - 1);
       ph += (110 * Math.pow(8, k)) / sr; const env = Math.pow(k, 2.2), s = sin1(ph) * .12 * env; l[i] = (a.bp * .6) * env + s; r[i] = (b.bp * .6) * env + s; }
     fadeTail(l, sr, .03); fadeTail(r, sr, .03); return {l, r}; };
+  // Shepard riser: octave-spaced partials glide up forever under a Gaussian window on log-frequency — the ear hears an endless climb
+  I.shepard = (sr, e) => { const n = Math.ceil((e.dur + .3) * sr), l = new Float32Array(n), r = new Float32Array(n), K = 7, ph = new Float64Array(K), phR = new Float64Array(K), f0 = e.f0 || 40, cyc = e.cycle || 6, gN = e.dur * sr;
+    for (let i = 0; i < n; i++){ const t = i / sr, pos = (t / cyc) % 1, env = Math.min(1, i / (sr * .5)) * (i > gN ? Math.max(0, 1 - (i - gN) / (sr * .25)) : 1) * (e.rise ? Math.pow(Math.min(1, t / e.dur), 1.4) : 1); let x = 0, y = 0;
+      for (let k = 0; k < K; k++){ const oct = k + pos, f = f0 * Math.pow(2, oct); if (f > sr * .4) continue; const w = Math.exp(-Math.pow((oct - K / 2) / 1.5, 2)); ph[k] += f / sr; phR[k] += f * 1.003 / sr; x += sin1(ph[k]) * w; y += sin1(phR[k]) * w; }
+      l[i] = x * .14 * env; r[i] = y * .14 * env; }
+    return {l, r}; };
   I.impact = (sr, e) => { const n = Math.ceil(1.8 * sr), m = new Float32Array(n), nz = rngOf(e.seed), s = svf(); let ph = 0;
     for (let i = 0; i < n; i++){ const t = i / sr, f = 28 + 46 * Math.exp(-t / .25); ph += f / sr; if ((i & 31) === 0) svfSet(s, 150 + 6000 * Math.exp(-t / .12), .7, sr); svfTick(s, nz() * 2 - 1);
       m[i] = sin1(ph) * Math.exp(-t / .55) * Math.min(1, t / .002) + s.lp * Math.exp(-t / .3) * .4; } fadeTail(m, sr, .05); return {m}; };
-
   // =========================================================== genre instruments
   // mono legato line: one event plays a whole phrase, so slides are real portamento and the filter/amp state carries across notes
   I.mono = (sr, e) => { const P = e.p, N = e.notes, k = P.kind, n = Math.ceil((e.len + (P.rel || .06) * 6 + .05) * sr), m = new Float32Array(n);
@@ -241,220 +280,297 @@ function SYNTH_CORE(){
   function PingPong(sr, time, fb, tone){ const N = Math.max(2, Math.round(time * sr)), bl = new Float32Array(N), br = new Float32Array(N), a = Math.exp(-TAU * tone / sr); let i = 0, ll = 0, lr = 0, hl = 0;
     return (inp, oL, oR, n) => { for (let s = 0; s < n; s++){ const dl = bl[i], dr = br[i]; ll = dl + (ll - dl) * a; lr = dr + (lr - dr) * a; hl += (inp[s] - hl) * .02; bl[i] = (inp[s] - hl) + lr * fb; br[i] = ll * fb; if (++i >= N) i = 0; oL[s] += dl; oR[s] += dr; } }; }
 
-  // =========================================================== composition
-  const DEF = {seed: 7, vary: 0, style: '', fx: null, bpm: 118, tonic: 9, mode: 'minor', bars: 112, rhythm: 'auto', form: 'auto', color: .5, motion: .45, develop: .55, chaos: .45, poly: .5,
-    density: .6, bright: .55, metal: .5, swing: .57, humanize: .4, pump: .3, drive: .3, verb: .45, delay: .35, width: .9, arpRate: 16,
-    layers: {kick: 1, snare: 1, hat: 1, perc: 1, bass: 1, arp: 1, pad: 1, lead: 1, tex: 1}, palette: {}};
+  // =========================================================== composition — the evolving engine
+  const DEF = {seed: 7, vary: 0, style: '', fx: null, bpm: 120, tonic: 9, mode: 'minor', bars: 112, rhythm: 'auto', form: 'auto', melody: 'auto', color: .65, motion: .4, develop: .5, chaos: .35, poly: .6,
+    density: .6, bright: .5, metal: .25, swing: .55, humanize: .35, pump: .35, drive: .2, verb: .55, delay: .4, width: .9, arpRate: 16,
+    layers: {kick: 1, snare: 1, hat: 1, perc: 1, bass: 1, arp: 1, pad: 1, keys: 1, lead: 1, tex: 1}, palette: {}};
+
+  // progression grammar, in scale-degree indices (0 = tonic). Each loop is a phrase people have loved for decades; the mode decides the chord qualities.
+  const PROG = {
+    minor: {4: [[0, 5, 2, 6], [0, 5, 3, 6], [0, 6, 5, 6], [0, 2, 6, 5], [5, 6, 0, 0], [0, 3, 5, 4], [0, 5, 0, 6], [3, 0, 5, 6], [0, 0, 5, 6], [0, 2, 3, 6], [5, 2, 6, 0], [0, 6, 3, 5]],
+      2: [[0, 5], [0, 6], [0, 3], [0, 2], [5, 0], [0, 4]], 8: [[0, 5, 2, 6, 0, 5, 3, 4], [0, 6, 5, 6, 0, 6, 3, 4], [0, 5, 2, 6, 3, 5, 0, 6]]},
+    dorian: {4: [[0, 3, 0, 3], [0, 3, 6, 5], [0, 1, 0, 3], [0, 5, 3, 0], [0, 3, 4, 0], [0, 6, 3, 0], [0, 2, 3, 0]], 2: [[0, 3], [0, 1], [0, 6], [0, 5]], 8: [[0, 3, 0, 3, 0, 1, 6, 5]]},
+    major: {4: [[0, 4, 5, 3], [0, 5, 3, 4], [5, 3, 0, 4], [0, 3, 5, 4], [0, 3, 0, 4], [1, 4, 0, 0], [0, 5, 1, 4], [3, 0, 4, 5], [0, 2, 3, 5]], 2: [[0, 3], [0, 5], [0, 4], [5, 3]], 8: [[0, 4, 5, 3, 0, 4, 1, 3]]},
+    lydian: {4: [[0, 1, 0, 1], [0, 1, 5, 4], [0, 4, 1, 0], [0, 1, 2, 1]], 2: [[0, 1], [0, 4]], 8: [[0, 1, 0, 1, 5, 4, 0, 1]]},
+    mixolydian: {4: [[0, 6, 3, 0], [0, 6, 0, 6], [0, 3, 6, 0], [0, 4, 6, 3]], 2: [[0, 6], [0, 3]], 8: [[0, 6, 3, 0, 0, 6, 4, 3]]}};
+  PROG.phrygian = {4: [[0, 1, 0, 1], [0, 1, 6, 1], [0, 6, 1, 0], [0, 2, 1, 0]], 2: [[0, 1], [0, 6]], 8: [[0, 1, 0, 1, 0, 6, 1, 0]]};
+  PROG.harmonicMinor = PROG.minor; PROG.pentMinor = {4: [[0, 2, 0, 3], [0, 3, 2, 0], [0, 4, 3, 0]], 2: [[0, 3], [0, 2]], 8: [[0, 2, 0, 3, 0, 4, 3, 0]]};
+  const STACK = {tri: [0, 2, 4], sev: [0, 2, 4, 6], sus2: [0, 1, 4], sus4: [0, 3, 4], add9: [0, 2, 4, 8], nine: [0, 2, 4, 6, 8], quart: [0, 3, 6], six: [0, 2, 4, 5], m11: [0, 2, 6, 8, 10]};
 
   function plan(p){
     if (GS[p.style]) return planGenre(p, GS[p.style]);
-    const R = rngOf(hashSeed(p.seed, 11)), V = rngOf(hashSeed(p.seed, 977, p.vary)), H = rngOf(hashSeed(p.seed, 313));   // R: identity · H: harmony · V: the parts (changes per variation)
+    const R = rngOf(hashSeed(p.seed, 11)), V = rngOf(hashSeed(p.seed, 977, p.vary)), H = rngOf(hashSeed(p.seed, 313)), A = rngOf(hashSeed(p.seed, 541, p.vary));   // R: identity · H: harmony · V: parts · A: arrangement
     const beat = 60 / p.bpm, ST = beat / 4, BT = beat * 4;
-    const scale = MODES[p.mode] || MODES.minor, nS = scale.length, tonic = ((p.tonic | 0) % 12 + 12) % 12;
+    const scale = MODES[p.mode] || MODES.minor, nS = scale.length, tonic = ((p.tonic | 0) % 12 + 12) % 12, minorish = scale.indexOf(3) >= 0;
     const dpc = d => (tonic + scale[((d % nS) + nS) % nS]) % 12;
     const dmidi = (d, base) => base + 12 * Math.floor(d / nS) + tonic + scale[((d % nS) + nS) % nS];
-    const rhythm = p.rhythm && p.rhythm !== 'auto' ? p.rhythm : pickW(R, {four: 34, drive: 14, broken: 24, half: 10, ca: 13, none: 5});
-    const form = ['arc', 'rise', 'twin', 'ambient'].indexOf(p.form) >= 0 ? p.form : pickW(R, {arc: 36, rise: 22, twin: 30, ambient: rhythm === 'none' ? 80 : 6});
-    // auto picks: bell-like (inharmonic, long-ringing) voices only come in when the Metal dial is high — otherwise they chime over everything
-    const mt = p.metal, ring = Math.max(0, mt - .6) * 5;
-    const pal = {bass: pick(R, ['fm', 'subsaw', 'string']), arp: pickW(R, {pluck: 3, saw: 3, epiano: 2, mallet: .6 + mt, bell: ring}), pad: pick(R, ['supersaw', 'fmpad', 'additive']),
-      lead: pickW(R, {sawlead: 3, fmlead: 2, pluck: 2, mallet: ring * .5}), perc: pickW(R, {wood: 3, membrane: 3, glass: ring * .4, metal: ring * .4}), tex: pickW(R, {grains: 1 + mt, wind: 2, chaos: 1})};
+    const rhythm = p.rhythm && p.rhythm !== 'auto' ? p.rhythm : pickW(R, {four: 36, drive: 10, broken: 26, half: 12, ca: 10, none: 6});
+    const form = ['arc', 'rise', 'twin', 'ambient'].indexOf(p.form) >= 0 ? p.form : pickW(R, {arc: 36, rise: 22, twin: 30, ambient: rhythm === 'none' ? 80 : 4});
+    const mt = p.metal, ring = Math.max(0, mt - .6) * 5, bright = p.bright;
+    // ---------- palette (auto picks lean to what carries an emotional electronic piece: pianos, plucks, lush pads)
+    const pal = {bass: pickW(R, {sub: 3, fm: 2, subsaw: 2, string: 1}), arp: pickW(R, {keys: 3, pluck: 3, saw: 1.5, epiano: 1.5, mallet: .4 + mt, bell: ring}),
+      pad: pickW(R, {lush: 4, fmpad: 2, additive: 1.5, supersaw: 1}), lead: pickW(R, {keys: 2.5, pluck: 2, glass: 1, sawlead: 1, fmlead: 1, mallet: ring * .5}),
+      perc: pickW(R, {wood: 3, membrane: 3, glass: ring * .5, metal: ring * .4}), tex: pickW(R, {grains: 1.5 + mt, wind: 2, chaos: 1, crackle: .6}), keys: pickW(R, {felt: 3, epiano: 1.5, glass: 1})};
     for (const k in pal) if (p.palette[k] && p.palette[k] !== 'auto') pal[k] = p.palette[k];
-    const metal = p.metal, bright = p.bright, malletBody = r => pickW(r, {bar: 3, wood: 2, glass: ring, metal: ring * .6});
+    const malletBody = r => pickW(r, {bar: 3, wood: 2, glass: ring, metal: ring * .6});
+    const keysOf = kind => ({inst: 'keys', kind, rel: kind === 'glass' ? .6 : .4});
     // ---------- patches, randomised once per seed
     const PT = {
-      kick: {f0: rr(R, 105, 165), f1: rr(R, 40, 52), pitchT: rr(R, .016, .04), decay: rr(R, .2, .42) * (rhythm === 'drive' ? .8 : 1), click: rr(R, .15, .5), drive: rr(R, 1.3, 2.4) * (1 + p.drive * .8)},
-      snare: {f0: rr(R, 165, 235), tone: rr(R, .05, .13), noise: rr(R, .09, .22), nf: rr(R, 1500, 3600), body: rr(R, .4, 1), snap: rr(R, .55, 1), clap: R() < .45},
-      hat: {base: rr(R, 300, 420), closed: rr(R, .022, .05), open: rr(R, .16, .38), hp: rr(R, 6200, 8600), ring: rr(R, 8500, 12000), noisy: rr(R, .1, .55)},
-      bass: pal.bass === 'fm' ? {inst: 'fm', ratio: pick(R, [1, .5, 2, 1]), index: rr(R, 1.4, 3.6) * (.6 + metal * .8), indexSus: rr(R, .15, .6), idecay: rr(R, .04, .18), atk: .004, dec: rr(R, .15, .4), sus: rr(R, .5, .85), rel: .07, fb: rr(R, 0, .4)}
-        : pal.bass === 'subsaw' ? {inst: 'saw', cut: rr(R, 1.4, 3), famt: rr(R, 3, 12) * (.5 + bright), fdec: rr(R, .06, .25), res: rr(R, .8, 2.6), atk: .004, dec: .35, sus: .75, rel: .07, sub: .55, det: .002}
-        : {inst: 'string', t60: rr(R, .9, 2.2), bright: rr(R, .18, .45), rel: .1},
-      arp: pal.arp === 'bell' ? {inst: 'fm', ratio: pick(R, [3.5, 1.4142, 2.756, 4, 1.618, 3]), index: rr(R, 2, 6) * (.5 + metal), indexSus: rr(R, 0, .3), idecay: rr(R, .06, .3), atk: .002, dec: rr(R, .25, .8), sus: 0, rel: rr(R, .25, .7)}
-        : pal.arp === 'epiano' ? {inst: 'fm', ratio: 1, ratio2: 14, index: rr(R, 1, 2.2) * (.6 + metal * .7), index2: rr(R, .3, 1.2), indexSus: .2, idecay: rr(R, .15, .4), atk: .002, dec: rr(R, .5, 1.2), sus: .1, rel: .3}
-        : pal.arp === 'pluck' ? {inst: 'string', t60: rr(R, .6, 2.6), bright: rr(R, .35, .95), rel: .08}
-        : pal.arp === 'saw' ? {inst: 'saw', cut: rr(R, 1.2, 3), famt: rr(R, 4, 16) * (.4 + bright), fdec: rr(R, .04, .22), res: rr(R, .7, 3.2), atk: .002, dec: rr(R, .1, .4), sus: rr(R, 0, .3), rel: rr(R, .05, .25), sq: R() < .4, det: rr(R, .002, .008)}
-        : {inst: 'mallet', body: malletBody(R), decay: rr(R, .45, 1.1)},
-      pad: pal.pad === 'supersaw' ? {kind: 'supersaw', det: rr(R, 7, 20), cut: rr(R, 700, 2200) * (.5 + bright), res: rr(R, .6, 1.1), atk: rr(R, .4, 1.6), rel: rr(R, 1, 2.8)}
-        : pal.pad === 'fmpad' ? {kind: 'fmpad', ratio: pick(R, [1, 2, .5, 3]), index: rr(R, .4, 1.8) * (.5 + metal), lfo: rr(R, .04, .22), det: rr(R, 3, 9), atk: rr(R, .6, 2), rel: rr(R, 1.2, 3)}
-        : {kind: 'additive', tilt: rr(R, .9, 1.7) - bright * .4, stretch: rr(R, 0, .0012), shimmer: rr(R, .05, .4), atk: rr(R, .7, 2), rel: rr(R, 1.2, 3)},
-      lead: pal.lead === 'fmlead' ? {inst: 'fm', ratio: pick(R, [1, 2, 3]), index: rr(R, 1.2, 3.2) * (.5 + metal), indexSus: rr(R, .5, 1.4), idecay: rr(R, .15, .5), atk: .012, dec: .45, sus: .7, rel: .25, vib: .004, fb: rr(R, 0, .5)}
-        : pal.lead === 'sawlead' ? {inst: 'saw', cut: 2.2, famt: rr(R, 3, 8) * (.4 + bright), fdec: .3, res: rr(R, .8, 2), atk: .01, dec: .5, sus: .7, rel: .2, vib: .0045, det: .006}
+      kick: {f0: rr(R, 95, 150), f1: rr(R, 42, 52), pitchT: rr(R, .018, .04), decay: rr(R, .22, .4) * (rhythm === 'drive' ? .85 : 1), click: rr(R, .12, .4), drive: rr(R, 1.1, 1.5) + p.drive * .4},
+      snare: {f0: rr(R, 165, 225), tone: rr(R, .05, .12), noise: rr(R, .1, .2), nf: rr(R, 1400, 2800), body: rr(R, .4, 1), snap: rr(R, .55, .95), clap: R() < .45},
+      hat: {base: rr(R, 300, 420), closed: rr(R, .02, .045), open: rr(R, .14, .3), hp: rr(R, 6500, 8800), ring: rr(R, 8500, 11500), noisy: rr(R, .45, .9)},
+      bass: pal.bass === 'fm' ? {inst: 'fm', ratio: pick(R, [1, .5, 2, 1]), index: rr(R, 1.2, 2.4) * (.6 + mt * .6), indexSus: rr(R, .15, .5), idecay: rr(R, .05, .18), atk: .004, dec: rr(R, .15, .4), sus: rr(R, .5, .85), rel: .07, fb: rr(R, 0, .3)}
+        : pal.bass === 'subsaw' ? {inst: 'saw', cut: rr(R, 1.3, 2.4), famt: rr(R, 2, 8) * (.5 + bright), fdec: rr(R, .06, .25), res: rr(R, .8, 1.8), atk: .004, dec: .35, sus: .75, rel: .07, sub: .6, det: .002}
+        : pal.bass === 'string' ? {inst: 'string', t60: rr(R, .9, 2.2), bright: rr(R, .18, .4), rel: .1}
+        : {inst: 'mono', kind: 'sub', atk: .008, dec: .6, sus: .85, rel: .09, glide: .04, gain: 1.05},
+      arp: pal.arp === 'bell' ? {inst: 'fm', ratio: pick(R, [3.5, 1.4142, 2.756, 4, 1.618, 3]), index: rr(R, 1.5, 3.2) * (.5 + mt), indexSus: rr(R, 0, .3), idecay: rr(R, .06, .3), atk: .002, dec: rr(R, .25, .8), sus: 0, rel: rr(R, .25, .7)}
+        : pal.arp === 'epiano' ? {inst: 'fm', ratio: 1, ratio2: 14, index: rr(R, .9, 1.8) * (.6 + mt * .6), index2: rr(R, .3, .9), indexSus: .2, idecay: rr(R, .15, .4), atk: .002, dec: rr(R, .5, 1.2), sus: .1, rel: .3}
+        : pal.arp === 'pluck' ? {inst: 'string', t60: rr(R, .6, 2.2), bright: rr(R, .35, .9), rel: .08}
+        : pal.arp === 'saw' ? {inst: 'saw', cut: rr(R, 1.2, 2.6), famt: rr(R, 3, 10) * (.4 + bright), fdec: rr(R, .04, .2), res: rr(R, .7, 2.2), atk: .002, dec: rr(R, .1, .4), sus: rr(R, 0, .3), rel: rr(R, .05, .25), sq: R() < .4, det: rr(R, .002, .008)}
+        : pal.arp === 'keys' ? keysOf(pal.keys) : {inst: 'mallet', body: malletBody(R), decay: rr(R, .45, 1.1)},
+      pad: pal.pad === 'lush' ? {kind: 'lush', det: rr(R, 9, 22), cut: rr(R, 700, 2200) * (.5 + bright), res: rr(R, .5, .8), atk: rr(R, .8, 2.4), rel: rr(R, 1.5, 3.5)}
+        : pal.pad === 'supersaw' ? {kind: 'supersaw', det: rr(R, 7, 18), cut: rr(R, 700, 1800) * (.5 + bright), res: rr(R, .6, 1), atk: rr(R, .4, 1.6), rel: rr(R, 1, 2.8)}
+        : pal.pad === 'fmpad' ? {kind: 'fmpad', ratio: pick(R, [1, 2, .5, 3]), index: rr(R, .4, 1.4) * (.5 + mt), lfo: rr(R, .04, .2), det: rr(R, 3, 9), atk: rr(R, .6, 2), rel: rr(R, 1.2, 3)}
+        : {kind: 'additive', tilt: rr(R, 1, 1.7) - bright * .4, stretch: rr(R, 0, .001), shimmer: rr(R, .05, .35), atk: rr(R, .7, 2), rel: rr(R, 1.2, 3)},
+      lead: pal.lead === 'fmlead' ? {inst: 'fm', ratio: pick(R, [1, 2, 3]), index: rr(R, 1, 2.4) * (.5 + mt), indexSus: rr(R, .4, 1.1), idecay: rr(R, .15, .5), atk: .012, dec: .45, sus: .7, rel: .25, vib: .004, fb: rr(R, 0, .4)}
+        : pal.lead === 'sawlead' ? {inst: 'saw', cut: 2, famt: rr(R, 3, 7) * (.4 + bright), fdec: .3, res: rr(R, .8, 1.8), atk: .01, dec: .5, sus: .7, rel: .2, vib: .0045, det: .006}
         : pal.lead === 'pluck' ? {inst: 'string', t60: rr(R, 1.4, 3.2), bright: rr(R, .5, 1), rel: .15}
-        : {inst: 'mallet', body: malletBody(R), decay: rr(R, .8, 1.3)},
-      perc: {body: pal.perc, decay: rr(R, .45, .9), reg: pal.perc === 'glass' || pal.perc === 'metal' ? 60 : 48},
-      tex: pal.tex === 'grains' ? {kind: 'grains', density: rr(R, 6, 20), fm: rr(R, .1, 1.2) * (.3 + metal)} : pal.tex === 'wind' ? {kind: 'wind', q: rr(R, 3, 9)} : {kind: 'chaos'}};
+        : pal.lead === 'glass' ? keysOf('glass') : pal.lead === 'keys' ? keysOf(pal.keys) : {inst: 'mallet', body: malletBody(R), decay: rr(R, .8, 1.3)},
+      keys: keysOf(pal.keys), perc: {body: pal.perc, decay: rr(R, .45, .9), reg: pal.perc === 'glass' || pal.perc === 'metal' ? 60 : pal.perc === 'wood' ? 55 : 50},
+      tex: pal.tex === 'grains' ? {kind: 'grains', density: rr(R, 5, 14), fm: rr(R, .1, .8) * (.3 + mt)} : pal.tex === 'wind' ? {kind: 'wind', q: rr(R, 3, 9)} : pal.tex === 'crackle' ? {kind: 'crackle', rate: 1} : {kind: 'chaos'}};
 
-    // ---------- form
-    const FORMS = {arc: [['intro', .12, .2], ['build', .12, .5], ['peak', .24, 1], ['break', .13, .3], ['build', .07, .6], ['peak', .19, 1], ['outro', .13, .22]],
-      rise: [['intro', .1, .15], ['rise', .22, .32], ['rise', .22, .6], ['peak', .32, 1], ['outro', .14, .28]],
-      twin: [['intro', .1, .2], ['groove', .18, .7], ['peak', .2, 1], ['break', .14, .3], ['groove', .1, .75], ['peak', .16, 1], ['outro', .12, .22]],
-      ambient: [['intro', .2, .12], ['swell', .3, .32], ['bloom', .3, .55], ['outro', .2, .15]]};
+    // ---------- form: sections with an energy curve
+    const FORMS = {arc: [['intro', .12, .3], ['build', .12, .55], ['peak', .24, 1], ['break', .13, .35], ['build', .07, .65], ['peak', .19, 1], ['outro', .13, .3]],
+      rise: [['intro', .1, .25], ['rise', .22, .4], ['rise', .22, .65], ['peak', .32, 1], ['outro', .14, .32]],
+      twin: [['intro', .1, .3], ['groove', .18, .7], ['peak', .2, 1], ['break', .14, .35], ['groove', .1, .75], ['peak', .16, 1], ['outro', .12, .3]],
+      ambient: [['intro', .2, .2], ['swell', .3, .38], ['bloom', .3, .6], ['outro', .2, .22]]};
     const B = Math.max(16, Math.round(p.bars / 4) * 4), F = FORMS[form];
     const secs = []; let acc = 0;
-    F.forEach(([name, f, e], i) => { const bars = Math.max(4, Math.round(f * B / 4) * 4); secs.push({name, bar0: acc, bars, e, eTo: e, chaosMul: 1}); acc += bars; });
+    F.forEach(([name, f, e], i) => { const bars = Math.max(4, Math.round(f * B / 4) * 4); secs.push({name, bar0: acc, bars, e, eTo: e, chaosMul: 1, idx: i}); acc += bars; });
     secs.forEach((s, i) => { if (s.name === 'build' || s.name === 'rise' || s.name === 'swell') s.eTo = secs[i + 1] ? Math.max(s.e, secs[i + 1].e * .85) : s.e;
       s.chaosMul = form === 'rise' ? [1, .85, .55, .22, .1][i] || .1 : s.name === 'break' ? 1.25 : s.name === 'peak' ? .8 : 1; });
     const NB = acc, NSTEP = NB * 16;
     const secOf = bar => { for (let i = secs.length - 1; i >= 0; i--) if (bar >= secs[i].bar0) return secs[i]; return secs[0]; };
     const energy = bar => { const s = secOf(bar), k = (bar - s.bar0) / s.bars; return lerp(s.e, s.eTo, k); };
+    const isPeak = S => S.name === 'peak' || S.name === 'bloom', isBuild = S => S.name === 'build' || S.name === 'rise' || S.name === 'swell', isCalm = S => S.name === 'intro' || S.name === 'break' || S.name === 'outro';
+    const peaks = secs.filter(isPeak), firstPeak = peaks.length ? peaks[0] : secs[Math.floor(secs.length / 2)];
 
     // ---------- chaos and continuous modulation
-    const LOG = new Float32Array(NSTEP); { let x = .31 + R() * .3; for (let i = 0; i < NSTEP; i++){ const s = secOf(i >> 4), r = clamp(3.55 + .44 * p.chaos * s.chaosMul, 3.4, 3.999); x = r * x * (1 - x); if (x <= 0 || x >= 1) x = .5 + R() * .1; LOG[i] = x; } }
+    const LOG = new Float32Array(NSTEP); { let x = .31 + R() * .3; for (let i = 0; i < NSTEP; i++){ const s = secOf(i >> 4), r = clamp(3.5 + .49 * p.chaos * s.chaosMul, 3.3, 3.999); x = r * x * (1 - x); if (x <= 0 || x >= 1) x = .5 + R() * .1; LOG[i] = x; } }
     const LZ = new Float32Array(NSTEP), LZ2 = new Float32Array(NSTEP); { let x = 1 + R(), y = 1, z = 1 + R() * 2; const dt = .006;
       for (let i = 0; i < NSTEP; i++){ for (let s = 0; s < 3; s++){ const dx = 10 * (y - x), dy = x * (28 - z) - y, dz = x * y - 8 / 3 * z; x += dx * dt; y += dy * dt; z += dz * dt; } LZ[i] = clamp(x / 20, -1, 1); LZ2[i] = clamp((z - 25) / 22, -1, 1); } }
 
-    // ---------- harmony
-    const DW = [.25, 1.4, 1.3, 3.0, 1.1, 2.6, .9];
+    // ---------- harmony: a loop from the grammar, one colour palette for the whole piece, voice-led
     const isDim = d => nS === 7 && ((dpc(d + 4) - dpc(d) + 12) % 12) === 6;
-    const nextRoot = (prev, r, home) => { const w = {}; for (let d = 0; d < nS; d++){ const mv = ((d - prev) % nS + nS) % nS, k = nS === 7 ? mv : Math.round(mv * 7 / nS) % 7; let x = DW[k]; if (d === 0) x *= 1 + home * 2.5; if (isDim(d)) x *= .08; if (d === prev) x *= .12; w[d] = x; } return +pickW(r, w); };
-    const STACK = {tri: [0, 2, 4], sev: [0, 2, 4, 6], sus2: [0, 1, 4], sus4: [0, 3, 4], add9: [0, 2, 4, 8], nine: [0, 2, 4, 6, 8], quart: [0, 3, 6]};
-    const chordType = r => { const c = p.color; return pickW(r, c < .25 ? {tri: 8, sus2: 1, sus4: 1} : c < .5 ? {tri: 4, sev: 3, sus2: 1.5, sus4: 1, add9: 1} : c < .75 ? {sev: 4, add9: 2.5, sus2: 1.5, tri: 1.5, nine: 1} : {nine: 3.5, sev: 2, quart: 2.5, add9: 2}); };
+    const chordType = (root, r) => { const c = p.color, maj = ((dpc(root + 2) - dpc(root) + 12) % 12) === 4;
+      if (c < .3) return pickW(r, {tri: 7, sus2: 1, add9: .5});
+      if (c < .6) return pickW(r, maj ? {add9: 3, sev: 2, tri: 2, sus2: 1} : {sev: 4, add9: 2, tri: 1.5, sus2: 1});
+      if (c < .85) return pickW(r, maj ? {add9: 3, nine: 2, sev: 2, sus2: 1.5, six: 1} : {sev: 3, nine: 3, add9: 2, sus2: 1, m11: .5});
+      return pickW(r, maj ? {nine: 3, add9: 2, quart: 1.5, sus2: 1.5, six: 1} : {nine: 3, m11: 1.5, quart: 2, add9: 1.5, sev: 1}); };
     const chordName = (root, type) => { const pcs = STACK[type].map(x => dpc(root + x)), rp = pcs[0], iv = pcs.map(q => (q - rp + 12) % 12), has = x => iv.indexOf(x) >= 0;
       if (type === 'quart') return NOTE[rp] + '⁴'; if (type === 'sus2') return NOTE[rp] + 'sus2'; if (type === 'sus4') return NOTE[rp] + 'sus4';
       const m = has(3) && !has(4), dim = m && has(6) && !has(7); let q = dim ? (has(10) ? 'm7♭5' : 'dim') : m ? 'm' : '';
-      if (!dim){ if (has(11)) q += 'maj7'; else if (has(10)) q += '7'; } if (type === 'add9') q += 'add9'; if (type === 'nine') q = q.replace('7', '9').replace('maj9', 'maj9'); return NOTE[rp] + q; };
+      if (!dim){ if (has(11)) q += 'maj7'; else if (has(10)) q += '7'; } if (type === 'add9') q += 'add9'; if (type === 'six') q += '6'; if (type === 'm11') q += '11'; if (type === 'nine') q = q.replace('7', '9'); return NOTE[rp] + q; };
     let lastVoice = null;
-    const voice = pcs => { const lo = 50, hi = 77, opts = pcs.map(pc => { const o = []; for (let m = lo; m <= hi; m++) if (m % 12 === pc) o.push(m); return o; }); let best = null, bc = 1e9; const cur = [];
-      const rec = i => { if (i === opts.length){ const s = cur.slice().sort((a, b) => a - b); for (let k = 1; k < s.length; k++){ if (s[k] - s[k - 1] < 2) return; if (s[k] < 59 && s[k] - s[k - 1] < 5) return; } if (s[s.length - 1] - s[0] > 21) return;
-          let c = 0; if (lastVoice) for (const m of s){ let d = 99; for (const q of lastVoice) d = Math.min(d, Math.abs(m - q)); c += d; } else c = Math.abs((s[0] + s[s.length - 1]) / 2 - 63);
-          c += H() * .9; if (c < bc){ bc = c; best = s; } return; } for (const m of opts[i]){ cur.push(m); rec(i + 1); cur.pop(); } };
-      rec(0); if (!best) best = pcs.map(pc => 55 + ((pc - 55) % 12 + 12) % 12).sort((a, b) => a - b); lastVoice = best; return best; };
-    const theme = [0]; for (let i = 1; i < 4; i++) theme.push(nextRoot(theme[i - 1], R, i === 3 ? .05 : .35));
-    const themeT = theme.map(() => chordType(R));
-    const hrBase = p.motion < .25 ? 4 : p.motion < .55 ? 2 : p.motion < .82 ? 2 : 1;
-    const chords = []; let prevRoot = 0;
-    secs.forEach(S => { const calm = S.name === 'intro' || S.name === 'break' || S.name === 'outro' || S.name === 'swell'; let hr = calm ? Math.min(8, hrBase * 2) : S.name === 'peak' ? Math.max(1, hrBase === 4 ? 2 : hrBase) : hrBase;
-      if (p.motion >= .82 && S.name === 'peak') hr = 1; hr = Math.min(hr, S.bars);
-      let b = S.bar0, ti = 0; while (b < S.bar0 + S.bars){ const bars = Math.min(hr, S.bar0 + S.bars - b); let root, type;
-        if (S.name === 'peak'){ root = theme[ti % 4]; type = themeT[ti % 4]; if (ti >= 4 && H() < p.develop * .45){ root = nextRoot(prevRoot, H, .2); type = chordType(H); } }
-        else { root = b === 0 ? 0 : nextRoot(prevRoot, H, S.name === 'outro' ? .6 : .2); type = chordType(H); }
-        const pcs = STACK[type].map(x => dpc(root + x)); chords.push({bar: b, bars, root, type, pcs, voicing: voice(pcs), bass: 33 + ((dpc(root) - 33) % 12 + 12) % 12, name: chordName(root, type)}); prevRoot = root; b += bars; ti++; } });
-    const chordAtBar = bar => { let c = chords[0]; for (const q of chords){ if (q.bar <= bar) c = q; else break; } return c; };
-    const chordAtT = t => chordAtBar(clamp(Math.floor(t / BT), 0, NB - 1)).voicing;
+    const voice = pcs => { const lo = 52, hi = 79, opts = pcs.map(pc => { const o = []; for (let m = lo; m <= hi; m++) if (m % 12 === pc) o.push(m); return o; }); let best = null, bc = 1e9; const cur = [];
+      const rec = i => { if (i === opts.length){ const s = cur.slice().sort((a, b) => a - b); for (let k = 1; k < s.length; k++){ const iv = s[k] - s[k - 1]; if (iv < 2) return; if (s[k] < 60 && iv < 3) return; if (s[k] < 57 && iv < 5) return; } if (s[s.length - 1] - s[0] > 22) return;
+          for (let a = 0; a < s.length; a++) for (let b = a + 1; b < s.length; b++){ const iv = s[b] - s[a]; if (iv % 12 === 1 && iv !== 11 && iv < 23) return; if (iv % 12 === 11 && iv !== 11 && iv < 23) return; }   // a 9th sits a major 7th above the 3rd, never a semitone or a minor 9th
+          let c = 0; if (lastVoice) for (const m of s){ let d = 99; for (const q of lastVoice) d = Math.min(d, Math.abs(m - q)); c += d; } else c = Math.abs((s[0] + s[s.length - 1]) / 2 - 64) * .6;
+          for (let k = 1; k < s.length; k++) if (s[k] - s[k - 1] === 2 && s[k] < 64) c += 1.5;   // close seconds low down turn to mud
+          c += H() * .7; if (c < bc){ bc = c; best = s; } return; } for (const m of opts[i]){ cur.push(m); rec(i + 1); cur.pop(); } };
+      rec(0); if (!best) best = pcs.map(pc => 57 + ((pc - 57) % 12 + 12) % 12).sort((a, b) => a - b); lastVoice = best; return best; };
+    const lib = PROG[p.mode] || PROG.minor, loopLen = p.motion < .25 ? pickW(H, {2: 3, 4: 2}) : p.motion < .75 ? pickW(H, {4: 5, 2: 1, 8: 1}) : pickW(H, {4: 3, 8: 2});
+    const degs = pick(H, lib[loopLen] || lib[4]).map(d => isDim(d) ? (d + (H() < .5 ? 1 : -1) + nS) % nS : d);
+    const mkChord = (root, type) => { const pcs = STACK[type].map(x => dpc(root + x)); return {root, type, pcs, name: chordName(root, type), bass: 33 + ((dpc(root) - 33) % 12 + 12) % 12}; };
+    const loopA = degs.map(d => mkChord(d, chordType(d, H)));
+    // the break's loop: the same chords with one substitution (relative, or the sixth degree), so the breakdown feels like a new room in the same house
+    const loopB = loopA.map((c, i) => { if (i !== 1 && i !== loopA.length - 1) return c; if (H() > .55 + p.develop * .3) return c; const alt = (c.root + (minorish ? 5 : 5)) % nS; return isDim(alt) ? c : mkChord(alt, chordType(alt, H)); });
+    const hrBase = p.motion < .3 ? 4 : p.motion < .65 ? 2 : 1;
+    const chords = [], chordBar = [];
+    secs.forEach(S => { const calm = isCalm(S) || S.name === 'swell', hr = Math.min(S.bars, calm ? Math.min(8, hrBase * 2) : hrBase), lp = S.name === 'break' ? loopB : loopA;
+      let b = S.bar0, ti = 0; while (b < S.bar0 + S.bars){ const bars = Math.min(hr, S.bar0 + S.bars - b), c = lp[ti % lp.length]; chords.push(Object.assign({bar: b, bars}, c)); b += bars; ti++; } });
+    chords.forEach(c => { c.voicing = voice(c.pcs); for (let b = c.bar; b < c.bar + c.bars; b++) chordBar[b] = c; });
+    const chordAtBar = bar => chordBar[clamp(bar, 0, NB - 1)];
+    const chordAtT = t => chordAtBar(Math.floor(t / BT)).voicing;
+    // the ladder: a chord's tones laid out across two octaves — melodies live on rungs, so the same shape re-harmonises itself under every chord
+    const ladderOf = (c, lo, hi) => { const o = []; for (let m = lo; m <= hi; m++) if (c.pcs.indexOf(m % 12) >= 0) o.push(m); return o; };
+    const scaleBetween = (a, b) => { const lo = Math.min(a, b), hi = Math.max(a, b), o = []; for (let m = lo + 1; m < hi; m++) if (scale.indexOf(((m - tonic) % 12 + 12) % 12) >= 0) o.push(m); return o.length ? o[o.length >> 1] : null; };
 
     // ---------- rhythm generators
     function CA(rule, r){ let row = Array.from({length: 16}, () => r() < .3 ? 1 : 0); return () => { const nx = row.map((_, i) => (rule >> (row[(i + 15) % 16] * 4 + row[i] * 2 + row[(i + 1) % 16])) & 1), c = nx.reduce((a, b) => a + b, 0);
       row = c === 0 || c >= 15 ? Array.from({length: 16}, () => r() < .3 ? 1 : 0) : nx; return row; }; }
-    const caHat = CA(pick(V, [150, 90, 105]), V), caPerc = CA(pick(V, [30, 45, 86, 135]), V), caKick = CA(pick(V, [18, 22, 26, 146]), V), caArp = CA(pick(V, [90, 150, 60, 102]), V), caFill = CA(30, V);
-    const RV = p.vary ? V : R, kickEu = euclid(3 + Math.floor(RV() * 3), 16, Math.floor(RV() * 4) * 2), backbeat = RV() < .6, snEu = euclid(2 + Math.floor(RV() * 2), 16, 4);
-    const bassStyle = rhythm === 'drive' ? pick(RV, ['pulse', 'pulse', 'offbeat', 'syncop']) : rhythm === 'four' ? pick(RV, ['offbeat', 'sustain', 'offbeat', 'roll']) : rhythm === 'half' || rhythm === 'none' ? 'sustain' : pick(RV, ['syncop', 'sustain', 'syncop']);
-    const bassEu = euclid(5, 16, Math.floor(V() * 16));
+    const caHat = CA(pick(V, [150, 90, 105]), V), caPerc = CA(pick(V, [30, 45, 86, 135]), V), caKick = CA(pick(V, [18, 22, 26, 146]), V), caFill = CA(30, V);
+    const RV = p.vary ? V : R, kickEu = euclid(3 + Math.floor(RV() * 3), 16, 0), backbeat = RV() < .6, snEu = euclid(2 + Math.floor(RV() * 2), 16, 4);
+    const bassStyle = rhythm === 'drive' ? pick(RV, ['pulse', 'pulse', 'offbeat', 'syncop']) : rhythm === 'four' ? pick(RV, ['offbeat', 'sustain', 'offbeat', 'roll', 'sustain']) : rhythm === 'half' || rhythm === 'none' ? 'sustain' : pick(RV, ['syncop', 'sustain', 'syncop', 'pulse']);
+    const bassEu = euclid(5, 16, Math.floor(V() * 4) * 2);
     const polyLens = p.poly < .25 ? [8, 16] : p.poly < .55 ? [6, 12, 10] : p.poly < .8 ? [5, 7, 9, 11] : [7, 9, 11, 13, 5];
-    const pA = {len: pick(V, polyLens), k: 0}, pB = {len: pick(V, polyLens), k: 0}; pA.pat = euclid(2 + Math.floor(V() * 3), pA.len, Math.floor(V() * pA.len)); pB.pat = euclid(2 + Math.floor(V() * 2), pB.len, Math.floor(V() * pB.len));
-    pA.deg = Array.from({length: pA.len}, () => Math.floor(V() * 7)); pB.deg = Array.from({length: pB.len}, () => Math.floor(V() * 5) - 2);
+    const pA = {len: pick(V, polyLens)}, pB = {len: pick(V, polyLens)}; pA.pat = euclid(2 + Math.floor(V() * 3), pA.len, Math.floor(V() * pA.len)); pB.pat = euclid(2 + Math.floor(V() * 2), pB.len, Math.floor(V() * pB.len));
+    pA.tone = Array.from({length: pA.len}, () => pick(V, [0, 0, 1, 2])); pB.tone = Array.from({length: pB.len}, () => pick(V, [0, 1]));   // chord-tone index, never a random scale degree
+    const hatAcc = euclid(pick(V, [5, 7, 3]), 16, Math.floor(V() * 16)), hatVoss = voss(V, 64, 5);
 
-    // ---------- motif
-    function makeMotif(r){ const len = r() < .55 ? 16 : 32, k = 3 + Math.floor(r() * 4) + (len > 16 ? 2 : 0), pos = euclid(k, len, Math.floor(r() * 4)).map((v, i) => v ? i : -1).filter(i => i >= 0);
-      const contour = pick(r, ['arch', 'rise', 'fall', 'zig', 'valley']); let d = pick(r, [0, 2, 4]);
-      const notes = pos.map((s, i) => { const nt = {s, d, v: .7 + r() * .3}; const half = i < pos.length / 2, dir = contour === 'rise' ? 1 : contour === 'fall' ? -1 : contour === 'arch' ? (half ? 1 : -1) : contour === 'valley' ? (half ? -1 : 1) : (i % 2 ? -1 : 1);
-        d = clamp(d + dir * (r() < .7 ? 1 : 2), -3, 10); return nt; }); return relen({len, notes}); }
+    // ---------- motif: rhythm from Euclid / a Fibonacci word / a cellular automaton; pitch from a 1/f walk, an L-system or a Lorenz slice; everything on chord-tone rungs
+    const melodyK = p.melody && p.melody !== 'auto' ? p.melody : pickW(R, {voss: 3, lsys: 2, euclid: 2, fib: 2, lorenz: 1});
+    function makeMotif(r){ const len = 32; let pos;
+      const rk = melodyK === 'fib' || melodyK === 'lsys' ? 'fib' : melodyK === 'lorenz' ? 'ca' : 'euclid';
+      if (rk === 'fib'){ const w = fibWord(len); pos = []; let i = 0; while (i < len){ pos.push(i); i += w[i] === 'A' ? pick(r, [2, 3, 4]) : pick(r, [1, 2]); } pos = pos.filter(s => s < len); }
+      else if (rk === 'ca'){ let row = Array.from({length: len}, (_, i) => i % 4 === 0 ? 1 : 0); for (let g = 0; g < 3; g++) row = row.map((_, i) => (90 >> (row[(i + len - 1) % len] * 4 + row[i] * 2 + row[(i + 1) % len])) & 1); pos = row.map((v, i) => v ? i : -1).filter(i => i >= 0 && i % 2 === 0); if (pos.length < 4) pos = euclid(7, len, 0).map((v, i) => v ? i : -1).filter(i => i >= 0); }
+      else { const k = 5 + Math.floor(r() * 5); pos = euclid(k, len, Math.floor(r() * 4) * 2).map((v, i) => v ? i : -1).filter(i => i >= 0); }
+      if (pos[0] !== 0) pos.unshift(0); if (pos.length > 11) pos = pos.filter((_, i) => i % 2 === 0 || i === 0);
+      // pitches: rungs 0..6 on the ladder (two octaves of chord tones)
+      let rungs; const n = pos.length;
+      if (melodyK === 'voss'){ const vs = voss(r, n, 4); rungs = vs.map(v => Math.round(1 + v * 4.5)); }
+      else if (melodyK === 'lsys'){ let s = 'A'; const rules = {A: pick(r, ['AB', 'A-B', 'AB+']), B: pick(r, ['A', 'B-A', '+A']), '+': '+', '-': '-'}; for (let g = 0; g < 5 && s.length < n * 3; g++) s = s.split('').map(c => rules[c] || c).join('');
+        let cur = 2, dir = 1; rungs = []; for (const c of s){ if (rungs.length >= n) break; if (c === '+') dir = 1; else if (c === '-') dir = -1; else { rungs.push(cur); cur = clamp(cur + (c === 'A' ? dir : -dir * 2), 0, 6); } } while (rungs.length < n) rungs.push(2); }
+      else if (melodyK === 'lorenz'){ rungs = pos.map(s => Math.round(3 + 3 * LZ[(s * 3) % NSTEP])); }
+      else { let cur = 1 + Math.floor(r() * 3); rungs = pos.map((_, i) => { if (i) cur = clamp(cur + +pickW(r, {'-2': 1, '-1': 3, '0': 1.5, '1': 3, '2': 1, '3': .4}), 0, 6); return cur; }); }
+      const contour = pick(r, ['arch', 'rise', 'fall', 'none']); rungs = rungs.map((g, i) => { const k = i / Math.max(1, n - 1), bias = contour === 'arch' ? Math.round(Math.sin(k * Math.PI) * 1.5) : contour === 'rise' ? Math.round(k * 2) : contour === 'fall' ? Math.round((1 - k) * 2) : 0; return clamp(g + bias, 0, 6); });
+      const vel = voss(r, n, 4);
+      const notes = pos.map((s, i) => ({s, rung: rungs[i], v: .6 + .4 * vel[i], pass: i > 0 && (s & 1) === 1 && Math.abs(rungs[i] - rungs[i - 1]) === 1 && r() < .5}));
+      return relen({len, notes}); }
     function relen(m){ m.notes.sort((a, b) => a.s - b.s); m.notes.forEach((n, i) => n.len = Math.max(1, (i + 1 < m.notes.length ? m.notes[i + 1].s : m.len) - n.s)); return m; }
-    function develop(m, r){ const dv = p.develop;
-      if (r() < .55 * dv){ const n = m.notes[(r() * m.notes.length) | 0]; n.d = clamp(n.d + pick(r, [-2, -1, 1, 2]), -3, 11); }
-      if (r() < .25 * dv && m.notes.length > 2){ const i = 1 + ((r() * (m.notes.length - 1)) | 0), lo = m.notes[i - 1].s + 1, hi = m.notes[i + 1] ? m.notes[i + 1].s - 1 : m.len - 1; if (hi >= lo) m.notes[i].s = clamp(m.notes[i].s + pick(r, [-1, 1]), lo, hi); }
-      if (r() < .16 * dv && m.notes.length < 10){ const i = (r() * (m.notes.length - 1)) | 0, a = m.notes[i], b = m.notes[i + 1]; if (b && b.s - a.s >= 2) m.notes.push({s: a.s + ((b.s - a.s) >> 1), d: Math.round((a.d + b.d) / 2) + pick(r, [-1, 1]), v: .6}); }
-      if (r() < .1 * dv && m.notes.length > 3) m.notes.splice(1 + ((r() * (m.notes.length - 1)) | 0), 1);
-      relen(m); let ph = m.notes.map(n => Object.assign({}, n)); const op = pickW(r, {plain: 3, invert: dv * 1.3, retro: dv * .9, frag: dv, aug: dv * .5, lift: dv * .7});
-      if (op === 'invert'){ const d0 = ph[0].d; ph.forEach(n => n.d = d0 - (n.d - d0)); }
-      else if (op === 'retro'){ const ds = ph.map(n => n.d).reverse(); ph.forEach((n, i) => n.d = ds[i]); }
-      else if (op === 'frag'){ const h = ph.filter(n => n.s < m.len / 2); ph = h.concat(h.map(n => Object.assign({}, n, {s: n.s + m.len / 2}))); }
-      else if (op === 'aug'){ ph = ph.filter(n => n.s < m.len / 2).map(n => Object.assign({}, n, {s: n.s * 2, len: n.len * 2})); }
-      else if (op === 'lift') ph.forEach(n => n.d += 2);
-      return {op, notes: ph, len: m.len}; }
-    const motif = makeMotif(p.vary ? V : R);
+    const copyM = m => ({len: m.len, notes: m.notes.map(n => Object.assign({}, n))});
+    // variants: A' changes the tail, B inverts or lifts, R runs backwards — development means choosing among them, not scrambling the theme
+    function variant(m, kind, r){ const c = copyM(m), N = c.notes;
+      if (kind === 'tail'){ for (let i = Math.max(1, N.length - 2 - Math.floor(r() * 2)); i < N.length; i++) N[i].rung = clamp(N[i].rung + pick(r, [-1, 1, 2]), 0, 6); }
+      else if (kind === 'invert'){ const r0 = N[0].rung; N.forEach(n => n.rung = clamp(r0 - (n.rung - r0), 0, 6)); }
+      else if (kind === 'lift'){ N.forEach(n => n.rung = clamp(n.rung + 1, 0, 6)); }
+      else if (kind === 'retro'){ const rs = N.map(n => n.rung).reverse(); N.forEach((n, i) => n.rung = rs[i]); }
+      else if (kind === 'thin'){ c.notes = N.filter((n, i) => i === 0 || (n.s & 3) === 0 || r() < .35); relen(c); }
+      else if (kind === 'aug'){ c.notes = N.filter(n => n.s < c.len / 2).map(n => Object.assign({}, n, {s: n.s * 2})); relen(c); }
+      return c; }
+    const motifR = p.vary ? V : R, motif = makeMotif(motifR), dv = p.develop;
+    const MV = {A: motif, A2: variant(motif, 'tail', motifR), B: variant(motif, pickW(motifR, {invert: 2, lift: 2, retro: dv}), motifR), T: variant(motif, 'thin', motifR), G: variant(variant(motif, 'aug', motifR), 'thin', motifR)};
+    const schemes = [['A', 'A2', 'A', 'B'], ['A', 'B', 'A', 'A2'], ['A', 'A', 'B', 'A2'], ['A', 'A2', 'B', 'B']];
+    // mutation that sticks: from the second peak on, the theme itself has moved (develop decides how far)
+    const motif2 = dv > .35 ? variant(variant(motif, 'tail', motifR), dv > .7 ? 'lift' : 'tail', motifR) : motif;
+    const MV2 = {A: motif2, A2: variant(motif2, 'tail', motifR), B: variant(motif2, pickW(motifR, {invert: 2, lift: 1, retro: dv}), motifR), T: variant(motif2, 'thin', motifR), G: MV.G};
+    const schemeOf = (S, k) => { const sc = schemes[(S.idx + Math.floor(k * 2)) % schemes.length]; return isPeak(S) && S.idx > firstPeak.idx && dv > .5 && k > .5 ? sc.map(x => x === 'A' ? 'B' : x) : sc; };
+
+    // ---------- arrangement: roles enter one at a time (every 4 bars in the intro, faster in the second build), leave in reverse in the outro
+    const L = Object.assign({keys: 1}, p.layers);
+    const roleOK = {kick: L.kick && rhythm !== 'none', snare: L.snare && rhythm !== 'none', hat: L.hat && rhythm !== 'none', perc: L.perc, bass: L.bass, arp: L.arp, pad: L.pad, keys: L.keys, lead: L.lead, tex: L.tex};
+    const ROLES = Object.keys(roleOK).filter(k => roleOK[k]);
+    const firstW = pickW(A, {pad: 3, keys: 3, arp: 2, tex: 1.5}), order = [firstW].concat(['tex', 'pad', 'keys', 'hat', 'perc', 'arp', 'bass', 'kick', 'snare', 'lead'].filter(x => x !== firstW).map(x => ({x, w: {tex: 1, pad: 2, keys: 2, hat: 3, perc: 3.5, arp: 4, bass: 5, kick: 6, snare: 6.5, lead: 8}[x] + A() * 2.5})).sort((a, b) => a.w - b.w).map(o => o.x)).filter(x => roleOK[x]);
+    const act = []; const all = new Set(ROLES), breakKeep = new Set(['pad', 'keys', 'tex']); if (A() < .45 && roleOK.arp) breakKeep.add('arp'); if (A() < .3 && roleOK.hat) breakKeep.add('hat'); if (A() < .25 && roleOK.bass) breakKeep.add('bass'); if (A() < .35 && roleOK.lead) breakKeep.add('lead');
+    const introLen = secs[0].bars + (isBuild(secs[1] || {}) ? secs[1].bars : 0), step0 = Math.max(2, Math.round(introLen / Math.max(1, order.length)) >> 1 << 1);
+    secs.forEach((S, si) => { for (let b = 0; b < S.bars; b++){ const bar = S.bar0 + b; let set;
+      if (si < firstPeak.idx){ const nIn = Math.min(order.length, 1 + Math.floor(bar / step0)); set = new Set(order.slice(0, nIn)); if (isBuild(S)){ if (b < S.bars - 1 && S.bars > 4) set.delete('kick'); if (b < S.bars * .5) set.delete('snare'); } if (!set.has('lead') && isBuild(S) && b >= S.bars - 4 && roleOK.lead && A() < .2) set.add('lead'); }
+      else if (isPeak(S)) set = new Set(all);
+      else if (S.name === 'groove') set = new Set([...all].filter(r => r !== 'lead' || b >= S.bars / 2));
+      else if (S.name === 'break'){ set = new Set([...all].filter(r => breakKeep.has(r))); if (!set.size) set.add(ROLES[0]); }
+      else if (isBuild(S)){ const prev = act[S.bar0 - 1] || new Set(), back = order.filter(r => !prev.has(r)), nIn = Math.ceil(back.length * (b + 1) / S.bars); set = new Set([...prev, ...back.slice(0, nIn)]); if (b < S.bars - 1 && roleOK.kick) set.delete('kick'); if (b === S.bars - 1 && roleOK.kick) set.add('kick'); }
+      else { const nOut = Math.floor(order.length * b / S.bars), gone = order.slice().reverse().slice(0, nOut); set = new Set([...all].filter(r => gone.indexOf(r) < 0)); if (!set.size) set.add(order[0]); }
+      act[bar] = set; } });
 
     // ---------- events
     const ev = [], kicks = []; let seq = 0;
     const T = (gs, s) => gs * ST + ((s & 1) ? (p.swing - .5) * 2 * ST : 0) + ((s & 3) ? (V() * 2 - 1) * p.humanize * .006 : 0);
     const add = o => { o.seed = hashSeed(p.seed, p.vary, seq++); ev.push(o); return o; };
-    const G = {kick: 1.0, snare: .42, hat: .13, perc: .28, bass: .74, arp: .26, pad: .2, lead: .26, tex: .32, drone: .2, riser: .22, impact: .55};
-    const L = p.layers;
-    let arpN = 0, arpCfg = null, motifPhrase = null, lastFillBar = -9;
+    const G = {kick: .78, snare: .7, hat: .4, perc: .15, bass: .3, arp: .21, pad: .26, keys: .39, lead: .24, tex: .24, drone: .1, riser: .17, impact: .42};
+    const ARPMUL = {keys: 1.15, pluck: 1, saw: .85, epiano: 1.1, mallet: 1, bell: .8}, LEADMUL = {keys: 1.3, pluck: 1.1, glass: 1.1, sawlead: .8, fmlead: .9, mallet: 1};
+    let arpN = 0, arpCfg = null, lastFillBar = -9, phraseCache = null;
+    const bassNotes = []; let bassStart = 0;
+    const flushBass = endBar => { if (bassNotes.length){ const t0 = bassStart * BT, len = endBar * BT - t0; add({inst: 'mono', t: t0, len, notes: bassNotes.map(n => Object.assign({}, n, {t: n.t - t0, dur: Math.min(n.dur, len - (n.t - t0))})), p: PT.bass, bus: 'bass', pan: 0, v: G.bass}); } bassNotes.length = 0; };
+    const playBass = (t, bar, pitch, dur, v) => { if (PT.bass.inst === 'mono'){ if (!bassNotes.length) bassStart = bar; bassNotes.push({t, m: pitch, dur, v}); } else add({inst: PT.bass.inst, t, v: v * G.bass, f: mtof(pitch), dur, p: PT.bass, bright: .6, bus: 'bass', pan: 0}); };
+    const keysInPeak = A() < .45, keysPat = pick(V, ['broken', 'broken', 'block', 'roll']), keysSteps = pick(V, [[0, 4, 8, 12], [0, 6, 8, 14], [0, 3, 6, 8, 11, 14], [0, 8]]), keysVoss = voss(V, 128, 5);
     for (let bar = 0; bar < NB; bar++){
-      const S = secOf(bar), k = (bar - S.bar0) / S.bars, e = energy(bar), ch = chordAtBar(bar), nextS = secOf(bar + 1), lastBarOfBuild = (S.name === 'build' || S.name === 'rise' || S.name === 'groove') && bar === S.bar0 + S.bars - 1 && nextS !== S && nextS.e > S.e + .15;
-      const dens = p.density * (.55 + .45 * e), bright = clamp(.25 + .55 * e + .2 * LZ[bar * 16], .1, 1.2), dyn = clamp(.3 + .7 * e, .25, 1), rising = S.name === 'build' || S.name === 'rise';
-      const on = {kick: L.kick && rhythm !== 'none' && (rising ? k >= .5 : e >= .45), snare: L.snare && rhythm !== 'none' && e >= .62,
-        hat: L.hat && rhythm !== 'none' && e >= .28, perc: L.perc && (e >= .38 || (rhythm === 'none' && e >= .25)), bass: L.bass && (rising ? k >= .75 : (e >= .4 || (form === 'ambient' && e >= .3))), arp: L.arp && e >= .22, lead: L.lead && (S.name === 'peak' || (S.name === 'groove' && k > .5) || (S.name === 'bloom')),
-        pad: L.pad, tex: L.tex && bar === S.bar0 && (e < .55 || S.name === 'peak' || form === 'ambient'), drone: L.pad && bar === S.bar0 && (S.name === 'intro' || S.name === 'break' || S.name === 'outro' || form === 'ambient')};
-      const hRow = caHat(), pRow = caPerc(), kRow = caKick(), aRow = caArp();
+      const S = secOf(bar), k = (bar - S.bar0) / S.bars, e = energy(bar), ch = chordAtBar(bar), set = act[bar], nextS = secOf(bar + 1), last = bar === S.bar0 + S.bars - 1;
+      const lastBarOfBuild = isBuild(S) && last && nextS !== S && nextS.e > S.e + .15 && rhythm !== 'none';
+      const dens = p.density * (.55 + .45 * e), brt = clamp(.3 + .5 * e + .15 * LZ[bar * 16] + (bright - .5) * .6, .15, 1.2), dyn = clamp(.5 + .5 * e, .4, 1);
+      const hRow = caHat(), pRow = caPerc(), kRow = caKick(), hatVar = (bar >> 2) & 1, chaosOn = p.chaos * S.chaosMul;
+      const ladder = ladderOf(ch, 64, 91), pool = ladderOf(ch, 55, 84);
       const gap = s => lastBarOfBuild && s >= 12;    // the silence before the drop
-      for (let s = 0; s < 16; s++){ const gs = bar * 16 + s, t = T(gs, s), lg = LOG[gs];
+      const MVS = isPeak(S) && S.idx > firstPeak.idx ? MV2 : MV;
+      for (let s = 0; s < 16; s++){ const gs = bar * 16 + s, t = T(gs, s), lg = LOG[gs], strong = (s & 3) === 0;
         if (gap(s)) continue;
         // kick
-        if (on.kick){ let v = 0;
-          if (rhythm === 'four') v = s % 4 === 0 ? 1 : (s === 14 && lg > 1 - dens * .45 ? .42 : 0);
-          else if (rhythm === 'drive') v = s % 2 === 0 ? (s % 4 === 0 ? 1 : .62) : 0;
-          else if (rhythm === 'broken') v = kickEu[s] ? (s === 0 ? 1 : .88) : (kRow[s] && lg > .78 && s % 2 === 0 ? .5 : 0);
-          else if (rhythm === 'half') v = s === 0 || s === 10 ? 1 : (s === 7 && lg > .6 ? .55 : 0);
-          else if (rhythm === 'ca') v = s === 0 ? 1 : (kRow[s] && s % 2 === 0 && lg > .45 ? .82 : 0);
+        if (set.has('kick')){ let v = 0;
+          if (rhythm === 'four') v = s % 4 === 0 ? 1 : (s === 14 && lg > 1 - dens * .4 && chaosOn > .3 ? .4 : 0);
+          else if (rhythm === 'drive') v = s % 2 === 0 ? (s % 4 === 0 ? 1 : .6) : 0;
+          else if (rhythm === 'broken') v = kickEu[s] ? (s === 0 ? 1 : .88) : (kRow[s] && lg > .85 && s % 2 === 0 && chaosOn > .4 ? .45 : 0);
+          else if (rhythm === 'half') v = s === 0 || s === 10 ? 1 : (s === 7 && lg > .7 && chaosOn > .3 ? .5 : 0);
+          else if (rhythm === 'ca') v = s === 0 ? 1 : (kRow[s] && s % 2 === 0 && lg > .5 ? .8 : 0);
           if (v > 0){ add({inst: 'kick', t, v: v * G.kick * dyn, p: PT.kick, bus: 'drums'}); if (v >= .6) kicks.push(t); } }
         // snare / clap
-        if (on.snare){ let v = 0;
+        if (set.has('snare')){ let v = 0;
           if (rhythm === 'four') v = backbeat ? (s === 4 || s === 12 ? 1 : 0) : (s === 12 ? .8 : 0);
-          else if (rhythm === 'drive') v = s === 12 ? .75 : 0;
+          else if (rhythm === 'drive') v = s === 12 ? .75 : (s === 4 ? .6 : 0);
           else if (rhythm === 'half') v = s === 8 ? 1 : 0;
           else if (rhythm === 'broken') v = snEu[s] ? .9 : 0;
           else if (rhythm === 'ca') v = (s === 4 || s === 12) && pRow[s] ? .9 : (s === 12 ? .7 : 0);
-          if (v > 0) add({inst: 'snare', t, v: v * G.snare * dyn, p: PT.snare, bus: 'drums', pan: 0, sv: .22}); }
+          if (v > 0) add({inst: 'snare', t, v: v * G.snare * dyn, p: PT.snare, bus: 'drums', pan: 0, sv: .2}); }
         // build roll
-        if ((S.name === 'build' || S.name === 'rise') && k > .74 && L.snare && rhythm !== 'none'){ const fin = bar === S.bar0 + S.bars - 1, every = fin ? 1 : k > .87 ? 2 : 4;
-          if (s % every === 0 && !gap(s)) add({inst: 'snare', t, v: (.25 + .6 * (k - .74) / .26) * G.snare * (fin ? (.6 + s / 30) : 1), p: Object.assign({}, PT.snare, {clap: false}), bus: 'drums', sv: .3}); }
-        // hats: accents, cellular mask, open on offbeats
-        if (on.hat){ const acc = [1, .38, .62, .38][s & 3]; let pl = (s & 1) === 0 || hRow[s] || lg > 1 - dens * .5;
-          if (rhythm === 'half' || rhythm === 'drive') pl = (s & 1) === 0 || (hRow[s] && lg > .5);
-          const open = (rhythm === 'four' && (s & 3) === 2 && e > .55) || (s === 14 && hRow[s] && e > .7);
-          if (pl && (e > .45 || (s & 1) === 0)) add({inst: 'hat', t, v: acc * (.6 + .4 * lg) * G.hat * dyn * (open ? 1.3 : 1), open, p: PT.hat, bus: 'drums', pan: (s & 2 ? .6 : -.6) * p.width}); }
-        // two polymetric percussion lines, pitched on the scale, rewritten by a cellular automaton
-        if (on.perc){ const ia = gs % pA.len, ib = gs % pB.len;
-          if (pA.pat[ia] && (pRow[s] || e < .5 || lg > .4)) add({inst: 'perc', t, v: (.45 + .55 * lg) * G.perc * (.5 + .5 * dyn), f: mtof(dmidi(pA.deg[ia] + ch.root, PT.perc.reg)), body: PT.perc.body, decay: PT.perc.decay, hard: .3 + .5 * lg, bus: 'duck', pan: ((ia / pA.len) - .5) * 1.6 * p.width, sv: .16, sd: .12 * p.delay});
-          if (pB.pat[ib] && e > .35 && lg > .3) add({inst: 'perc', t: t + .001, v: (.35 + .4 * lg) * G.perc, f: mtof(dmidi(pB.deg[ib] + ch.root, 43)), body: pB.len % 2 ? 'wood' : 'membrane', decay: .6, hard: .6, bus: 'duck', pan: -((ib / pB.len) - .5) * 1.4 * p.width, sv: .12, sd: .1 * p.delay}); }
-        // bass
-        if (on.bass){ let hit = false, len = 2, d = 0;
-          if (bassStyle === 'sustain'){ hit = s === 0 && (bar === ch.bar || S.name === 'peak' || (bar - ch.bar) % 2 === 0); len = (bar === ch.bar ? ch.bars : 1) * 16 - .5; if (S.name === 'peak' && s === 0) len = Math.min(len, 16); }
+        if (isBuild(S) && k > .74 && roleOK.snare && rhythm !== 'none'){ const fin = last, every = fin ? 1 : k > .87 ? 2 : 4;
+          if (s % every === 0) add({inst: 'snare', t, v: (.2 + .6 * (k - .74) / .26) * G.snare * (fin ? (.6 + s / 30) : 1), p: Object.assign({}, PT.snare, {clap: false}), bus: 'drums', sv: .3}); }
+        // hats: 8ths with a Euclidean accent, 16ths when dense; the CA only rewrites them when chaos asks
+        if (set.has('hat')){ const acc = hatAcc[s] ? 1 : [.9, .4, .6, .4][s & 3]; let pl = (s & 1) === 0 || (dens > .55 && (hatVar ? hatAcc[(s + 8) % 16] : hatAcc[s])) || (chaosOn > .55 && hRow[s] && lg > .6);
+          if (rhythm === 'half') pl = (s & 1) === 0 || (hRow[s] && lg > .7); if (rhythm === 'ca') pl = (s & 1) === 0 || hRow[s];
+          const open = (rhythm === 'four' && (s & 3) === 2 && e > .55 && (bassStyle !== 'offbeat' || (bar & 1))) || (s === 14 && hRow[s] && e > .75);
+          if (pl && (e > .45 || (s & 1) === 0)) add({inst: 'hat', t, v: acc * (.7 + .3 * hatVoss[gs % 64]) * G.hat * dyn * (open ? 1.25 : 1), open, p: PT.hat, bus: 'drums', pan: (s & 2 ? .5 : -.5) * p.width}); }
+        // two polymetric percussion lines on chord tones, thinned by the automaton
+        if (set.has('perc')){ const ia = gs % pA.len, ib = gs % pB.len, pcsA = ladderOf(ch, PT.perc.reg, PT.perc.reg + 12);
+          if (pA.pat[ia] && (pRow[s] || e < .5 || lg > .35)) add({inst: 'perc', t, v: (.5 + .5 * lg) * G.perc * (.5 + .5 * dyn), f: mtof(pcsA[pA.tone[ia] % pcsA.length]), body: PT.perc.body, decay: PT.perc.decay, hard: .3 + .5 * lg, bus: 'duck', pan: ((ia / pA.len) - .5) * 1.6 * p.width, sv: .18, sd: .12 * p.delay});
+          if (pB.pat[ib] && e > .35 && lg > .3){ const pcsB = ladderOf(ch, 43, 55); add({inst: 'perc', t: t + .001, v: (.35 + .4 * lg) * G.perc, f: mtof(pcsB[pB.tone[ib] % pcsB.length]), body: pB.len % 2 ? 'wood' : 'membrane', decay: .6, hard: .6, bus: 'duck', pan: -((ib / pB.len) - .5) * 1.4 * p.width, sv: .12, sd: .1 * p.delay}); } }
+        // bass: the root, held across the chord or moving under the kick; a fifth or octave now and then
+        if (set.has('bass')){ let hit = false, len = 2, d = 0;
+          if (bassStyle === 'sustain'){ hit = s === 0 && (bar === ch.bar || (isPeak(S) && (bar - ch.bar) % 2 === 0)); len = Math.min(bar === ch.bar ? ch.bars : 2, 2) * 16 - .5; }
           else if (bassStyle === 'offbeat'){ hit = (s & 3) === 2; len = 1.6; }
           else if (bassStyle === 'roll'){ hit = (s & 3) !== 0; len = .9; }
           else if (bassStyle === 'pulse'){ hit = (s & 1) === 0; len = 1.5; }
           else { hit = !!bassEu[s]; len = 2.5; }
-          if (hit && !(lastBarOfBuild && s > 8)){ const r5 = V(); if (s !== 0 && r5 < .14) d = 4; else if (s !== 0 && r5 < .22) d = 7;
-            const pitch = ch.bass + (d === 4 ? (dpc(ch.root + 4) - dpc(ch.root) + 12) % 12 : d === 7 ? 12 : 0);
-            add({inst: PT.bass.inst, t, v: (s === 0 ? 1 : .85) * G.bass * dyn, f: mtof(pitch), dur: len * ST, p: PT.bass, bright: .6 + .4 * e, bus: 'duck', pan: 0}); } }
-        // arpeggiator: chord tones in a polymetric cycle, gated by euclid × cellular automaton
-        if (on.arp){ if (!arpCfg || bar === S.bar0){ const rate = S.name === 'break' || S.name === 'intro' || S.name === 'swell' ? 2 : (p.arpRate === 8 ? 2 : 1);
-            arpCfg = {rate, pat: pick(V, ['up', 'down', 'updown', 'converge', 'walk', 'thirds']), plen: pick(V, p.poly < .3 ? [4, 8] : [3, 5, 7, 5, 6]), oct: Math.round(e * 1.4 * V()), gate: euclid(Math.round(lerp(5, 14, dens)), 16, Math.floor(V() * 16)), walk: 0}; }
-          if (s % arpCfg.rate === 0 && (arpCfg.gate[s] || (p.poly > .5 && aRow[s])) && (e > .5 || lg > .25)){
-            const pool = []; for (let o = 0; o <= arpCfg.oct; o++) ch.voicing.forEach(m => pool.push(m + 12 * o)); pool.sort((a, b) => a - b);
-            const n = arpN++, ci = n % arpCfg.plen, cyc = Math.floor(n / arpCfg.plen), P = pool.length; let ix;
+          if (hit && !(lastBarOfBuild && s > 8)){ const r5 = V(); if (s !== 0 && bassStyle !== 'sustain'){ if (r5 < .1 + chaosOn * .1) d = 7; else if (r5 < .16 + chaosOn * .1) d = 12; }
+            playBass(t, bar, ch.bass + d, len * ST, (s === 0 ? 1 : .85) * dyn); } }
+        // arpeggio: chord tones in a polymetric cycle; accents from 1/f noise; ratchets when chaos is up
+        if (set.has('arp')){ if (!arpCfg || bar === S.bar0){ const rate = isCalm(S) || S.name === 'swell' ? 2 : (p.arpRate === 8 ? 2 : 1);
+            arpCfg = {rate, pat: pick(V, ['up', 'down', 'updown', 'converge', 'walk', 'thirds', 'up']), plen: pick(V, p.poly < .3 ? [4, 8] : [3, 5, 7, 5, 6]), oct: isPeak(S) ? 1 : 0, gate: euclid(Math.round(lerp(6, 14, dens)), 16, Math.floor(V() * 4) * 2), walk: 0, vel: voss(V, 32, 4)}; }
+          if (s % arpCfg.rate === 0 && (arpCfg.gate[s] || (p.poly > .6 && hRow[s] && lg > .5)) && (e > .5 || lg > .2 || strong)){
+            const P = pool.length, n = arpN++, ci = n % arpCfg.plen, cyc = Math.floor(n / arpCfg.plen); let ix;
             if (arpCfg.pat === 'up') ix = (ci + cyc) % P; else if (arpCfg.pat === 'down') ix = P - 1 - (ci + cyc) % P;
             else if (arpCfg.pat === 'updown'){ const per = Math.max(1, 2 * P - 2), q = (ci + cyc * 2) % per; ix = q < P ? q : per - q; }
             else if (arpCfg.pat === 'converge') ix = ci % 2 ? P - 1 - ((ci >> 1) + cyc) % P : ((ci >> 1) + cyc) % P;
             else if (arpCfg.pat === 'thirds') ix = (ci * 2 + cyc) % P;
             else { arpCfg.walk = clamp(arpCfg.walk + (lg > .5 ? 1 : -1), 0, P - 1); ix = arpCfg.walk; }
-            let mn = pool[clamp(ix, 0, P - 1)]; if (mn < 60) mn += 12; while (mn > 84) mn -= 12;   // keep the arp in C4–C6: above that every voice turns into a tiny chime
-            const gate = arpCfg.rate * ST * (.7 + 1.3 * LOG[(gs + 7) % NSTEP]);
-            add({inst: PT.arp.inst, t, v: (.55 + .45 * lg) * (ci === 0 ? 1.15 : 1) * G.arp * (.45 + .55 * dyn), f: mtof(mn), dur: gate, p: PT.arp, body: PT.arp.body, decay: PT.arp.decay, bright, bus: 'duck', pan: clamp((ci / Math.max(1, arpCfg.plen - 1) - .5) * 1.7 * p.width, -1, 1), sv: .26, sd: .35 * p.delay}); } }
-        // developed motif on the lead voice
-        if (on.lead){ if (!motifPhrase || gs >= motifPhrase.end){ const ph = develop(motif, V); motifPhrase = Object.assign(ph, {start: gs, end: gs + ph.len}); }
-          const rel = gs - motifPhrase.start; for (const nt of motifPhrase.notes) if (nt.s === rel){ let mn = dmidi(ch.root + nt.d, S.name === 'bloom' ? 60 : 67); while (mn > 86) mn -= 12;
-            add({inst: PT.lead.inst, t, v: nt.v * G.lead * (S.name === 'groove' ? .75 : 1), f: mtof(mn), dur: Math.min(nt.len, 8) * ST * .95, p: PT.lead, body: PT.lead.body, decay: PT.lead.decay, bright: bright * 1.1, bus: 'duck', pan: .12, sv: .3, sd: .4 * p.delay}); } }
+            let mn = pool[clamp(ix, 0, P - 1)]; if (arpCfg.oct && ci === 0 && cyc % 2) mn += 12; while (mn > 84) mn -= 12; while (mn < 57) mn += 12;
+            const vel = (.55 + .45 * arpCfg.vel[gs % 32]) * (ci === 0 ? 1.12 : 1) * (.45 + .55 * dyn), gate = arpCfg.rate * ST * (.6 + 1.2 * lg);
+            const ratchet = chaosOn > .4 && lg > .93 && arpCfg.rate === 1 ? 2 : 1;
+            for (let q = 0; q < ratchet; q++) add({inst: PT.arp.inst, t: t + q * ST / 2, v: vel * G.arp * (ARPMUL[pal.arp] || 1) * (q ? .7 : 1), f: mtof(mn), vel, dur: gate / ratchet, p: PT.arp, body: PT.arp.body, decay: PT.arp.decay, bright: brt, bus: 'duck', pan: clamp((ci / Math.max(1, arpCfg.plen - 1) - .5) * 1.6 * p.width, -1, 1), sv: .28, sd: .35 * p.delay}); } }
+        // keys: broken chords in the calm sections, long chords on changes elsewhere — the piano in the breakdown
+        if (set.has('keys')){ const calm = isCalm(S) || S.name === 'swell' || S.name === 'groove', lad = ladderOf(ch, 48, 76);
+          if (keysPat === 'block' || !calm){ if (!calm && !keysInPeak && !isBuild(S)){} else if (s === 0 && (bar === ch.bar || (!calm && (bar - ch.bar) % 2 === 0))){ const vl = .5 + .3 * e; add({inst: 'keys', t, v: G.keys * .8, vel: vl, notes: ch.voicing.map(m => m - (ch.voicing[0] > 60 ? 12 : 0)), dur: (calm ? Math.min(ch.bars, 2) : 1) * BT * .95, p: PT.keys, bright: brt, bus: 'duck', pan: 0, sv: .4, sd: .1 * p.delay}); } }
+          else if (calm && keysSteps.indexOf(s) >= 0){ const i = keysSteps.indexOf(s), m = keysPat === 'roll' ? lad[(i + (bar - ch.bar) * 2) % lad.length] : lad[(i * 2 + (bar & 1)) % lad.length], vl = .45 + .35 * keysVoss[gs % 128] + .15 * e;
+            add({inst: 'keys', t, v: G.keys, vel: vl, f: mtof(m), dur: ST * 6, p: PT.keys, bright: brt, bus: 'duck', pan: (m - 62) / 40, sv: .42, sd: .15 * p.delay}); } }
+        // lead: the motif, re-harmonised on the ladder; A A' B A schemes; thin in builds, augmented in breaks
+        if (set.has('lead')){ const phraseLen = 32, pgs = gs - S.bar0 * 16, ph = Math.floor(pgs / phraseLen), rel = pgs % phraseLen;
+          if (rel === 0 || !phraseCache || phraseCache.S !== S || phraseCache.ph !== ph){ const sc = schemeOf(S, k); let key = sc[ph % 4]; if (isBuild(S)) key = ph % 2 ? 'T' : key; if (S.name === 'break' || S.name === 'intro') key = 'G'; phraseCache = {S, ph, m: MVS[key] || MVS.A, key}; }
+          for (const nt of phraseCache.m.notes) if (nt.s === rel){ let mn; const rung = clamp(nt.rung, 0, ladder.length - 1);
+              if (nt.pass && phraseCache.prevM !== undefined){ const target = ladder[rung]; const pt = scaleBetween(phraseCache.prevM, target); mn = pt === null ? target : pt; } else mn = ladder[rung];
+              if (phraseCache.key === 'G') mn -= 12; while (mn > 91) mn -= 12; phraseCache.prevM = mn;
+              const vel = nt.v * (S.name === 'groove' ? .8 : 1) * (.6 + .4 * dyn), dur = Math.min(nt.len, 8) * ST * (phraseCache.key === 'G' ? 1.6 : .95);
+              add({inst: PT.lead.inst, t, v: vel * G.lead * (LEADMUL[pal.lead] || 1), vel, f: mtof(mn), dur, p: PT.lead, body: PT.lead.body, decay: PT.lead.decay, bright: brt * 1.05, bus: 'duck', pan: .1, sv: .32, sd: .4 * p.delay}); } }
       }
       // fills every 8 bars in the driving sections
-      if ((S.name === 'peak' || S.name === 'groove') && (bar - S.bar0) % 8 === 7 && bar - lastFillBar > 4 && rhythm !== 'none'){ lastFillBar = bar; const fr = caFill();
-        for (let s = 12; s < 16; s++) if (fr[s] || s === 15) add({inst: 'perc', t: T(bar * 16 + s, s), v: (.5 + .1 * (s - 12)) * G.perc, f: mtof(dmidi(ch.root + (s - 12) * 2, 48)), body: 'membrane', decay: .7, hard: .7, bus: 'duck', pan: (s - 13.5) * .3, sv: .2}); }
+      if ((isPeak(S) || S.name === 'groove') && roleOK.perc && (bar - S.bar0) % 8 === 7 && bar - lastFillBar > 4 && rhythm !== 'none'){ lastFillBar = bar; const fr = caFill(), lad = ladderOf(ch, 48, 60);
+        for (let s = 12; s < 16; s++) if (fr[s] || s === 15) add({inst: 'perc', t: T(bar * 16 + s, s), v: (.45 + .1 * (s - 12)) * G.perc, f: mtof(lad[(s - 12) % lad.length]), body: 'membrane', decay: .7, hard: .7, bus: 'duck', pan: (s - 13.5) * .3, sv: .2}); }
+      // bass phrases flush every 4 bars, at section edges, or when the bass leaves
+      const nextSet = act[bar + 1]; if (bar + 1 >= NB || (bar + 1) % 4 === 0 || nextS !== S || !nextSet || !nextSet.has('bass')) flushBass(bar + 1);
       // chord-length events
-      if (on.pad && bar === ch.bar){ const notes = ch.voicing.slice(); if (S.name === 'peak' && p.color > .4) notes.push(ch.voicing[1] + 12);
-        add({inst: 'pad', t: bar * BT, v: G.pad * (.6 + .4 * (1 - e * .5)), notes, dur: ch.bars * BT, p: PT.pad, bright, mod: LZ.subarray(bar * 16, Math.min(NSTEP, (bar + ch.bars) * 16 + 16)), modT: ST, bus: 'duck', sv: .45}); }
-      if (on.drone) add({inst: 'drone', t: bar * BT, v: G.drone, root: dmidi(0, 36), dur: S.bars * BT, bus: 'duck', sv: .35});
-      if (on.tex) add({inst: 'tex', t: bar * BT, v: G.tex * (S.name === 'peak' ? .5 : 1), dur: S.bars * BT, p: PT.tex, root: dmidi(ch.root, 36), chordAt: chordAtT, mod: LZ2.subarray(bar * 16, Math.min(NSTEP, (bar + S.bars) * 16 + 16)), modT: ST, bus: 'duck', sv: .55});
-      if (bar === S.bar0 && (S.name === 'peak' || (S.name === 'groove' && S.e >= .7)) && bar > 0 && rhythm !== 'none') add({inst: 'impact', t: bar * BT, v: G.impact, bus: 'drums', sv: .45});
-      if ((S.name === 'build' || S.name === 'rise') && bar === S.bar0 + S.bars - Math.min(4, Math.max(2, S.bars >> 2))){ const nb = S.bar0 + S.bars - bar; add({inst: 'riser', t: bar * BT, v: G.riser, dur: nb * BT - ST * 4, bus: 'duck', sv: .5}); }
+      if (set.has('pad') && bar === ch.bar){ const notes = ch.voicing.slice(); if (isPeak(S) && p.color > .4) notes.push(ch.voicing[1] + 12);
+        add({inst: 'pad', t: bar * BT, v: G.pad * (.65 + .35 * (1 - e * .5)), notes, dur: ch.bars * BT, p: PT.pad, bright: brt, mod: LZ.subarray(bar * 16, Math.min(NSTEP, (bar + ch.bars) * 16 + 16)), modT: ST, bus: 'duck', sv: .5}); }
+      if (set.has('pad') && bar === S.bar0 && (isCalm(S) || form === 'ambient') && p.color > .3) add({inst: 'drone', t: bar * BT, v: G.drone, root: dmidi(0, 36), dur: S.bars * BT, bus: 'bass', sv: .3});
+      if (set.has('tex') && (bar === S.bar0 || (act[bar - 1] && !act[bar - 1].has('tex')))){ let nb = 0; while (bar + nb < NB && secOf(bar + nb) === S && act[bar + nb].has('tex')) nb++;
+        add({inst: 'tex', t: bar * BT, v: G.tex * (isPeak(S) ? .55 : 1) * (pal.tex === 'crackle' ? .8 : 1), dur: nb * BT, p: PT.tex, root: dmidi(ch.root, 36), chordAt: chordAtT, mod: LZ2.subarray(bar * 16, Math.min(NSTEP, (bar + nb) * 16 + 16)), modT: ST, bus: 'duck', sv: .55}); }
+      if (bar === S.bar0 && isPeak(S) && bar > 0 && rhythm !== 'none' && !p.noSweeteners) add({inst: 'impact', t: bar * BT, v: G.impact, bus: 'drums', sv: .45});
+      if (isBuild(S) && nextS !== S && !p.noSweeteners && bar === S.bar0 + S.bars - Math.min(8, Math.max(4, S.bars >> 1))){ const nb = S.bar0 + S.bars - bar;
+        add({inst: 'shepard', t: bar * BT, v: G.riser * .9, dur: nb * BT - ST * 4, f0: mtof(dmidi(0, 24)), cycle: BT * 2, rise: true, bus: 'duck', sv: .5});
+        if (rhythm !== 'none') add({inst: 'riser', t: (bar + Math.max(0, nb - 4)) * BT, v: G.riser * .8, dur: Math.min(nb, 4) * BT - ST * 4, bus: 'duck', sv: .5}); }
     }
-    const fxC = resolveFx(p, STYLES[p.style] && STYLES[p.style].fx, rngOf(hashSeed(p.seed, 733)));
+    flushBass(NB);
+    const fxC = resolveFx(p, (STYLES[p.style] || STYLES.cooper).fx, rngOf(hashSeed(p.seed, 733)));
     const meta = {bpm: p.bpm, key: NOTE[tonic] + ' ' + p.mode, style: p.style, styleName: STYLES[p.style] ? STYLES[p.style].name : 'free', fx: Object.keys(fxC).filter(k => fxC[k]), rhythm, form, palette: pal, bassStyle, bars: NB, duration: NB * BT,
       sections: secs.map(s => ({name: s.name, bar0: s.bar0, bars: s.bars, e: s.e, eTo: s.eTo, chords: chords.filter(c => c.bar >= s.bar0 && c.bar < s.bar0 + s.bars).map(c => ({bar: c.bar, bars: c.bars, name: c.name}))})),
-      events: ev.length, motif: motif.notes.length + ' notes / ' + motif.len + ' steps', poly: pA.len + '/' + pB.len};
+      events: ev.length, loop: loopA.map(c => c.name).join(' – '), melody: melodyK, motif: motif.notes.length + ' notes / ' + motif.len + ' steps', poly: pA.len + '/' + pB.len};
     return {events: ev, kicks, beat, BT, duration: NB * BT, meta, fx: fxC, fxp: fxPlan(secs, NB, BT, beat, fxC, rngOf(hashSeed(p.seed, 734)))};
   }
-
   // =========================================================== effects choice (shared by both engines)
   const FXN = ['lofi', 'tape', 'phaser', 'chorus', 'sweep', 'crush', 'dubthrow', 'stutter', 'tapestop', 'reverse'];
   // explicit p.fx wins; otherwise 1–3 effects are drawn from the style's weights — a different combination per piece
@@ -475,7 +591,6 @@ function SYNTH_CORE(){
         if (fx.reverse) post.push({type: 'reverse', t: tD, len: beat * (r() < .5 ? 2 : 1)}); }
       if (fx.stutter && isDrop(S)) for (let b = S.bar0 + 7; b < S.bar0 + S.bars - 1; b += 8) if (r() < .5) post.push({type: 'stutter', t0: (b + 1) * BT - beat, t1: (b + 1) * BT, slice: beat / pick(r, [2, 4, 4, 8])}); });
     return {lp, hp, post}; }
-
   // =========================================================== genre engine
   // Each style is a grammar: tempo, mode, kit, a groove library per drum voice, which roles carry the bass / chords / top line,
   // how the harmony loops, and which effects it likes. Every piece draws one option per slot, so styles never sound alike
@@ -639,7 +754,7 @@ function SYNTH_CORE(){
     const subPulse = A() < .5, reeseStab = A() < .5;
     let mono = [], monoStart = 0; const flushMono = endBar => { if (mono.length){ const t0 = monoStart * BT, len = endBar * BT - t0;
         const cutAt = part.bass === 'acid' ? (tt => { const b = clamp(Math.floor((t0 + tt) / BT), 0, NB - 1), e = energy(b); return (.35 + 1.4 * e) * (1 + .5 * LZ[b * 16]); }) : null;
-        add({inst: 'mono', t: t0, len, notes: mono.map(n => Object.assign({}, n, {t: n.t - t0, dur: Math.min(n.dur, len - (n.t - t0))})), p: BP, cutAt, bus: 'duck', pan: 0, v: GN.bass}); } mono = []; };
+        add({inst: 'mono', t: t0, len, notes: mono.map(n => Object.assign({}, n, {t: n.t - t0, dur: Math.min(n.dur, len - (n.t - t0))})), p: BP, cutAt, bus: 'bass', pan: 0, v: GN.bass}); } mono = []; };
     // chords
     const SP = {stab: {kind: 'saw', cut: rr(R, 500, 1100), famt: rr(R, 3, 8), res: rr(R, .7, 1.5), fdec: rr(R, .05, .14), dec: rr(R, .12, .3), sus: 0, rel: .05, det: rr(R, .003, .008)},
       dub: {kind: 'dub', cut: rr(R, 700, 1500), res: rr(R, 1, 1.8), fdec: rr(R, .05, .12), dec: rr(R, .08, .16), sus: 0, rel: .04},
@@ -744,39 +859,63 @@ function SYNTH_CORE(){
     return {events: ev, kicks, beat, BT, duration: NB * BT, meta, fx, fxp: fxPlan(secs, NB, BT, beat, fx, FXR)};
   }
 
-  // =========================================================== randomiser
-  // each style is a set of ranges that make sense together (tempo ↔ groove ↔ swing ↔ density ↔ space); a roll stays inside one style
-  // the classic (evolving, Max-Cooper-like) engine keeps four styles; the other eleven run on the genre engine (GS above)
+  // =========================================================== styles and randomiser
+  // each style is a set of ranges that make sense together; a roll stays inside one style. These run on the evolving engine;
+  // the genre styles (GS) are loop grammars and are only reached by choosing them explicitly.
   const STYLES = {
-    cinematic: {name: 'cinematic', w: 2, bpm: [104, 122], rhythm: {broken: 2, four: 1, half: 1}, form: {rise: 2, arc: 2}, mode: {minor: 2, lydian: 1, dorian: 1, major: 1}, color: [.65, .95], develop: [.6, .9], motion: [.45, .8], verb: [.5, .75], width: [.85, 1], pump: [.1, .35], fx: {reverse: 2, sweep: 2, chorus: 1, tape: 1}},
-    broken: {name: 'broken beat / IDM', w: 2, bpm: [120, 138], rhythm: {broken: 4, ca: 2}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 2, dorian: 2, pentMinor: 1, lydian: 1}, swing: [.55, .64], density: [.5, .75], pump: [.15, .4], drive: [.2, .5], color: [.5, .85], motion: [.4, .75], develop: [.55, .85], chaos: [.4, .75], poly: [.55, .9], humanize: [.4, .7], fx: {stutter: 3, crush: 2, phaser: 1, sweep: 1}},
-    halftime: {name: 'downtempo', w: 1.5, bpm: [84, 100], rhythm: {half: 1}, form: {arc: 2, twin: 1, rise: 1}, mode: {minor: 3, harmonicMinor: 1, dorian: 1, pentMinor: 1}, swing: [.56, .66], density: [.4, .62], pump: [.2, .45], drive: [.3, .6], color: [.4, .75], motion: [.3, .6], verb: [.4, .65], fx: {tape: 2, lofi: 1, reverse: 1, sweep: 1}},
+    cooper: {name: 'emergence — evolving, Max Cooper-leaning', w: 5, bpm: [114, 126], rhythm: {four: 3, broken: 3, half: 1, ca: 1}, form: {arc: 3, twin: 2, rise: 2}, mode: {minor: 3, dorian: 2, major: 1.5, lydian: 1}, color: [.55, .9], motion: [.25, .6], develop: [.4, .75], chaos: [.2, .5], poly: [.5, .9], density: [.5, .72], bright: [.4, .6], metal: [.1, .35], swing: [.5, .58], humanize: [.3, .6], pump: [.25, .5], drive: [.1, .3], verb: [.5, .75], delay: [.3, .55], width: [.85, 1], fx: {sweep: 3, reverse: 2, stutter: 2, chorus: 1, tape: 1}},
+    cinematic: {name: 'cinematic', w: 2, bpm: [104, 122], rhythm: {broken: 2, four: 1, half: 1}, form: {rise: 2, arc: 2}, mode: {minor: 2, lydian: 1, dorian: 1, major: 1}, color: [.65, .95], develop: [.5, .85], motion: [.35, .7], chaos: [.15, .4], verb: [.55, .8], width: [.85, 1], pump: [.1, .35], drive: [.05, .25], metal: [.1, .4], fx: {reverse: 2, sweep: 2, chorus: 1, tape: 1}},
+    broken: {name: 'broken beat / IDM', w: 2, bpm: [120, 138], rhythm: {broken: 4, ca: 2}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 2, dorian: 2, pentMinor: 1, lydian: 1}, swing: [.55, .64], density: [.5, .75], pump: [.15, .4], drive: [.15, .45], color: [.5, .85], motion: [.3, .7], develop: [.5, .85], chaos: [.35, .7], poly: [.55, .9], humanize: [.4, .7], fx: {stutter: 3, crush: 2, phaser: 1, sweep: 1}},
+    deep: {name: 'deep house (evolving)', w: 2, bpm: [118, 125], rhythm: {four: 5, broken: 1}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 3, dorian: 3, mixolydian: 1}, swing: [.53, .6], density: [.5, .72], pump: [.35, .6], drive: [.15, .4], color: [.6, .9], motion: [.3, .6], chaos: [.15, .4], metal: [.1, .3], fx: {chorus: 2, tape: 2, sweep: 2, dubthrow: 1}},
+    technoE: {name: 'techno (evolving)', w: 2, bpm: [126, 134], rhythm: {drive: 3, four: 3, ca: 1}, form: {rise: 2, arc: 2, twin: 1}, mode: {minor: 3, phrygian: 2, harmonicMinor: 1}, swing: [.5, .54], density: [.6, .85], pump: [.4, .7], drive: [.3, .6], color: [.3, .6], motion: [.1, .4], develop: [.3, .6], chaos: [.3, .6], bright: [.35, .6], metal: [.2, .5], verb: [.35, .6], fx: {sweep: 3, stutter: 2, crush: 1, phaser: 1}},
+    halftime: {name: 'downtempo', w: 1.5, bpm: [84, 100], rhythm: {half: 1}, form: {arc: 2, twin: 1, rise: 1}, mode: {minor: 3, harmonicMinor: 1, dorian: 1, pentMinor: 1}, swing: [.56, .66], density: [.4, .62], pump: [.2, .45], drive: [.2, .5], color: [.4, .75], motion: [.3, .6], verb: [.4, .65], fx: {tape: 2, lofi: 1, reverse: 1, sweep: 1}},
     ambient: {name: 'ambient', w: 1, bpm: [70, 100], bars: [64, 80, 96], rhythm: {none: 1}, form: {ambient: 1}, mode: {major: 1, lydian: 2, dorian: 1, minor: 1}, density: [.3, .5], pump: [0, .1], drive: [0, .2], verb: [.65, .9], delay: [.4, .7], color: [.6, .95], motion: [.2, .5], chaos: [.2, .45], swing: [.5, .55], fx: {chorus: 2, tape: 2, phaser: 1}}};
   const ALL = Object.assign({}, STYLES, GS);
-  const GEN = {swing: [.5, .6], density: [.45, .75], pump: [.2, .5], drive: [.2, .5], color: [.35, .8], motion: [.3, .65], develop: [.4, .8], chaos: [.3, .6], poly: [.35, .75], bright: [.4, .65], metal: [.15, .5], humanize: [.25, .6], verb: [.35, .65], delay: [.25, .55], width: [.75, 1]};
+  const GEN = {swing: [.5, .6], density: [.45, .75], pump: [.2, .5], drive: [.1, .4], color: [.4, .85], motion: [.25, .65], develop: [.4, .8], chaos: [.2, .55], poly: [.4, .85], bright: [.4, .62], metal: [.1, .4], humanize: [.25, .6], verb: [.4, .7], delay: [.25, .55], width: [.8, 1]};
   // full = every dial; otherwise the song's identity (style, seed, key, mode, tempo, groove, swing, form, length, sounds, effects) and the user's other dials stay
   function randomize(cur, full, rnd){ const r = rnd || Math.random, o = JSON.parse(JSON.stringify(Object.assign({}, DEF, cur || {})));
-    const others = Object.fromEntries(Object.entries(ALL).map(([k, v]) => [k, k === o.style && !full ? 0 : v.w]));   // New piece moves to another style 3 times in 4
-    const sk = !full && ALL[o.style] && r() < .25 ? o.style : pickW(r, others), S = ALL[sk];
-    o.style = sk; o.seed = 1 + Math.floor(r() * 999998); o.vary = 0; o.tonic = Math.floor(r() * 12); o.mode = pickW(r, S.mode);
+    const others = Object.fromEntries(Object.entries(STYLES).map(([k, v]) => [k, k === o.style && !full ? 0 : v.w]));   // New piece moves to another style 3 times in 4
+    const sk = !full && STYLES[o.style] && r() < .25 ? o.style : pickW(r, others), S = STYLES[sk];
+    o.style = sk; o.seed = 1 + Math.floor(r() * 999998); o.vary = 0; o.tonic = Math.floor(r() * 12); o.mode = pickW(r, S.mode); o.melody = 'auto';
     o.bpm = Math.round(rr(r, S.bpm[0], S.bpm[1])); o.rhythm = S.rhythm ? pickW(r, S.rhythm) : 'auto'; o.form = pickW(r, S.form); o.palette = {}; o.fx = null;
     o.bars = pick(r, S.bars || [96, 112, 112, 128, 144]); const sw = S.swing || GEN.swing; o.swing = +rr(r, sw[0], sw[1]).toFixed(2);
     if (full){ for (const k in GEN){ if (k === 'swing') continue; const g = S[k] || GEN[k]; o[k] = +rr(r, g[0], g[1]).toFixed(2); }
-      o.arpRate = o.bpm > 128 || r() < .3 ? 8 : 16; o.layers = Object.assign({}, DEF.layers); if (sk === 'ambient'){ o.layers.kick = o.layers.snare = o.layers.hat = 0; } }
+      o.arpRate = o.bpm > 128 || r() < .25 ? 8 : 16; o.layers = Object.assign({}, DEF.layers); if (sk === 'ambient'){ o.layers.kick = o.layers.snare = o.layers.hat = 0; } }
     else if (o.rhythm !== 'none' && !o.layers.kick && !o.layers.snare && !o.layers.hat) Object.assign(o.layers, {kick: 1, snare: 1, hat: 1});   // leaving an ambient roll brings the drums back
     return o; }
+
+  // =========================================================== mastering tools
+  // glue compressor: RMS detector, soft knee, slow enough to breathe with the bar rather than chew the transients
+  function glue(L, R, sr, thrDb, ratio, kneeDb, atkS, relS){ const n = L.length, BK = 32, dk = 1 - Math.exp(-1 / (.02 * sr / BK)), ak = 1 - Math.exp(-1 / (atkS * sr / BK)), rk = 1 - Math.exp(-1 / (relS * sr / BK)); let rms = 1e-6, grDb = 0, maxGr = 0, gPrev = 1;
+    for (let b = 0; b < n; b += BK){ const e0 = Math.min(n, b + BK); let s = 0; for (let i = b; i < e0; i++){ const x = (L[i] + R[i]) * .5; s += x * x; } rms += (s / (e0 - b) - rms) * dk;
+      const lv = 10 * Math.log10(rms + 1e-12), over = lv - thrDb; let gr = 0;
+      if (over > kneeDb / 2) gr = over * (1 - 1 / ratio); else if (over > -kneeDb / 2){ const q = over + kneeDb / 2; gr = (1 - 1 / ratio) * q * q / (2 * kneeDb); }
+      grDb += (gr - grDb) * (gr > grDb ? ak : rk); if (grDb > maxGr) maxGr = grDb; const g = Math.pow(10, -grDb / 20), dg = (g - gPrev) / (e0 - b); let gi = gPrev;
+      for (let i = b; i < e0; i++){ gi += dg; L[i] *= gi; R[i] *= gi; } gPrev = g; } return maxGr; }
+  // look-ahead peak limiter: the gain needed over the next window is found with a monotone deque, reached ahead of the peak, released slowly
+  function limiter(L, R, sr, ceil, lookS, relS){ const n = L.length, W = Math.max(2, Math.round(lookS * sr)), need = new Float32Array(n);
+    for (let i = 0; i < n; i++){ const a = Math.max(Math.abs(L[i]), Math.abs(R[i])); need[i] = a > ceil ? ceil / a : 1; }
+    const dq = new Int32Array(n + 1); let h = 0, t = 0, env = 1; const ak = 1 - Math.exp(-1 / (W * .3)), rk = 1 - Math.exp(-1 / (relS * sr));
+    for (let i = 0; i < n; i++){ const j = Math.min(n - 1, i + W - 1); while (t > h && need[dq[t - 1]] >= need[j]) t--; dq[t++] = j; while (dq[h] < i) h++;   // dq holds indices of rising minima over [i, i+W)
+      const gmin = need[dq[h]]; env += (gmin - env) * (gmin < env ? ak : rk); L[i] *= env; R[i] *= env;
+      if (L[i] > ceil) L[i] = ceil; else if (L[i] < -ceil) L[i] = -ceil; if (R[i] > ceil) R[i] = ceil; else if (R[i] < -ceil) R[i] = -ceil; } }
+  // loudness: RMS of the loudest half of 400 ms windows
+  function loudHalf(L, R, sr){ const W = (.4 * sr) | 0, total = L.length, rms = []; for (let i = 0; i + W <= total; i += W){ let s = 0; for (let j = i; j < i + W; j += 4) s += L[j] * L[j] + R[j] * R[j]; rms.push(Math.sqrt(s / (W / 2))); }
+    rms.sort((a, b) => b - a); const top = rms.slice(0, Math.max(1, rms.length >> 1)); return top.reduce((a, b) => a + b, 0) / top.length || 1e-6; }
 
   // =========================================================== render
   function render(p0, progress){
     const p = Object.assign({}, DEF, p0 || {}); p.layers = Object.assign({}, DEF.layers, (p0 && p0.layers) || {}); p.palette = Object.assign({}, (p0 && p0.palette) || {});
     const sr = p.sr || 44100, P = plan(p), ev = P.events.sort((a, b) => a.t - b.t), total = Math.ceil((P.duration + 4) * sr);
     const OL = new Float32Array(total), OR = new Float32Array(total), CH = 16384;
-    const dL = new Float32Array(CH), dR = new Float32Array(CH), uL = new Float32Array(CH), uR = new Float32Array(CH), vS = new Float32Array(CH), dS = new Float32Array(CH), mL = new Float32Array(CH), mR = new Float32Array(CH);
-    const verb = FDN(sr, .75 + p.verb * .9, 1.1 + p.verb * 4.2, .3 + (1 - p.bright) * .45), dly = PingPong(sr, P.beat * .75, .28 + p.delay * .38, 2400 + p.bright * 2500);
+    const dL = new Float32Array(CH), dR = new Float32Array(CH), uL = new Float32Array(CH), uR = new Float32Array(CH), bL = new Float32Array(CH), bR = new Float32Array(CH), vS = new Float32Array(CH), dS = new Float32Array(CH), mL = new Float32Array(CH), mR = new Float32Array(CH);
+    const verb = FDN(sr, .8 + p.verb * .9, 1.2 + p.verb * 4.5, .25 + (1 - p.bright) * .4), dly = PingPong(sr, P.beat * .75, .28 + p.delay * .38, 2200 + p.bright * 2500);
     const kickS = P.kicks.map(t => Math.round(t * sr)).sort((a, b) => a - b), depth = p.pump * .6, prel = .07 + (1 - p.density) * .05, scK = Math.exp(-1 / (prel * sr)), atkS = Math.max(1, .004 * sr); let ki = 0, scEnv = 0, scAt = -1e9;
+    // bus tone: the music bus keeps out of the bass, the bass bus stays mono and warm, the reverb never carries mud or fizz
+    const mhL = svf(), mhR = svf(); svfSet(mhL, 140, .6, sr); svfSet(mhR, 140, .6, sr); const bLP = svf(); svfSet(bLP, 2600, .55, sr); const vHP = svf(); svfSet(vHP, 230, .6, sr); const vLL = svf(), vLR = svf(); svfSet(vLL, 4500 + p.bright * 5000, .5, sr); svfSet(vLR, 4400 + p.bright * 5000, .5, sr);
     // master state
-    const hpA = Math.exp(-TAU * 26 / sr), shA = 1 - Math.exp(-TAU * 4200 / sr), sdA = 1 - Math.exp(-TAU * 160 / sr), shelf = Math.pow(10, lerp(-4, 2.5, p.bright) / 20), drv = 1 + p.drive * 2.2;
-    let hxL = 0, hyL = 0, hxR = 0, hyR = 0, lsL = 0, lsR = 0, sLo = 0;
+    const hpA = Math.exp(-TAU * 24 / sr), shA = 1 - Math.exp(-TAU * 4200 / sr), lsA = 1 - Math.exp(-TAU * 130 / sr), sdA = 1 - Math.exp(-TAU * 160 / sr), shelf = Math.pow(10, lerp(0, 4.5, p.bright) / 20), lshelf = Math.pow(10, 1.5 / 20), drv = 1 + Math.max(0, p.drive - .35) * 1.4;
+    let hxL = 0, hyL = 0, hxR = 0, hyR = 0, lsL = 0, lsR = 0, lwL = 0, lwR = 0, sLo = 0;
     const active = []; let ei = 0; const CACHE = new Map();
     // ---- effect chain state (only what this piece uses runs)
     const FX = P.fx || {}, FXP = P.fxp || {post: []}, NBb = Math.round(P.duration / P.BT), lpC = FXP.lp, hpC = FXP.hp;
@@ -790,19 +929,22 @@ function SYNTH_CORE(){
     const rd = (buf, N, pos) => { let x = pos; while (x < 0) x += N; const i0 = x | 0, f = x - i0, a = buf[i0 % N], b = buf[(i0 + 1) % N]; return a + (b - a) * f; };
     // one-shots that are identical apart from level: three noise variants each, so repeats are not sample-identical
     const cacheKey = e => { const v = e.seed % 3; switch (e.inst){ case 'kick': return 'k' + v; case 'snare': return 's' + v + (e.p.clap ? 'c' : 'n') + e.p.tone.toFixed(3); case 'hat': return 'h' + v + (e.open ? 'o' + e.p.open.toFixed(2) : 'c') + e.p.noisy.toFixed(2); case 'shaker': return 'sh' + v + (e.dec || .05).toFixed(3); case 'rumble': return 'ru' + v + (e.dur || .45).toFixed(2);
-      case 'impact': return 'i'; case 'perc': return 'p' + v + e.body + Math.round(e.f) + '_' + (e.decay || 1).toFixed(2) + '_' + (e.hard || .5).toFixed(1); case 'mallet': return 'm' + v + e.p.body + Math.round(e.f) + '_' + (e.dur > .4 ? 1 : 0) + (e.bright || .5).toFixed(1); default: return null; } };
-    for (let c0 = 0; c0 < total; c0 += CH){ const n = Math.min(CH, total - c0); dL.fill(0); dR.fill(0); uL.fill(0); uR.fill(0); vS.fill(0); dS.fill(0); mL.fill(0); mR.fill(0);
+      case 'impact': return 'i'; case 'perc': return 'p' + v + e.body + Math.round(e.f) + '_' + (e.decay || 1).toFixed(2) + '_' + (e.hard || .5).toFixed(1); case 'mallet': return 'm' + v + e.p.body + Math.round(e.f) + '_' + (e.dur > .4 ? 1 : 0) + (e.bright || .5).toFixed(1);
+      case 'keys': return e.notes ? null : 'ky' + v + e.p.kind + Math.round(e.f) + '_' + (Math.round((e.vel || .8) * 8)) + '_' + Math.round((e.bright || .5) * 6) + '_' + Math.round(Math.min(e.dur, 6) * 8); default: return null; } };
+    for (let c0 = 0; c0 < total; c0 += CH){ const n = Math.min(CH, total - c0); dL.fill(0); dR.fill(0); uL.fill(0); uR.fill(0); bL.fill(0); bR.fill(0); vS.fill(0); dS.fill(0); mL.fill(0); mR.fill(0);
       while (ei < ev.length && ev[ei].t * sr < c0 + n){ const e = ev[ei++], fn = I[e.inst]; if (!fn) continue; const ck = cacheKey(e); let o = ck && CACHE.get(ck); if (!o){ if (ck) e.seed = hashSeed(e.seed % 3, 41); o = fn(sr, e); if (ck) CACHE.set(ck, o); } const pan = clamp(e.pan || 0, -1, 1);
-        active.push({s0: Math.max(0, Math.round(e.t * sr)), o, v: e.v, gl: Math.cos((pan + 1) * Math.PI / 4) * Math.SQRT2, gr: Math.sin((pan + 1) * Math.PI / 4) * Math.SQRT2, drums: e.bus === 'drums', sv: e.sv || 0, sd: e.sd || 0}); }
+        active.push({s0: Math.max(0, Math.round(e.t * sr)), o, v: e.v, gl: Math.cos((pan + 1) * Math.PI / 4) * Math.SQRT2, gr: Math.sin((pan + 1) * Math.PI / 4) * Math.SQRT2, bus: e.bus === 'drums' ? 0 : e.bus === 'bass' ? 1 : 2, sv: e.sv || 0, sd: e.sd || 0}); }
       for (let a = active.length - 1; a >= 0; a--){ const A = active[a], o = A.o, len = o.m ? o.m.length : o.l.length, from = Math.max(c0, A.s0), to = Math.min(c0 + n, A.s0 + len);
-        const TL = A.drums ? dL : uL, TR = A.drums ? dR : uR, v = A.v;
+        const TL = A.bus === 0 ? dL : A.bus === 1 ? bL : uL, TR = A.bus === 0 ? dR : A.bus === 1 ? bR : uR, v = A.v;
         if (o.m){ const m = o.m, gl = A.gl * v, gr = A.gr * v, sv = A.sv * v, sd = A.sd * v; for (let i = from; i < to; i++){ const x = m[i - A.s0], j = i - c0; TL[j] += x * gl; TR[j] += x * gr; if (sv) vS[j] += x * sv; if (sd) dS[j] += x * sd; } }
         else { const l = o.l, r = o.r, sv = A.sv * v * .5, sd = A.sd * v * .5; for (let i = from; i < to; i++){ const x = l[i - A.s0], y = r[i - A.s0], j = i - c0; TL[j] += x * v; TR[j] += y * v; if (sv) vS[j] += (x + y) * sv; if (sd) dS[j] += (x + y) * sd; } }
         if (A.s0 + len <= c0 + n) active.splice(a, 1); }
+      for (let i = 0; i < n; i++){ svfTick(vHP, vS[i]); vS[i] = vHP.hp; }
       dly(dS, uL, uR, n); verb(vS, mL, mR, n);
       for (let i = 0; i < n; i++){ const si = c0 + i; while (ki < kickS.length && kickS[ki] <= si){ ki++; scAt = si; scEnv = depth; }
         let g = 1; if (scEnv > 1e-4){ const da = si - scAt; g = 1 - scEnv * (da < atkS ? da / atkS : 1); if (da >= atkS) scEnv *= scK; }
-        let ml = uL[i] * g, mr = uR[i] * g, dl = dL[i], dr = dR[i];
+        svfTick(mhL, uL[i]); svfTick(mhR, uR[i]); let ml = mhL.hp * g, mr = mhR.hp * g, dl = dL[i], dr = dR[i];
+        const bm = svfTick(bLP, (bL[i] + bR[i]) * .5), bs = Math.tanh(bm * 1.3) / 1.3 * (1 - (1 - g) * .6);
         if (FX.sweep && lpC){ if ((i & 31) === 0){ const tb = si / sr / P.BT, b0 = Math.min(NBb, tb | 0), b1 = Math.min(NBb, b0 + 1), fr = tb - (tb | 0);
             const lv = lpC[b0] + (lpC[b1] - lpC[b0]) * Math.min(1, fr), hv = hpC[b0] + (hpC[b1] - hpC[b0]) * Math.min(1, fr); svfSet(swL, lv, .9, sr); svfSet(swR, lv, .9, sr); svfSet(hwL, hv, .7, sr); svfSet(hwR, hv, .7, sr); }
           ml = svfTick(swL, ml); mr = svfTick(swR, mr); svfTick(hwL, ml); svfTick(hwR, mr); ml = hwL.hp; mr = hwR.hp; }
@@ -810,18 +952,19 @@ function SYNTH_CORE(){
           let xl = ml + fbL * .5, xr = mr + fbR * .5; for (let k = 0; k < 4; k++){ xl = apS(phL, k, aL, xl); xr = apS(phR, k, aR, xr); } fbL = xl; fbR = xr; ml = (ml + xl) * .62; mr = (mr + xr) * .62; }
         if (FX.chorus){ cL[cI] = ml; cR[cI] = mr; cP += .65 / sr; const dl1 = (.013 + .0035 * sin1(cP)) * sr, dr1 = (.013 + .0035 * sin1(cP + .5)) * sr; const yl = rd(cL, CN, cI - dl1), yr = rd(cR, CN, cI - dr1); cI = (cI + 1) % CN; ml = ml * .82 + yr * .42; mr = mr * .82 + yl * .42; }
         if (FX.crush){ if (si % 3 === 0){ crL = Math.round(dl * 14) / 14; crR = Math.round(dr * 14) / 14; } dl = dl * .45 + crL * .7; dr = dr * .45 + crR * .7; }
-        let l = (dl + ml + mL[i] * p.verb * 1.2) * .38, r = (dr + mr + mR[i] * p.verb * 1.2) * .38;
-        // high-pass ~26 Hz
+        let l = (dl + bs + ml + svfTick(vLL, mL[i]) * p.verb * 1.1) * .38, r = (dr + bs + mr + svfTick(vLR, mR[i]) * p.verb * 1.1) * .38;
+        // high-pass ~24 Hz
         hyL = hpA * (hyL + l - hxL); hxL = l; hyR = hpA * (hyR + r - hxR); hxR = r; l = hyL; r = hyR;
-        // high shelf for the dark, sub-forward balance
+        // low shelf for weight, high shelf for air
+        lwL += (l - lwL) * lsA; lwR += (r - lwR) * lsA; l = l + lwL * (lshelf - 1); r = r + lwR * (lshelf - 1);
         lsL += (l - lsL) * shA; lsR += (r - lsR) * shA; l = lsL + (l - lsL) * shelf; r = lsR + (r - lsR) * shelf;
         // mono below ~160 Hz, width above
-        const M = (l + r) * .5; let Sd = (l - r) * .5; sLo += (Sd - sLo) * sdA; Sd = sLo * .15 + (Sd - sLo) * (.6 + p.width * .95); l = M + Sd; r = M - Sd;
+        const M = (l + r) * .5; let Sd = (l - r) * .5; sLo += (Sd - sLo) * sdA; Sd = sLo * .3 + (Sd - sLo) * (.6 + p.width * .95); l = M + Sd; r = M - Sd;
         if (FX.lofi || FX.tape){ wL[wI] = l; wR[wI] = r; wP += .55 / sr; wP2 += 5.3 / sr; const dd = (.008 + wowD * sin1(wP) + flD * sin1(wP2)) * sr; l = rd(wL, WN, wI - dd); r = rd(wR, WN, wI - dd); wI = (wI + 1) % WN;
           l = svfTick(loL, l); r = svfTick(loR, r);
           if (FX.lofi){ svfTick(lhL, l); svfTick(lhR, r); l = Math.round(lhL.hp * 900) / 900; r = Math.round(lhR.hp * 900) / 900; } else { l = Math.tanh(l * 1.6) / 1.6; r = Math.tanh(r * 1.6) / 1.6; } }
-        OL[c0 + i] = Math.tanh(l * drv) / drv; OR[c0 + i] = Math.tanh(r * drv) / drv; }
-      if (progress) progress(Math.min(.98, (c0 + n) / total)); }
+        OL[c0 + i] = drv > 1 ? Math.tanh(l * drv) / drv : l; OR[c0 + i] = drv > 1 ? Math.tanh(r * drv) / drv : r; }
+      if (progress) progress(Math.min(.96, (c0 + n) / total)); }
     // edits on the finished mix: stutters / beat-repeat builds, tape stops, reverse swells into drops
     for (const q of FXP.post || []){
       if (q.type === 'stutter' || q.type === 'buildrepeat'){ const s0 = Math.round(q.t0 * sr), s1 = Math.min(total, Math.round(q.t1 * sr)); if (s0 < 0 || s1 <= s0) continue; const cl = OL.slice(s0, s1), cr = OR.slice(s0, s1), N = s1 - s0;
@@ -831,14 +974,14 @@ function SYNTH_CORE(){
         for (let i = 0; i < N; i++){ const k = pos | 0, fr = pos - k, fade = Math.min(1, (N - i) / (sr * .03)); OL[s0 + i] = k + 1 < N ? (cl[k] + (cl[k + 1] - cl[k]) * fr) * fade : 0; OR[s0 + i] = k + 1 < N ? (cr[k] + (cr[k + 1] - cr[k]) * fr) * fade : 0; pos += Math.pow(1 - i / N, 1.7); } }
       else if (q.type === 'reverse'){ const N = Math.round(q.len * sr), s0 = Math.round(q.t * sr); if (s0 - N < 0 || s0 + N > total) continue; const cl = OL.slice(s0, s0 + N), cr = OR.slice(s0, s0 + N);
         for (let i = 0; i < N; i++){ const g = Math.pow(i / N, 2) * .75; OL[s0 - N + i] += cl[N - 1 - i] * g; OR[s0 - N + i] += cr[N - 1 - i] * g; } } }
-    // loudness: RMS of the loudest half of 400 ms windows → −11 dBFS, then a soft ceiling
-    const W = (.4 * sr) | 0, rms = []; for (let i = 0; i + W <= total; i += W){ let s = 0; for (let j = i; j < i + W; j += 4) s += OL[j] * OL[j] + OR[j] * OR[j]; rms.push(Math.sqrt(s / (W / 2))); }
-    rms.sort((a, b) => b - a); const top = rms.slice(0, Math.max(1, rms.length >> 1)), ref = top.reduce((a, b) => a + b, 0) / top.length || 1e-6, gain = Math.pow(10, -11 / 20) / ref;
-    const ceil = x => { const a = Math.abs(x); return a > .82 ? Math.sign(x) * (.82 + .17 * Math.tanh((a - .82) / .17)) : x; };
-    if (!p.raw) for (let i = 0; i < total; i++){ OL[i] = ceil(OL[i] * gain); OR[i] = ceil(OR[i] * gain); }   // raw: un-normalised, for level calibration
+    // mastering: level → glue → level again → look-ahead limiter at −1 dBFS. raw: un-normalised, for level calibration
+    if (!p.raw){ const g1 = Math.pow(10, -13 / 20) / loudHalf(OL, OR, sr); for (let i = 0; i < total; i++){ OL[i] *= g1; OR[i] *= g1; }
+      glue(OL, OR, sr, -16, 2.2, 6, .012, .22);
+      const g2 = Math.pow(10, -11.5 / 20) / loudHalf(OL, OR, sr); for (let i = 0; i < total; i++){ OL[i] *= g2; OR[i] *= g2; }
+      limiter(OL, OR, sr, .89, .0015, .06); }
     if (progress) progress(1);
     return {sr, L: OL, R: OR, meta: P.meta};
   }
-  return {render, randomize, STYLES: ALL, GS, FXN, plan: p => plan(Object.assign({}, DEF, p, {layers: Object.assign({}, DEF.layers, p && p.layers), palette: Object.assign({}, p && p.palette)})), DEF, resolveFx, MODES, NOTE};
+  return {render, randomize, STYLES: ALL, EVOLVING: STYLES, GS, FXN, plan: p => plan(Object.assign({}, DEF, p, {layers: Object.assign({}, DEF.layers, p && p.layers), palette: Object.assign({}, p && p.palette)})), DEF, resolveFx, MODES, NOTE};
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = SYNTH_CORE;

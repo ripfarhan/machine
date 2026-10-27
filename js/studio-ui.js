@@ -13,9 +13,11 @@
   // ---------------------------------------------------------------- controls
   CORE.NOTE.forEach((n, i) => { const o = document.createElement('option'); o.value = i; o.textContent = n; $s('stKey').append(o); });
   Object.keys(CORE.MODES).forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m.replace(/([A-Z])/g, ' $1').toLowerCase(); $s('stMode').append(o); });
-  const LAY = {kick: 'Kick', snare: 'Snare/clap', hat: 'Hats', perc: 'Perc', bass: 'Bass', arp: 'Arp / top', pad: 'Pad / chords', lead: 'Lead', tex: 'Texture'};
-  { const o = document.createElement('option'); o.value = ''; o.textContent = 'free (classic engine, no style)'; $s('stStyle').append(o);
-    for (const k in CORE.STYLES){ const o2 = document.createElement('option'); o2.value = k; o2.textContent = CORE.STYLES[k].name + (CORE.GS[k] ? '' : ' · evolving engine'); $s('stStyle').append(o2); } }
+  const LAY = {kick: 'Kick', snare: 'Snare/clap', hat: 'Hats', perc: 'Perc', bass: 'Bass', arp: 'Arp / top', pad: 'Pad / chords', keys: 'Keys / piano', lead: 'Lead', tex: 'Texture'};
+  { const sel = $s('stStyle'), gE = document.createElement('optgroup'), gG = document.createElement('optgroup'); gE.label = 'evolving engine — systems, not loops'; gG.label = 'genre loops — pattern engine';
+    for (const k in CORE.EVOLVING){ const o = document.createElement('option'); o.value = k; o.textContent = CORE.EVOLVING[k].name; gE.append(o); }
+    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'free — evolving engine, no style'; gE.append(o0);
+    for (const k in CORE.GS){ const o = document.createElement('option'); o.value = k; o.textContent = CORE.GS[k].name; gG.append(o); } sel.append(gE, gG); }
   $s('stStyle').onchange = e => { const k = e.target.value, S = CORE.STYLES[k]; P.style = k; P.fx = null; P.form = 'auto'; ['bassline', 'chords', 'topline'].forEach(x => delete P.palette[x]);
     if (S){ P.bpm = Math.max(S.bpm[0], Math.min(S.bpm[1], P.bpm)); if (S.swing) P.swing = Math.max(S.swing[0], Math.min(S.swing[1], P.swing)); if (S.bars && S.bars.indexOf(P.bars) < 0) P.bars = S.bars[Math.floor(S.bars.length / 2)]; P.rhythm = S.rhythm ? Object.keys(S.rhythm)[0] : 'auto'; }
     syncUI(); changed(true); };
@@ -31,9 +33,9 @@
   const DIALS = [['stTempo', 'bpm', v => String(v | 0)], ['stBars', 'bars', v => v + ' bars'], ['stMotion', 'motion'], ['stColor', 'color'], ['stDevelop', 'develop'], ['stChaos', 'chaos'], ['stPoly', 'poly'], ['stDensity', 'density'],
     ['stBright', 'bright'], ['stMetal', 'metal'], ['stSwing', 'swing'], ['stHuman', 'humanize'], ['stPump', 'pump'], ['stDrive', 'drive'], ['stVerb', 'verb'], ['stDelay', 'delay'], ['stWidth', 'width']];
   DIALS.forEach(([id, key, f]) => { const el = $s(id), out = $s(id + 'Out'); el.oninput = () => { if (out) out.textContent = f ? f(+el.value) : (+el.value).toFixed(2); }; el.onchange = () => { P[key] = +el.value; changed(); }; });
-  const SELS = [['stRhythm', 'rhythm'], ['stForm', 'form'], ['stMode', 'mode'], ['stKey', 'tonic', Number], ['stArpRate', 'arpRate', Number]];
+  const SELS = [['stRhythm', 'rhythm'], ['stForm', 'form'], ['stMode', 'mode'], ['stKey', 'tonic', Number], ['stArpRate', 'arpRate', Number], ['stMelody', 'melody']];
   SELS.forEach(([id, key, cast]) => { $s(id).onchange = e => { P[key] = cast ? cast(e.target.value) : e.target.value; changed(); }; });
-  const PALS = [['stPalBass', 'bass'], ['stPalArp', 'arp'], ['stPalPad', 'pad'], ['stPalLead', 'lead'], ['stPalPerc', 'perc'], ['stPalTex', 'tex']];
+  const PALS = [['stPalBass', 'bass'], ['stPalArp', 'arp'], ['stPalPad', 'pad'], ['stPalLead', 'lead'], ['stPalKeys', 'keys'], ['stPalPerc', 'perc'], ['stPalTex', 'tex']];
   PALS.forEach(([id, key]) => { $s(id).onchange = e => { P.palette[key] = e.target.value; changed(); }; });
   $s('stSeed').onchange = e => { P.seed = Math.max(1, +e.target.value | 0); P.vary = 0; changed(true); };
   const roll = full => { const o = CORE.randomize(P, full); for (const k in o) P[k] = o[k]; syncUI(); changed(true); };
@@ -43,7 +45,7 @@
   function syncUI(){ $s('stSeed').value = P.seed; DIALS.forEach(([id, key]) => { $s(id).value = P[key]; $s(id).oninput(); });
     SELS.forEach(([id, key]) => { $s(id).value = String(P[key]); }); PALS.forEach(([id, key]) => { $s(id).value = P.palette[key] || 'auto'; });
     [...$s('stLayers').querySelectorAll('input')].forEach(c => c.checked = !!P.layers[c.dataset.layer]);
-    $s('stStyle').value = P.style || ''; GPARTS.forEach(([id, key]) => { $s(id).value = P.palette[key] || 'auto'; }); engineUI(); }
+    $s('stStyle').value = P.style || ''; if ($s('stStyle').value !== (P.style || '')) $s('stStyle').value = ''; GPARTS.forEach(([id, key]) => { $s(id).value = P.palette[key] || 'auto'; }); engineUI(); }
 
   // ---------------------------------------------------------------- render worker
   let worker = null, jobId = 0, workerOK = true;
@@ -70,7 +72,7 @@
   function status(t){ $s('stStatus').textContent = t; }
   function info(m){ const pal = m.palette || {}, head = (m.styleName || 'free') + ' · ' + m.key + ' · ' + m.bpm + ' BPM · ' + m.form + ' form · ' + m.bars + ' bars (' + fmt0(m.duration) + ')';
     const parts = CORE.GS[m.style] ? ' · kit ' + m.kit + ' · bass ' + pal.bass + ', chords ' + pal.chords + ', top ' + pal.top + ', texture ' + pal.tex + ' · loop ' + m.loop
-      : ' · ' + m.rhythm + ' · bass ' + pal.bass + ', arp ' + pal.arp + ', pad ' + pal.pad + ', lead ' + pal.lead + ', perc ' + pal.perc + ', texture ' + pal.tex + ' · polymeter ' + m.poly + ' · motif ' + m.motif;
+      : ' · ' + m.rhythm + ' · ' + (m.loop || '') + ' · bass ' + pal.bass + ', arp ' + pal.arp + ', pad ' + pal.pad + ', keys ' + pal.keys + ', lead ' + pal.lead + ', perc ' + pal.perc + ', texture ' + pal.tex + ' · polymeter ' + m.poly + ' · melody ' + m.melody + ' (' + m.motif + ')';
     $s('stInfo').textContent = head + parts + ' · effects ' + ((m.fx && m.fx.length) ? m.fx.map(k => FXL[k] || k).join(', ') : 'none'); }
 
   // ---------------------------------------------------------------- playback
