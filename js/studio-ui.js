@@ -13,7 +13,20 @@
   // ---------------------------------------------------------------- controls
   CORE.NOTE.forEach((n, i) => { const o = document.createElement('option'); o.value = i; o.textContent = n; $s('stKey').append(o); });
   Object.keys(CORE.MODES).forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m.replace(/([A-Z])/g, ' $1').toLowerCase(); $s('stMode').append(o); });
-  const LAY = {kick: 'Kick', snare: 'Snare/clap', hat: 'Hats', perc: 'Perc', bass: 'Bass', arp: 'Arp', pad: 'Pad', lead: 'Lead', tex: 'Texture'};
+  const LAY = {kick: 'Kick', snare: 'Snare/clap', hat: 'Hats', perc: 'Perc', bass: 'Bass', arp: 'Arp / top', pad: 'Pad / chords', lead: 'Lead', tex: 'Texture'};
+  { const o = document.createElement('option'); o.value = ''; o.textContent = 'free (classic engine, no style)'; $s('stStyle').append(o);
+    for (const k in CORE.STYLES){ const o2 = document.createElement('option'); o2.value = k; o2.textContent = CORE.STYLES[k].name + (CORE.GS[k] ? '' : ' · evolving engine'); $s('stStyle').append(o2); } }
+  $s('stStyle').onchange = e => { const k = e.target.value, S = CORE.STYLES[k]; P.style = k; P.fx = null; P.form = 'auto'; ['bassline', 'chords', 'topline'].forEach(x => delete P.palette[x]);
+    if (S){ P.bpm = Math.max(S.bpm[0], Math.min(S.bpm[1], P.bpm)); if (S.swing) P.swing = Math.max(S.swing[0], Math.min(S.swing[1], P.swing)); if (S.bars && S.bars.indexOf(P.bars) < 0) P.bars = S.bars[Math.floor(S.bars.length / 2)]; P.rhythm = S.rhythm ? Object.keys(S.rhythm)[0] : 'auto'; }
+    syncUI(); changed(true); };
+  const GPARTS = [['stLine', 'bassline'], ['stChords', 'chords'], ['stTop', 'topline'], ['stTexG', 'tex']];
+  GPARTS.forEach(([id, key]) => { $s(id).onchange = e => { P.palette[key] = e.target.value; changed(); }; });
+  const FXL = {lofi: 'lo-fi', tape: 'tape', phaser: 'phaser', chorus: 'chorus', sweep: 'filter sweeps', crush: 'drum crush', dubthrow: 'dub throws', stutter: 'stutter', tapestop: 'tape stop', reverse: 'reverse swells'};
+  CORE.FXN.forEach(k => { const l = document.createElement('label'); l.className = 'chk'; const c = document.createElement('input'); c.type = 'checkbox'; c.dataset.fx = k;
+    c.onchange = () => { const cur = planNow ? planNow.meta.fx : []; const o = {}; CORE.FXN.forEach(x => o[x] = cur.indexOf(x) >= 0); o[k] = c.checked; P.fx = o; changed(); }; l.append(c, ' ' + (FXL[k] || k)); $s('stFx').append(l); });
+  $s('stFxAuto').onclick = () => { P.fx = null; changed(); };
+  function fxUI(list){ [...$s('stFx').querySelectorAll('input')].forEach(c => c.checked = list.indexOf(c.dataset.fx) >= 0); $s('stFxAuto').disabled = !P.fx; }
+  function engineUI(){ const g = !!CORE.GS[P.style]; $s('stPartsG').hidden = !g; $s('stPartsC').hidden = g; $s('stRhythm').disabled = g; $s('stRhythm').title = g ? 'This style brings its own groove library' : ''; }
   for (const k in LAY){ const l = document.createElement('label'); l.className = 'chk'; const c = document.createElement('input'); c.type = 'checkbox'; c.dataset.layer = k; c.onchange = () => { P.layers[k] = c.checked ? 1 : 0; changed(); }; l.append(c, ' ' + LAY[k]); $s('stLayers').append(l); }
   const DIALS = [['stTempo', 'bpm', v => String(v | 0)], ['stBars', 'bars', v => v + ' bars'], ['stMotion', 'motion'], ['stColor', 'color'], ['stDevelop', 'develop'], ['stChaos', 'chaos'], ['stPoly', 'poly'], ['stDensity', 'density'],
     ['stBright', 'bright'], ['stMetal', 'metal'], ['stSwing', 'swing'], ['stHuman', 'humanize'], ['stPump', 'pump'], ['stDrive', 'drive'], ['stVerb', 'verb'], ['stDelay', 'delay'], ['stWidth', 'width']];
@@ -29,7 +42,8 @@
   $s('stVary').onclick = () => { P.vary = (P.vary | 0) + 1; changed(true); };
   function syncUI(){ $s('stSeed').value = P.seed; DIALS.forEach(([id, key]) => { $s(id).value = P[key]; $s(id).oninput(); });
     SELS.forEach(([id, key]) => { $s(id).value = String(P[key]); }); PALS.forEach(([id, key]) => { $s(id).value = P.palette[key] || 'auto'; });
-    [...$s('stLayers').querySelectorAll('input')].forEach(c => c.checked = !!P.layers[c.dataset.layer]); }
+    [...$s('stLayers').querySelectorAll('input')].forEach(c => c.checked = !!P.layers[c.dataset.layer]);
+    $s('stStyle').value = P.style || ''; GPARTS.forEach(([id, key]) => { $s(id).value = P.palette[key] || 'auto'; }); engineUI(); }
 
   // ---------------------------------------------------------------- render worker
   let worker = null, jobId = 0, workerOK = true;
@@ -52,9 +66,12 @@
     status('Rendered in ' + ((performance.now() - t0Render) / 1000).toFixed(1) + ' s'); info(d.meta); draw();
     if (was) play(Math.min(at, cur.dur - .05)); else offset = Math.min(offset, cur.dur - .05); syncPos(); }
   function overview(L, R){ const W = 1120, o = new Float32Array(W * 2), step = Math.max(1, Math.floor(L.length / W)); for (let x = 0; x < W; x++){ let mn = 0, mx = 0; const a = x * step, b = Math.min(L.length, a + step); for (let i = a; i < b; i += 7){ const v = (L[i] + R[i]) * .5; if (v < mn) mn = v; if (v > mx) mx = v; } o[x * 2] = mn; o[x * 2 + 1] = mx; } return o; }
-  let deb = null; function changed(now){ planNow = CORE.plan(P); info(planNow.meta, true); draw(); clearTimeout(deb); deb = setTimeout(render, now ? 0 : 450); }
+  let deb = null; function changed(now){ planNow = CORE.plan(P); info(planNow.meta, true); fxUI(planNow.meta.fx || []); engineUI(); draw(); clearTimeout(deb); deb = setTimeout(render, now ? 0 : 450); }
   function status(t){ $s('stStatus').textContent = t; }
-  function info(m, pending){ $s('stInfo').textContent = (P.style ? P.style + ' · ' : '') + m.key + ' · ' + m.bpm + ' BPM · ' + m.rhythm + ' · ' + m.form + ' form · ' + m.bars + ' bars (' + fmt0(m.duration) + ') · bass ' + m.palette.bass + ', arp ' + m.palette.arp + ', pad ' + m.palette.pad + ', lead ' + m.palette.lead + ', perc ' + m.palette.perc + ', texture ' + m.palette.tex + ' · polymeter ' + m.poly + ' · motif ' + m.motif + (pending ? '' : ''); }
+  function info(m){ const pal = m.palette || {}, head = (m.styleName || 'free') + ' · ' + m.key + ' · ' + m.bpm + ' BPM · ' + m.form + ' form · ' + m.bars + ' bars (' + fmt0(m.duration) + ')';
+    const parts = CORE.GS[m.style] ? ' · kit ' + m.kit + ' · bass ' + pal.bass + ', chords ' + pal.chords + ', top ' + pal.top + ', texture ' + pal.tex + ' · loop ' + m.loop
+      : ' · ' + m.rhythm + ' · bass ' + pal.bass + ', arp ' + pal.arp + ', pad ' + pal.pad + ', lead ' + pal.lead + ', perc ' + pal.perc + ', texture ' + pal.tex + ' · polymeter ' + m.poly + ' · motif ' + m.motif;
+    $s('stInfo').textContent = head + parts + ' · effects ' + ((m.fx && m.fx.length) ? m.fx.map(k => FXL[k] || k).join(', ') : 'none'); }
 
   // ---------------------------------------------------------------- playback
   let AC2 = null, src = null, startedAt = 0, offset = 0, abuf = null;
@@ -72,7 +89,7 @@
   function seek(t, commit){ const d = cur ? cur.dur : (planNow ? planNow.meta.duration : 0); t = Math.max(0, Math.min(d - .05, t)); if (playing() && commit) play(t); else if (!playing()) offset = t; draw(t); syncPos(t); }
 
   // ---------------------------------------------------------------- the arc: sections, chords, waveform, playhead
-  const COL = {intro: '#2b3a55', build: '#7a5416', rise: '#7a5416', swell: '#6b4f1a', peak: '#b0134f', groove: '#5a2f78', bloom: '#8a2a6a', break: '#1f5b56', outro: '#2b3a55'};
+  const COL = {intro: '#2b3a55', build: '#7a5416', rise: '#7a5416', swell: '#6b4f1a', peak: '#b0134f', drop: '#b0134f', hook: '#a0206a', verse: '#4a3a78', groove: '#5a2f78', bloom: '#8a2a6a', break: '#1f5b56', outro: '#2b3a55'};
   function draw(scrubT){ const c = $s('stArc'), x = c.getContext('2d'), w = c.width, h = c.height, m = (cur && cur.meta) || (planNow && planNow.meta); x.clearRect(0, 0, w, h); if (!m) return;
     const bw = w / m.bars;
     m.sections.forEach(s => { x.fillStyle = COL[s.name] || '#333'; x.fillRect(s.bar0 * bw, 0, s.bars * bw - 2, h); });
@@ -99,7 +116,7 @@
     w(0, 'RIFF'); v.setUint32(4, 36 + n * 4, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 2, true); v.setUint32(24, cur.sr, true); v.setUint32(28, cur.sr * 4, true); v.setUint16(32, 4, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 4, true);
     let o = 44; for (let i = 0; i < n; i++){ const l = Math.max(-1, Math.min(1, cur.L[i])), r = Math.max(-1, Math.min(1, cur.R[i])); v.setInt16(o, l < 0 ? l * 32768 : l * 32767, true); v.setInt16(o + 2, r < 0 ? r * 32768 : r * 32767, true); o += 4; }
     return new Blob([b], {type: 'audio/wav'}); }
-  const fname = () => 'synth-' + CORE.NOTE[P.tonic].replace('#', 's') + '-' + P.mode + '-' + P.bpm + '-seed' + P.seed + (P.vary ? 'v' + P.vary : '') + '.wav';
+  const fname = () => 'synth-' + (P.style ? P.style + '-' : '') + CORE.NOTE[P.tonic].replace('#', 's') + '-' + P.mode + '-' + P.bpm + '-seed' + P.seed + (P.vary ? 'v' + P.vary : '') + '.wav';
   $s('stExport').onclick = () => { if (!cur) return APP.toast('Still rendering'); APP.saveBlob(fname(), wavBlob()); APP.toast('WAV saved'); };
   $s('stUse').onclick = async () => { if (!cur) return APP.toast('Still rendering'); if (playing()) pause(); try { const f = new File([wavBlob()], fname(), {type: 'audio/wav'}); if (APP.IDB) APP.IDB.put('song', 'current', {name: f.name, type: f.type, blob: f}); await APP.loadSongFile(f); APP.toast('Studio track is now the reel song'); } catch(e){ console.error(e); APP.toast('Could not hand the track to the reel: ' + e.message); } };
   const recipe = () => JSON.stringify(Object.assign({app: 'maut-ki-machine-synth', v: 1}, P));
