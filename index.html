@@ -123,6 +123,27 @@ DOOBE RAHO</textarea>
       <label class="f"><span>Font set</span>
         <select id="fontSet"><option value="auto" selected>Auto (style decides)</option><option value="narrow">Arial Narrow, stretched</option><option value="display">Display: Anton, Bebas, Six Caps, Archivo Black</option><option value="sans">Sans: Inter, Space Grotesk, Oswald</option><option value="serif">Serif: Playfair, Bodoni, Cormorant, Garamond</option><option value="desi">Devanagari: Khand, Teko, Noto</option><option value="mono">Mono</option></select></label>
       <p class="note">One word per hit, in order. Hindi, Hinglish and English all work; Devanagari words switch to a face that has the script. Rate, size, stretch and glitch are in the Words dials.</p>
+      <div class="row" role="radiogroup" aria-label="Words mode">
+        <button class="btn sm" id="wmRandom" aria-pressed="true">Random words</button>
+        <button class="btn sm" id="wmLyrics" aria-pressed="false">Timed lyrics</button>
+      </div>
+      <div id="lyricBox" hidden>
+        <div class="row regionrow">
+          <span class="note" style="color:var(--fg);font-weight:600">Spread lines</span>
+          <input class="num" id="lyFrom" type="number" step="0.1" min="0" placeholder="from" style="width:70px" aria-label="Lyrics from, seconds">
+          <span class="note">→</span>
+          <input class="num" id="lyTo" type="number" step="0.1" min="0" placeholder="to" style="width:70px" aria-label="Lyrics to, seconds">
+          <button class="btn sm" id="lySpread">Spread</button>
+          <button class="btn sm ghost" id="lyReset" title="Clear all timings">Reset</button>
+        </div>
+        <div class="row">
+          <label class="f" style="flex:1"><span>Shift everything <output id="lyOffOut">0.0 s</output></span><input type="range" id="lyOff" min="-6" max="6" step="0.05" value="0"></label>
+          <label class="f"><span>Show</span><select id="lyHow"><option value="word">word by word</option><option value="line">whole line</option></select></label>
+          <label class="f"><span>Max hold <output id="lyHoldOut">4.0 s</output></span><input type="range" id="lyHold" min="1" max="10" step="0.5" value="4"></label>
+        </div>
+        <p class="note">Sync: play the reel and press <b>L</b> when each line is sung — it stamps the next line at the playhead. Or type a time, nudge with ◀ ▶, or hit ● to set a line to the playhead. Times are reel seconds.</p>
+        <div id="lyCues" class="cues"></div>
+      </div>
     </div>
 
     <div class="sec">
@@ -154,6 +175,51 @@ DOOBE RAHO</textarea>
       <p class="note" id="gpuHint" hidden>That is the integrated GPU. On Windows, Chrome picks its GPU at startup from the system setting: Settings → System → Display → Graphics → add chrome.exe → Options → <b>High performance</b>, then quit Chrome fully and reopen. (Or NVIDIA Control Panel → Manage 3D settings → Program Settings → Chrome → High-performance NVIDIA processor.)</p>
       <p class="note" id="exNote">Export renders frame by frame and encodes with your GPU, so it is never laggy, whatever the preview speed. Same seed and dials always give the same reel.</p>
     </div>
+
+    <div class="sec" id="studioSec">
+      <h2>Studio <b>generative music · everything synthesized</b></h2>
+      <div class="row">
+        <button class="btn primary" id="stGen">Generate</button>
+        <button class="btn play" id="stPlay" aria-label="Play">&#9654;</button>
+        <button class="btn sm ghost" id="stDice" title="New seed">&#127922; seed</button>
+        <input class="num" id="stSeed" type="number" min="1" max="999999" value="7" style="width:84px" aria-label="Studio seed">
+        <span class="note" id="stInfo" style="flex:1"></span>
+      </div>
+      <div class="strip" style="height:34px"><canvas id="stArc" width="1120" height="68" style="width:100%;height:100%"></canvas></div>
+      <div class="two" style="grid-template-columns:1fr 1fr 1fr 1fr">
+        <label class="f"><span>Tempo <output id="stTempoOut">118</output></span><input type="range" id="stTempo" min="90" max="150" step="1" value="118"></label>
+        <label class="f"><span>Key</span><select id="stKey"></select></label>
+        <label class="f"><span>Mode</span><select id="stMode"></select></label>
+        <label class="f"><span>Length <output id="stBarsOut">112 bars</output></span><input type="range" id="stBars" min="16" max="160" step="16" value="112"></label>
+      </div>
+      <div class="two" style="grid-template-columns:1fr 1fr 1fr">
+        <label class="f"><span>Kick pulse</span><select id="stPulse"><option value="four">four on the floor</option><option value="eighths">8th-note drive</option><option value="broken">broken / euclidean</option></select></label>
+        <label class="f"><span>Arp rate</span><select id="stArpRate"><option value="8">8ths</option><option value="16" selected>16ths</option></select></label>
+        <label class="f"><span>Polymeter <output id="stPolyOut">0.50</output></span><input type="range" id="stPoly" min="0" max="1" step="0.01" value="0.5"></label>
+      </div>
+      <div class="two" style="grid-template-columns:repeat(4,1fr)">
+        <label class="f"><span>Density <output id="stDensityOut">0.60</output></span><input type="range" id="stDensity" min="0" max="1" step="0.01" value="0.6"></label>
+        <label class="f"><span>Swing <output id="stSwingOut">0.54</output></span><input type="range" id="stSwing" min="0.5" max="0.72" step="0.01" value="0.54"></label>
+        <label class="f"><span>Pump <output id="stPumpOut">0.35</output></span><input type="range" id="stPump" min="0" max="1" step="0.01" value="0.35"></label>
+        <label class="f"><span>Cutoff <output id="stCutoffOut">0.55</output></span><input type="range" id="stCutoff" min="0" max="1" step="0.01" value="0.55"></label>
+        <label class="f"><span>Drive <output id="stDriveOut">0.30</output></span><input type="range" id="stDrive" min="0" max="1" step="0.01" value="0.3"></label>
+        <label class="f"><span>Delay <output id="stDelayOut">0.30</output></span><input type="range" id="stDelay" min="0" max="1" step="0.01" value="0.3"></label>
+        <label class="f"><span>Reverb <output id="stVerbOut">0.35</output></span><input type="range" id="stVerb" min="0" max="1" step="0.01" value="0.35"></label>
+        <label class="f"><span>Texture <output id="stTexOut">0.40</output></span><input type="range" id="stTex" min="0" max="1" step="0.01" value="0.4"></label>
+        <label class="f"><span>Chord motion <output id="stMotionOut">0.40</output></span><input type="range" id="stMotion" min="0" max="1" step="0.01" value="0.4"></label>
+        <label class="f"><span>Sub <output id="stSubOut">0.80</output></span><input type="range" id="stSub" min="0" max="1" step="0.01" value="0.8"></label>
+        <label class="f"><span>Humanize <output id="stHumanOut">0.50</output></span><input type="range" id="stHuman" min="0" max="1" step="0.01" value="0.5"></label>
+      </div>
+      <div class="row" id="stLayers" style="flex-wrap:wrap;gap:6px 14px"></div>
+      <div class="row">
+        <button class="btn" id="stExport">Export WAV</button>
+        <button class="btn" id="stUse">Use as song &rarr; reel</button>
+        <button class="btn sm ghost" id="stCopy">Copy music recipe</button>
+        <button class="btn sm ghost" id="stPaste">Apply recipe</button>
+        <span class="note" id="stStatus"></span>
+      </div>
+      <p class="note">Shaped by the Max Cooper analysis in <code>music/analysis</code>: tempo range, four-on-the-floor vs 8th-note kick pulse vs broken grooves, odd-length hat/perc/arp cycles that phase against the bar, a long-intro / build / peak / breakdown / second-peak arc, and sidechain pump depth. Same seed + same dials = the same track. <em>Use as song</em> drops it straight into the reel engine.</p>
+    </div>
   </aside>
 </main>
 <div class="toast" id="toast" hidden></div>
@@ -168,5 +234,7 @@ DOOBE RAHO</textarea>
 <script src="js/mp4.js"></script>
 <script src="js/samples.js"></script>
 <script src="js/app.js"></script>
+<script src="js/studio.js"></script>
+<script src="js/studio-ui.js"></script>
 </body>
 </html>

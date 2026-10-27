@@ -41,7 +41,12 @@ No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 | `js/shader.js` | GLSL effect chain |
 | `js/mp4.js` | MP4 muxer and codec picker |
 | `js/samples.js` | sample footage, inlined so the app runs from a local file |
-| `js/app.js` | state, media (GIF decoder, clip bursts), sequencer, renderer, export, UI, recipes, local library |
+| `js/app.js` | state, media (GIF decoder, clip bursts), sequencer, renderer, export, UI, recipes, local library, timed lyrics |
+| `js/studio.js` | Studio: generative music engine (Web Audio, all synthesized, seed-reproducible) |
+| `js/studio-ui.js` | Studio panel wiring |
+| `music/analyze.py` | music reverse-engineering pipeline (numpy/scipy, no librosa) |
+| `music/analysis/` | per-track JSON, `profile.json` (cross-track medians the generator is parameterised from), charts |
+| `music/REPORT.html` | the readable analysis report |
 
 ## Adding things
 
@@ -74,6 +79,33 @@ video. Several effects also carry alternate forms chosen the same way:
 
 Scanlines model tape rather than stripes: chroma lags luma and the torn
 head-switch strip sits at the bottom of the frame.
+
+## Timed lyrics
+
+In the Words panel, *Timed lyrics* turns the textarea into one line per row
+and gives every line a time. *Spread* distributes lines across a range,
+snapped to beats. Play the reel and press **L** when each line is sung to
+stamp the next line at the playhead; nudge any line ±¼ s, type a time, or
+hit ● to set it to the playhead. *Shift everything* moves all lines at once.
+Each line either flashes word by word across its window or shows whole, up
+to *Max hold*. Cues save into recipes.
+
+## Studio
+
+A generative music engine built from the analysis of ten Max Cooper tracks
+(`music/REPORT.html`). Everything is synthesized — kick, snare/clap, hats,
+two percussion lines, bass, arp, pad, texture, riser, impact — so a seed plus
+the dials reproduces a track exactly. The sequencer runs independent cycle
+lengths per layer (polymeter), three kick pulses (four-on-the-floor,
+8th-note drive, broken/euclidean), a long-intro → build → peak → breakdown →
+second-peak arc, sidechain pump, delay, reverb and drive. *Export WAV*
+renders offline; *Use as song* hands the track straight to the reel engine.
+
+Re-run the analysis on new material:
+
+    ffmpeg -i track.mp3 -ac 1 -ar 22050 wav/track.wav
+    ffmpeg -i track.mp3 -ac 2 -ar 22050 wav/track_st.wav
+    python3 music/analyze.py wav music/analysis
 
 ## Drop handling
 

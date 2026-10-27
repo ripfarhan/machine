@@ -29,7 +29,7 @@ function randomizeDials(){
    ========================================================= */
 const state = {
   media: [], preset: 'overdrive', seed: 1312, react: 1, intensity: 1, clarity: .6, exSize: 1080, exQ: 16, exporting: false, fontSet: 'auto', lengthSel: 30, fps: 60, clipFrames: 24,
-  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0, preDrop: false, preCalm: .7, dropAt: null, failed: [], libGen: 0,
+  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0, preDrop: false, preCalm: .7, dropAt: null, failed: [], libGen: 0, wordMode: 'random', cues: [], lyOff: 0, lyHow: 'word', lyHold: 4, tapIdx: 0,
   dur: 30, A: null, grid: null, off: 0, score: null, flkPattern: 'burst'
 };
 function sig(name, t){
@@ -308,7 +308,21 @@ function buildScore(){
   if (!trig.kick) trig.kick = triggers('kick', .5, .07);
   // words
   const texts = [], words = parseWords(); let wi = 0;
-  if (words.length){ for (let k = 1; k < beats.length; k++){ const bt = beats[k]; if (bt > dur - .25) break; const rate = val('wordRate', bt);
+  const mkEv = (t0, t1, word, word2) => { const c = cutAt(cuts, t0), Pz = c.P, style = word2 ? 'stack' : pick(r, Pz.textStyles.filter(x => x !== 'stack').length ? Pz.textStyles.filter(x => x !== 'stack') : Pz.textStyles); const fset = FONT_SETS[state.fontSet] || Pz.fonts || ['narrow', 'anton'];
+    return {start: t0, end: Math.min(dur, t1), style, word, word2: word2 || null, color: pick(r, BRIGHTS), color2: pick(r, BRIGHTS), mode: pick(r, Pz.textModes), stretch: rr(r, .8, 1.25), y: rr(r, .25, .75), x: rr(r, .15, .85), rot: rr(r, -.12, .12), side: r() < .5 ? .14 : .86, lower: r() < .5, seed: r() * 1e4, font: pick(r, fset)}; };
+  if (state.wordMode === 'lyrics'){
+    // timed lyrics: each line owns the window from its cue to the next cue (capped by max hold); shown whole, or one word per beat across the window
+    const cues = state.cues.filter(q => q.t !== null && q.text.trim()).map(q => ({t: q.t + state.lyOff, text: q.text.trim()})).sort((a, b) => a.t - b.t);
+    for (let i = 0; i < cues.length; i++){ const t0 = cues[i].t; if (t0 >= dur || t0 < -.5) continue; const next = i + 1 < cues.length ? cues[i + 1].t : dur; const t1 = Math.min(next, t0 + state.lyHold, dur); if (t1 - t0 < .05) continue;
+      if (state.lyHow === 'line'){ texts.push(mkEv(Math.max(0, t0), t1, cues[i].text)); continue; }
+      const ws = cues[i].text.split(/\s+/).filter(Boolean); if (!ws.length) continue;
+      let grid = beats.filter(b => b >= t0 - .02 && b < t1); if (grid.length < ws.length){ const half = []; for (const b of beats) if (b >= t0 - .02 && b < t1){ half.push(b, b + per / 2); } grid = half.filter(b => b < t1); }
+      if (grid.length < ws.length){ grid = ws.map((_, k) => t0 + k * (t1 - t0) / ws.length); } // denser than the grid: spread evenly
+      if (!grid.length || grid[0] > t0 + .25) grid.unshift(t0);
+      const every = Math.max(1, Math.floor(grid.length / ws.length));
+      ws.forEach((w, k) => { const gi = Math.min(grid.length - 1, k * every); const a = Math.max(0, grid[gi]), b = k + 1 < ws.length ? Math.max(a + .08, grid[Math.min(grid.length - 1, (k + 1) * every)]) : t1; texts.push(mkEv(a, Math.min(b, t1), w)); }); }
+    texts.sort((a, b) => a.start - b.start);
+  } else if (words.length){ for (let k = 1; k < beats.length; k++){ const bt = beats[k]; if (bt > dur - .25) break; const rate = val('wordRate', bt);
     const sub = rate > .8 && hype(bt) > .6 ? 2 : 1; // two words per beat when hot
     for (let s = 0; s < sub; s++){ const t0 = bt + s * per / 2; if (r() > rate * (.35 + hype(t0) * .8)) continue; const c = cutAt(cuts, t0), Pz = c.P, style = pick(r, Pz.textStyles);
       const fset = FONT_SETS[state.fontSet] || Pz.fonts || ['narrow', 'anton'];
@@ -713,6 +727,33 @@ $('#setOut').onclick = () => { const t = now(); setRegion(state.rIn === null || 
 $('#clearRegion').onclick = () => setRegion(null, null);
 $('#dropGate').onchange = e => { state.dropGate = e.target.checked; rebuild(); };
 $('#preDrop').onchange = e => { state.preDrop = e.target.checked; rebuild(); };
+/* ---- timed lyrics ---- */
+function lyricLines(){ return $('#lyrics').value.split(/\n/).map(l => l.trim()).filter(Boolean); }
+function syncCues(){ // keep timings for lines that still exist (matched by text, then by position)
+  const lines = lyricLines(), old = state.cues.slice(); const used = new Set();
+  state.cues = lines.map((text, i) => { let m = old.findIndex((q, j) => !used.has(j) && q.text === text); if (m < 0 && old[i] && !used.has(i) && old[i].text !== text && old.filter(q => q.text === old[i].text).length === 1) m = -1; if (m >= 0){ used.add(m); return {text, t: old[m].t}; } return {text, t: null}; });
+  state.tapIdx = Math.min(state.tapIdx, state.cues.length); renderCues(); }
+function setWordMode(m){ state.wordMode = m; $('#wmRandom').setAttribute('aria-pressed', m === 'random'); $('#wmLyrics').setAttribute('aria-pressed', m === 'lyrics'); $('#lyricBox').hidden = m !== 'lyrics'; if (m === 'lyrics') syncCues(); rebuild(); }
+$('#wmRandom').onclick = () => setWordMode('random'); $('#wmLyrics').onclick = () => setWordMode('lyrics');
+$('#lyrics').addEventListener('input', () => { if (state.wordMode === 'lyrics') syncCues(); });
+function renderCues(){ const box = $('#lyCues'); if (!box) return; box.innerHTML = '';
+  state.cues.forEach((q, i) => { const d = document.createElement('div'); d.className = 'cue' + (q.t === null ? ' unset' : '') + (i === state.tapIdx ? ' next' : '');
+    const tin = document.createElement('input'); tin.className = 'num'; tin.type = 'number'; tin.step = '0.05'; tin.min = '0'; tin.placeholder = '–'; tin.value = q.t === null ? '' : q.t.toFixed(2); tin.setAttribute('aria-label', 'Time for line ' + (i + 1));
+    tin.onchange = () => { q.t = tin.value === '' ? null : clamp(+tin.value, 0, state.dur); renderCues(); rebuild(); };
+    const mk = (txt, title, fn) => { const b = document.createElement('button'); b.className = 'btn sm ghost'; b.textContent = txt; b.title = title; b.onclick = fn; return b; };
+    const back = mk('◀', '−¼ s', () => { q.t = Math.max(0, (q.t === null ? now() : q.t) - .25); renderCues(); rebuild(); });
+    const fwd = mk('▶', '+¼ s', () => { q.t = Math.min(state.dur, (q.t === null ? now() : q.t) + .25); renderCues(); rebuild(); });
+    const here = mk('●', 'Set to playhead', () => { q.t = +now().toFixed(2); state.tapIdx = i + 1; renderCues(); rebuild(); });
+    const txt = document.createElement('span'); txt.className = 'txt'; txt.textContent = (i + 1) + '. ' + q.text; txt.title = q.text; txt.onclick = () => { if (q.t !== null) seek(q.t + state.lyOff); };
+    d.append(tin, back, fwd, here, txt); box.append(d); });
+  const nx = box.querySelector('.cue.next'); if (nx) nx.scrollIntoView({block: 'nearest'}); }
+function tapLyric(){ if (state.wordMode !== 'lyrics' || !state.cues.length) return; if (state.tapIdx >= state.cues.length) state.tapIdx = 0; state.cues[state.tapIdx].t = +now().toFixed(2); state.tapIdx++; renderCues(); rebuild(); toast('Line ' + state.tapIdx + ' @ ' + fmt(now())); }
+$('#lySpread').onclick = () => { if (!state.cues.length) syncCues(); const n = state.cues.length; if (!n) return; const a = $('#lyFrom').value === '' ? 0 : clamp(+$('#lyFrom').value, 0, state.dur), b = $('#lyTo').value === '' ? state.dur : clamp(+$('#lyTo').value, 0, state.dur); const lo = Math.min(a, b), hi = Math.max(a, b);
+  state.cues.forEach((q, i) => { let t = lo + (hi - lo) * i / n; const bt = state.grid && state.grid.beats; if (bt && bt.length){ let best = t, bd = 1e9; for (const x of bt){ const dd = Math.abs(x - t); if (dd < bd){ bd = dd; best = x; } } t = best; } q.t = +t.toFixed(2); }); state.tapIdx = 0; renderCues(); rebuild(); toast('Spread ' + n + ' lines ' + fmt(lo) + '–' + fmt(hi)); };
+$('#lyReset').onclick = () => { state.cues.forEach(q => q.t = null); state.tapIdx = 0; renderCues(); rebuild(); };
+$('#lyOff').oninput = e => { state.lyOff = +e.target.value; $('#lyOffOut').textContent = (state.lyOff >= 0 ? '+' : '') + state.lyOff.toFixed(2) + ' s'; }; $('#lyOff').onchange = () => rebuild();
+$('#lyHow').onchange = e => { state.lyHow = e.target.value; rebuild(); };
+$('#lyHold').oninput = e => { state.lyHold = +e.target.value; $('#lyHoldOut').textContent = state.lyHold.toFixed(1) + ' s'; }; $('#lyHold').onchange = () => rebuild();
 $('#preCalm').oninput = e => { state.preCalm = +e.target.value; $('#preCalmOut').textContent = state.preCalm.toFixed(2); };
 $('#preCalm').onchange = () => { if (!playing) frame(); };
 $('#dropAt').onchange = e => { state.dropAt = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); e.target.value = state.dropAt === null ? '' : state.dropAt; rebuild(); };
@@ -720,11 +761,11 @@ $('#dropNow').onclick = () => { state.dropAt = +now().toFixed(2); $('#dropAt').v
 $('#rIn').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(v, state.rOut === null && v !== null ? state.dur : state.rOut); };
 $('#rOut').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(state.rIn === null && v !== null ? 0 : state.rIn, v); };
 document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; const k = e.key.toLowerCase(); if (k === 'i') $('#setIn').click(); else if (k === 'o') $('#setOut').click(); else if (k === 'x') $('#clearRegion').click(); });
-document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if (e.code === 'Space'){ e.preventDefault(); $('#play').click(); } if (e.key === 'r' || e.key === 'R') $('#reroll').click(); });
+document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if (e.code === 'Space'){ e.preventDefault(); $('#play').click(); } if (e.key === 'r' || e.key === 'R') $('#reroll').click(); if (e.key === 'l' || e.key === 'L') tapLyric(); });
 
 
 /* ---- recipes: the whole setup as a small JSON ---- */
-function recipe(){ return {v: 2, app: 'glitch-reel-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate, preDrop: state.preDrop, preCalm: state.preCalm, dropAt: state.dropAt,
+function recipe(){ return {v: 2, app: 'glitch-reel-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate, preDrop: state.preDrop, preCalm: state.preCalm, dropAt: state.dropAt, wordMode: state.wordMode, cues: state.cues, lyOff: state.lyOff, lyHow: state.lyHow, lyHold: state.lyHold,
   lengthSel: state.lengthSel, fps: state.fps, bpm: state.bpm, beatSeed: state.beatSeed, words: $('#lyrics').value, dials: JSON.parse(JSON.stringify(P))}; }
 function applyRecipe(R){
   if (!R || !R.dials) throw new Error('not a recipe');
@@ -732,6 +773,9 @@ function applyRecipe(R){
   state.flkPattern = FLK_PATTERNS[R.flkPattern] ? R.flkPattern : state.flkPattern; state.fontSet = FONT_SETS[R.fontSet] !== undefined ? R.fontSet : 'auto'; if (R.lengthSel !== undefined) state.lengthSel = +R.lengthSel; if (R.fps) state.fps = +R.fps;
   if (R.bpm) state.bpm = +R.bpm; if (R.beatSeed) state.beatSeed = +R.beatSeed; if (typeof R.words === 'string') $('#lyrics').value = R.words;
   state.dropGate = !!R.dropGate; const dg = $('#dropGate'); if (dg) dg.checked = state.dropGate;
+  if (Array.isArray(R.cues)) state.cues = R.cues.map(q => ({text: String(q.text || ''), t: q.t === null || q.t === undefined ? null : +q.t})); state.lyOff = +R.lyOff || 0; state.lyHow = R.lyHow === 'line' ? 'line' : 'word'; state.lyHold = R.lyHold ? clamp(+R.lyHold, 1, 10) : 4;
+  { const o = $('#lyOff'); if (o){ o.value = state.lyOff; o.oninput({target: o}); } const hw = $('#lyHow'); if (hw) hw.value = state.lyHow; const hd = $('#lyHold'); if (hd){ hd.value = state.lyHold; hd.oninput({target: hd}); } }
+  if (R.wordMode === 'lyrics' || R.wordMode === 'random') setWordMode(R.wordMode); else renderCues();
   state.preDrop = !!R.preDrop; state.preCalm = R.preCalm === undefined ? .7 : clamp(+R.preCalm || 0, 0, 1); state.dropAt = (R.dropAt === undefined || R.dropAt === null) ? null : Math.max(0, +R.dropAt || 0);
   { const a = $('#preDrop'); if (a) a.checked = state.preDrop; const c = $('#preCalm'); if (c){ c.value = state.preCalm; $('#preCalmOut').textContent = state.preCalm.toFixed(2); } const d = $('#dropAt'); if (d) d.value = state.dropAt === null ? '' : state.dropAt; }
   for (const id in R.dials){ if (P[id] && typeof R.dials[id] === 'object'){ const d = R.dials[id]; P[id] = {base: +d.base || 0, src: SIGNALS.includes(d.src) ? d.src : 'const', depth: +d.depth || 0}; } }

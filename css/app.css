@@ -106,3 +106,12 @@ select,.num{background:var(--ink);border:1px solid var(--line);padding:6px 6px;m
 .thumb.bad{background:repeating-linear-gradient(45deg,#2a1d1d,#2a1d1d 7px,#351f1f 7px,#351f1f 14px);border-color:#7a3b3b;display:flex;align-items:flex-end;justify-content:center}
 .thumb.bad .v{background:#7a3b3b;color:#ffd9d9;font-size:9px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .thumb .x.rt{right:22px;background:#2f6b4a}
+
+.cues{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px;margin-top:6px}
+.cue{display:grid;grid-template-columns:62px 22px 22px 22px 1fr;gap:4px;align-items:center;padding:4px 6px;border-bottom:1px solid var(--line);font-size:12px}
+.cue:last-child{border-bottom:0}
+.cue input.num{width:100%;padding:3px 4px;font-size:12px}
+.cue button{padding:2px 0;font-size:11px;line-height:1.2}
+.cue .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}
+.cue.next .txt{color:var(--hot);font-weight:600}
+.cue.unset .txt{color:var(--muted)}
