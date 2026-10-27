@@ -18,6 +18,7 @@
 
 <main class="grid">
   <section class="stage" aria-label="Preview">
+    <div class="coltitle">Preview</div>
     <div class="screen" id="screen">
       <canvas id="gl" width="720" height="1280" aria-label="Reel preview"></canvas>
       <div class="badge" id="badge" hidden></div>
@@ -43,9 +44,25 @@
       </div>
     </div>
     <div class="result" id="result" hidden></div>
+    <div class="sec">
+      <h2>Output</h2>
+      <div class="two">
+        <label class="f"><span>Length</span>
+          <select id="length"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="0">Whole song</option><option value="-1">Custom…</option></select>
+          <input class="num" id="lenCustom" type="number" min="3" max="600" step="0.5" value="20" hidden aria-label="Custom length in seconds"></label>
+        <label class="f"><span>Frame rate</span><select id="fps"><option value="30">30 fps</option><option value="60" selected>60 fps</option></select></label>
+        <label class="f"><span>Preview size</span><select id="pvSize"><option value="540">540 × 960 (fast)</option><option value="720" selected>720 × 1280</option></select></label>
+        <label class="f"><span>Export size</span><select id="exSize"><option value="720">720 × 1280</option><option value="1080" selected>1080 × 1920</option></select></label>
+        <label class="f"><span>Export quality</span><select id="exQ"><option value="8">Good (8 Mbps)</option><option value="16" selected>High (16 Mbps)</option><option value="28">Max (28 Mbps)</option></select></label>
+      </div>
+      <p class="note">Rendering on: <b id="gpuName" style="color:var(--fg)">…</b></p>
+      <p class="note" id="gpuHint" hidden>That is the integrated GPU. On Windows, Chrome picks its GPU at startup from the system setting: Settings → System → Display → Graphics → add chrome.exe → Options → <b>High performance</b>, then quit Chrome fully and reopen. (Or NVIDIA Control Panel → Manage 3D settings → Program Settings → Chrome → High-performance NVIDIA processor.)</p>
+      <p class="note" id="exNote">Export renders frame by frame and encodes with your GPU, so it is never laggy, whatever the preview speed. Same seed and dials always give the same reel.</p>
+    </div>
   </section>
 
-  <aside class="rack">
+  <aside class="rack" id="visualRack" aria-label="Visual controls">
+    <div class="coltitle">Visual</div>
     <div class="sec">
       <h2>Footage <b id="mediaCount"></b></h2>
       <label class="drop" id="drop">Drop photos, GIFs and video clips, or tap to pick
@@ -56,7 +73,69 @@
       <label class="f"><span>Frames kept per video clip <output id="cfOut">24</output></span><input type="range" id="clipFrames" min="12" max="72" step="6" value="24"></label>
       <p class="note">Clips are sampled as bursts of 6 consecutive frames taken from random points in the clip (24 frames = 4 bursts). Each cut starts on a random burst, plays forward or reversed, at song speed. Applies to clips added after you move the slider.</p>
     </div>
+    <div class="sec">
+      <h2>Style <b>58 styles · FX = effects only, no words</b></h2>
+      <div class="presets" id="presets"></div>
+      <div class="two" style="grid-template-columns:1fr 1fr 1fr">
+        <label class="f"><span>Reactivity <output id="reactOut">1.0</output></span><input type="range" id="react" min="0" max="2" step="0.1" value="1"></label>
+        <label class="f"><span>Intensity <output id="intOut">1.0</output></span><input type="range" id="intensity" min="0.3" max="2" step="0.1" value="1"></label>
+        <label class="f"><span>Clarity <output id="clarOut">0.6</output></span><input type="range" id="clarity" min="0" max="1" step="0.05" value="0.6"></label>
+      </div>
+      <p class="note">Clarity pulls the photo back through the effects: it tames warps, melts and palette strength without touching cuts or flicker.</p>
+      <div class="row"><button class="btn sm" id="randDials">Randomize dials</button><button class="btn sm ghost" id="resetDials">Reset to style</button>
+        <label class="f" style="margin-left:auto"><span>Seed</span><input class="num" id="seed" type="number" min="1" max="999999" value="1312" style="width:90px"></label></div>
+    </div>
+    <div id="groups"></div>
+    <div class="sec">
+      <h2>Words</h2>
+      <textarea id="lyrics" spellcheck="false" aria-label="Words">raat ka SHOR
+रंग बिखरे
+CHAOS in my head
+sheher jal raha
+नींद नहीं
+DOOBE RAHO</textarea>
+      <label class="f"><span>Font set</span>
+        <select id="fontSet"><option value="auto" selected>Auto (style decides)</option><option value="narrow">Arial Narrow, stretched</option><option value="display">Display: Anton, Bebas, Six Caps, Archivo Black</option><option value="sans">Sans: Inter, Space Grotesk, Oswald</option><option value="serif">Serif: Playfair, Bodoni, Cormorant, Garamond</option><option value="desi">Devanagari: Khand, Teko, Noto</option><option value="mono">Mono</option></select></label>
+      <p class="note">One word per hit, in order. Hindi, Hinglish and English all work; Devanagari words switch to a face that has the script. Rate, size, stretch and glitch are in the Words dials.</p>
+      <div class="row" role="radiogroup" aria-label="Words mode">
+        <button class="btn sm" id="wmRandom" aria-pressed="true">Random words</button>
+        <button class="btn sm" id="wmLyrics" aria-pressed="false">Timed lyrics</button>
+      </div>
+      <div id="lyricBox" hidden>
+        <div class="row regionrow">
+          <span class="note" style="color:var(--fg);font-weight:600">Spread lines</span>
+          <input class="num" id="lyFrom" type="number" step="0.1" min="0" placeholder="from" style="width:70px" aria-label="Lyrics from, seconds">
+          <span class="note">→</span>
+          <input class="num" id="lyTo" type="number" step="0.1" min="0" placeholder="to" style="width:70px" aria-label="Lyrics to, seconds">
+          <button class="btn sm" id="lySpread">Spread</button>
+          <button class="btn sm ghost" id="lyReset" title="Clear all timings">Reset</button>
+        </div>
+        <div class="row">
+          <label class="f" style="flex:1"><span>Shift everything <output id="lyOffOut">0.0 s</output></span><input type="range" id="lyOff" min="-6" max="6" step="0.05" value="0"></label>
+          <label class="f"><span>Show</span><select id="lyHow"><option value="word">word by word</option><option value="line">whole line</option></select></label>
+          <label class="f"><span>Max hold <output id="lyHoldOut">4.0 s</output></span><input type="range" id="lyHold" min="1" max="10" step="0.5" value="4"></label>
+        </div>
+        <p class="note">Sync: play the reel and press <b>L</b> when each line is sung — it stamps the next line at the playhead. Or type a time, nudge with ◀ ▶, or hit ● to set a line to the playhead. Times are reel seconds.</p>
+        <div id="lyCues" class="cues"></div>
+      </div>
+    </div>
+    <div class="sec">
+      <h2>Recipes <b>save a setup</b></h2>
+      <div class="row">
+        <button class="btn sm" id="recSave">Save recipe file</button>
+        <label class="btn sm" style="cursor:pointer">Load recipe file<input type="file" id="recLoad" accept=".json,application/json" style="display:none"></label>
+        <button class="btn sm ghost" id="recRestore">Restore last session</button>
+      </div>
+      <div class="row" style="align-items:stretch">
+        <textarea id="recCode" rows="2" style="min-height:48px;flex:1" placeholder="Recipe code appears here. Paste one and press Apply." aria-label="Recipe code"></textarea>
+        <div style="display:flex;flex-direction:column;gap:6px"><button class="btn sm" id="recCopy">Copy code</button><button class="btn sm" id="recApply">Apply</button></div>
+      </div>
+      <p class="note">A recipe is the style, seed, every dial with its source and depth, the words and the font set. Your footage and song are not in it; load those and the recipe recreates the edit.</p>
+    </div>
+  </aside>
 
+  <aside class="rack" id="audioRack" aria-label="Audio controls">
+    <div class="coltitle">Audio</div>
     <div class="sec">
       <h2>Sound <b id="soundName">Built-in beat</b></h2>
       <div class="seg" role="group" aria-label="Sound source">
@@ -94,88 +173,8 @@
         <span class="note">calm <b id="preCalmOut">0.70</b></span>
       </div>
       <p class="note">Flashes toggle: before the drop only clean media cuts — no invert bursts, white/black flashes, strobe or flash cuts. Build-up mode goes further: the whole effect stack is damped by the calm amount until the drop, then slams back to full power. “Drop at” is in reel seconds — leave it empty to use the detected drop, type a time, or hit “Drop at playhead”. The cyan line on the timeline marks the switch; both toggles use it.</p>
-      <p class="hint">Signals: SUB BASS KICK SNARE HAT MID HIGH PUNCH LOUD HYPE DROP BUILD BEAT BAR BRIGHT. Pick any of them as a source in the dials below.</p>
+      <p class="hint">Signals: SUB BASS KICK SNARE HAT MID HIGH PUNCH LOUD HYPE DROP BUILD BEAT BAR BRIGHT. Pick any of them as a source in the Visual dials.</p>
     </div>
-
-    <div class="sec">
-      <h2>Style <b>58 styles · FX = effects only, no words</b></h2>
-      <div class="presets" id="presets"></div>
-      <div class="two" style="grid-template-columns:1fr 1fr 1fr">
-        <label class="f"><span>Reactivity <output id="reactOut">1.0</output></span><input type="range" id="react" min="0" max="2" step="0.1" value="1"></label>
-        <label class="f"><span>Intensity <output id="intOut">1.0</output></span><input type="range" id="intensity" min="0.3" max="2" step="0.1" value="1"></label>
-        <label class="f"><span>Clarity <output id="clarOut">0.6</output></span><input type="range" id="clarity" min="0" max="1" step="0.05" value="0.6"></label>
-      </div>
-      <p class="note">Clarity pulls the photo back through the effects: it tames warps, melts and palette strength without touching cuts or flicker.</p>
-      <div class="row"><button class="btn sm" id="randDials">Randomize dials</button><button class="btn sm ghost" id="resetDials">Reset to style</button>
-        <label class="f" style="margin-left:auto"><span>Seed</span><input class="num" id="seed" type="number" min="1" max="999999" value="1312" style="width:90px"></label></div>
-    </div>
-
-    <div id="groups"></div>
-
-    <div class="sec">
-      <h2>Words</h2>
-      <textarea id="lyrics" spellcheck="false" aria-label="Words">raat ka SHOR
-रंग बिखरे
-CHAOS in my head
-sheher jal raha
-नींद नहीं
-DOOBE RAHO</textarea>
-      <label class="f"><span>Font set</span>
-        <select id="fontSet"><option value="auto" selected>Auto (style decides)</option><option value="narrow">Arial Narrow, stretched</option><option value="display">Display: Anton, Bebas, Six Caps, Archivo Black</option><option value="sans">Sans: Inter, Space Grotesk, Oswald</option><option value="serif">Serif: Playfair, Bodoni, Cormorant, Garamond</option><option value="desi">Devanagari: Khand, Teko, Noto</option><option value="mono">Mono</option></select></label>
-      <p class="note">One word per hit, in order. Hindi, Hinglish and English all work; Devanagari words switch to a face that has the script. Rate, size, stretch and glitch are in the Words dials.</p>
-      <div class="row" role="radiogroup" aria-label="Words mode">
-        <button class="btn sm" id="wmRandom" aria-pressed="true">Random words</button>
-        <button class="btn sm" id="wmLyrics" aria-pressed="false">Timed lyrics</button>
-      </div>
-      <div id="lyricBox" hidden>
-        <div class="row regionrow">
-          <span class="note" style="color:var(--fg);font-weight:600">Spread lines</span>
-          <input class="num" id="lyFrom" type="number" step="0.1" min="0" placeholder="from" style="width:70px" aria-label="Lyrics from, seconds">
-          <span class="note">→</span>
-          <input class="num" id="lyTo" type="number" step="0.1" min="0" placeholder="to" style="width:70px" aria-label="Lyrics to, seconds">
-          <button class="btn sm" id="lySpread">Spread</button>
-          <button class="btn sm ghost" id="lyReset" title="Clear all timings">Reset</button>
-        </div>
-        <div class="row">
-          <label class="f" style="flex:1"><span>Shift everything <output id="lyOffOut">0.0 s</output></span><input type="range" id="lyOff" min="-6" max="6" step="0.05" value="0"></label>
-          <label class="f"><span>Show</span><select id="lyHow"><option value="word">word by word</option><option value="line">whole line</option></select></label>
-          <label class="f"><span>Max hold <output id="lyHoldOut">4.0 s</output></span><input type="range" id="lyHold" min="1" max="10" step="0.5" value="4"></label>
-        </div>
-        <p class="note">Sync: play the reel and press <b>L</b> when each line is sung — it stamps the next line at the playhead. Or type a time, nudge with ◀ ▶, or hit ● to set a line to the playhead. Times are reel seconds.</p>
-        <div id="lyCues" class="cues"></div>
-      </div>
-    </div>
-
-    <div class="sec">
-      <h2>Recipes <b>save a setup</b></h2>
-      <div class="row">
-        <button class="btn sm" id="recSave">Save recipe file</button>
-        <label class="btn sm" style="cursor:pointer">Load recipe file<input type="file" id="recLoad" accept=".json,application/json" style="display:none"></label>
-        <button class="btn sm ghost" id="recRestore">Restore last session</button>
-      </div>
-      <div class="row" style="align-items:stretch">
-        <textarea id="recCode" rows="2" style="min-height:48px;flex:1" placeholder="Recipe code appears here. Paste one and press Apply." aria-label="Recipe code"></textarea>
-        <div style="display:flex;flex-direction:column;gap:6px"><button class="btn sm" id="recCopy">Copy code</button><button class="btn sm" id="recApply">Apply</button></div>
-      </div>
-      <p class="note">A recipe is the style, seed, every dial with its source and depth, the words and the font set. Your footage and song are not in it; load those and the recipe recreates the edit.</p>
-    </div>
-
-    <div class="sec">
-      <h2>Output</h2>
-      <div class="two">
-        <label class="f"><span>Length</span>
-          <select id="length"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="0">Whole song</option><option value="-1">Custom…</option></select>
-          <input class="num" id="lenCustom" type="number" min="3" max="600" step="0.5" value="20" hidden aria-label="Custom length in seconds"></label>
-        <label class="f"><span>Frame rate</span><select id="fps"><option value="30">30 fps</option><option value="60" selected>60 fps</option></select></label>
-        <label class="f"><span>Preview size</span><select id="pvSize"><option value="540">540 × 960 (fast)</option><option value="720" selected>720 × 1280</option></select></label>
-        <label class="f"><span>Export size</span><select id="exSize"><option value="720">720 × 1280</option><option value="1080" selected>1080 × 1920</option></select></label>
-        <label class="f"><span>Export quality</span><select id="exQ"><option value="8">Good (8 Mbps)</option><option value="16" selected>High (16 Mbps)</option><option value="28">Max (28 Mbps)</option></select></label>
-      </div>
-      <p class="note">Rendering on: <b id="gpuName" style="color:var(--fg)">…</b></p>
-      <p class="note" id="gpuHint" hidden>That is the integrated GPU. On Windows, Chrome picks its GPU at startup from the system setting: Settings → System → Display → Graphics → add chrome.exe → Options → <b>High performance</b>, then quit Chrome fully and reopen. (Or NVIDIA Control Panel → Manage 3D settings → Program Settings → Chrome → High-performance NVIDIA processor.)</p>
-      <p class="note" id="exNote">Export renders frame by frame and encodes with your GPU, so it is never laggy, whatever the preview speed. Same seed and dials always give the same reel.</p>
-    </div>
-
     <div class="sec" id="studioSec">
       <h2>Studio <b>math synthesiser · every sample computed</b></h2>
       <div class="row">
