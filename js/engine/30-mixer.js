@@ -35,7 +35,7 @@ function AWZ_MIXER(A){
       this.loud = new A.Loudness(sr); this.lim = new A.Limiter(sr, .002); this.lim.set({ceiling: A.dbToGain(-1.2), release: .1});
       this.autoGain = 1; this.target = -11; this.autoOn = true; this.agK = 1 - Math.exp(-1 / (2.5 * sr / BLK)); this.master = new A.Smooth(1, .05, sr / BLK);
       this.kicks = []; this.duckDepth = {bass: 10, ret: 3, music: 0}; this.duckRel = .16; this.tiltLow = 1; this.tiltHigh = 0; this.musicLP = new A.Smooth(20000, .08, sr / BLK); this.mLPL = new A.SVF(); this.mLPR = new A.SVF();
-      this.preL = 0; this.grMaster = 0; this.outPeak = 0; this.crush = 0; this.chL = 0; this.chR = 0; this.chC = 0;
+      this.preL = 0; this.grMaster = 0; this.outPeak = 0; this.crush = 0; this.chL = 0; this.chR = 0; this.chC = 0; this.phaser = new A.Phaser(sr); this.phaserMix = 0;
       this.mBells = [[300, -4, .8], [1000, -2, .7]].map(([fc, db, q]) => ({fc, db, q, a: new A.SVF(), b: new A.SVF()})); this.setMusicEQ();
       // loudness reference = slow peak-hold of short-term loudness → quiet sections stay quiet, the arc survives normalisation
       this.lref = -20; this.lrefDecay = .04; this.maxBoost = A.dbToGain(14);
@@ -48,8 +48,9 @@ function AWZ_MIXER(A){
     kickAt(sampleTime){ this.kicks.push(sampleTime); if (this.kicks.length > 8) this.kicks.shift(); }
     duckGain(t, depthDb){ // deterministic ease-out duck from the most recent kick at or before t
       let k = -1e12; for (let i = this.kicks.length - 1; i >= 0; i--) if (this.kicks[i] <= t){ k = this.kicks[i]; break; }
-      const dt = (t - k) / this.sr, atk = .0008, hold = .03, rel = this.duckRel; if (dt < 0 || dt > atk + hold + rel) return 1;
-      let x; if (dt < atk) x = dt / atk; else if (dt < atk + hold) x = 1; else { const q = (dt - atk - hold) / rel; x = 1 - (1 - Math.pow(1 - q, 2.2)); }
+      const dt = (t - k) / this.sr, atk = .004, hold = .025, rel = this.duckRel;   // 4 ms attack: a sub-ms gain step on a sine is itself a click
+      if (dt < 0 || dt > atk + hold + rel) return 1;
+      let x; if (dt < atk){ const q = dt / atk; x = q * q * (3 - 2 * q); } else if (dt < atk + hold) x = 1; else { const q = (dt - atk - hold) / rel; x = 1 - (1 - Math.pow(1 - q, 2.2)); }
       return Math.pow(10, -depthDb * x / 20); }
     process(oL, oR, n, t0){ const B = this.bus, S = this.sendBuf, sr = this.sr;
       for (const k in B){ B[k][0].fill(0, 0, n); B[k][1].fill(0, 0, n); } for (const k in S){ S[k][0].fill(0, 0, n); S[k][1].fill(0, 0, n); this.ret[k][0].fill(0, 0, n); this.ret[k][1].fill(0, 0, n); }
@@ -66,6 +67,7 @@ function AWZ_MIXER(A){
       const mlp = this.musicLP.tick(); if (mlp < 19000){ this.mLPL.set(mlp, .7, sr); this.mLPR.set(mlp, .7, sr); for (let i = 0; i < n; i++){ B.music[0][i] = this.mLPL.tick(B.music[0][i]); B.music[1][i] = this.mLPR.tick(B.music[1][i]); } }
       this.musicSat.process(B.music[0], B.music[1], n);
       for (const e of this.mBells){ if (!e.g) continue; const a = e.a, b = e.b, g = e.g * a.k, ML = B.music[0], MR = B.music[1]; for (let i = 0; i < n; i++){ a.tick(ML[i]); ML[i] += g * a.bp; b.tick(MR[i]); MR[i] += g * b.bp; } }
+      if (this.phaserMix > .01) this.phaser.process(B.music[0], B.music[1], n);
       if (this.crush > .01){ const hold = 1 + Math.floor(this.crush * 5), q = Math.pow(2, 15 - this.crush * 9), mix = this.crush * .6, ML = B.music[0], MR = B.music[1];   // lo-fi: sample-rate + bit reduction (Y = broken)
         for (let i = 0; i < n; i++){ if (++this.chC >= hold){ this.chC = 0; this.chL = Math.round(ML[i] * q) / q; this.chR = Math.round(MR[i] * q) / q; } ML[i] += (this.chL - ML[i]) * mix; MR[i] += (this.chR - MR[i]) * mix; } }
       const rp = this.retGain.plate.tick(), rh = this.retGain.hall.tick(), rd = this.retGain.delay.tick(), dB = this.duckDepth;

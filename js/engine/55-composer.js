@@ -76,7 +76,7 @@ function AWZ_COMPOSER(A){
       // ---- process α (rain → grid): world-defined curve, CHAOS pulls it back toward rain
       let alpha = this.w.alpha ? this.w.alpha(pieceProg, S2, prog) : 1; alpha = clamp(alpha * (1 - M.chaos * .7), 0, 1);
       // ---- arrangement
-      const density = clamp(M.density * .8 + E * .35 - .1, 0, 1), shift = (M.density - .5) * .3;
+      const density = clamp(M.density * 1.15 + E * .25 - .2, 0, 1), shift = (M.density - .5) * .4;
       if (sectionStart || this.bis % 4 === 0){ let entries = 0; this.changed = [];
         const order = this.parts.slice().sort((a, b) => (a.spec.on || 0) - (b.spec.on || 0));
         for (const p of order){ const sp = p.spec; let want = E >= (sp.on || 0) - shift && E <= (sp.off === undefined ? 2 : sp.off);
@@ -97,11 +97,20 @@ function AWZ_COMPOSER(A){
       const t0 = this.t, stepN = this.stepN, swing = this.g.swing || 0, hum = this.hum, chaos = M.chaos;
       for (const p of this.parts){ if (!p.on) continue; const slot = p.slot, drum = !!p.spec.drum, tight = p.spec.tight;
         c.emit = (sl, step, ev, raw) => { let s = step; if (!raw && swing && Math.abs(s - Math.round(s)) < .01 && (Math.round(s) & 1)) s += swing;
-          let t = t0 + s * stepN; if (!tight){ const h = (drum ? .0015 : .004 + chaos * .008) * sr; t += hum.gauss() * h * (raw ? .3 : 1); }
+          let t = t0 + s * stepN; if (!tight){ const h = (drum ? .0015 + chaos * .004 : .004 + chaos * .016) * sr; t += hum.gauss() * h * (raw ? .3 : 1); }
           out.push({t: Math.max(t0 - .01 * sr, t), slot: sl, ev}); };
         p.obj.bar(c); }
       out.sort((a, b) => a.t - b.t);
-      const info = {bar: this.k, t0, section: S2.name, tag: S2.tag, si: this.si, nSections: this.sections.length, bis: this.bis, sbars: S2.bars, E, alpha, chord: ch.name, chordStart,
+      // CHAOS glitch layer: beat-repeats (1/16 · 1/32 stutters), drop-outs and octave flips, never on the first beat of a phrase
+      if (chaos > .3){ const beatN = stepN * 4, gr = this.P.rng('glitch' + this.k), add = [];
+        for (let b = (this.bis % 8 === 0 ? 1 : 0); b < 4; b++){ if (gr() > (chaos - .3) * .7) continue; const b0 = t0 + b * beatN, b1 = b0 + beatN, kind = gr.weighted({stutter: 3, drop: 1, octave: 1.2, roll: chaos > .6 ? 1.5 : 0});
+          const inBeat = out.filter(e => e.t >= b0 && e.t < b1 && e.ev.level === undefined);
+          if (kind === 'drop'){ for (const e of inBeat) if (!e.ev.kick && gr() < .8) e.drop = true; }
+          else if (kind === 'octave'){ for (const e of inBeat) if (e.ev.note !== undefined && e.ev.note < 84) e.ev = Object.assign({}, e.ev, {note: e.ev.note + 12}); }
+          else { const div = kind === 'roll' ? 8 : gr() < .5 ? 4 : 8, seg = beatN / div, src = inBeat.filter(e => e.t < b0 + seg * 1.5); for (const e of inBeat) if (e.t >= b0 + seg * 1.5 && !e.ev.kick) e.drop = true;
+            for (const e of src) for (let q = 1; q < div; q++) add.push({t: e.t + q * seg, slot: e.slot, ev: Object.assign({}, e.ev, {vel: (e.ev.vel || .7) * Math.pow(kind === 'roll' ? 1.04 : .86, q), dur: e.ev.dur ? Math.min(e.ev.dur, seg / sr * .9) : e.ev.dur, kick: false})}); } }
+        if (add.length){ for (const a of add) out.push(a); } for (let i = out.length - 1; i >= 0; i--) if (out[i].drop) out.splice(i, 1); out.sort((a, b) => a.t - b.t); }
+      const info = {bar: this.k, t0, chordPcs: ch.pcs, scalePcs: this.key.sc.map(x => (x + this.key.tonic) % 12), barN: this.barN, section: S2.name, tag: S2.tag, si: this.si, nSections: this.sections.length, bis: this.bis, sbars: S2.bars, E, alpha, chord: ch.name, chordStart,
         nextChord: this.loop.chords[(this.ci + 1) % loopLen].name, active: this.parts.filter(p => p.on).map(p => p.slot), changed: this.changed, mode: this.key.mode, tonic: this.key.tonic,
         progress: pieceProg, voicing: v.notes, bass: v.bass, cycle: this.cycle};
       this.lastInfo = info; this.changed = [];

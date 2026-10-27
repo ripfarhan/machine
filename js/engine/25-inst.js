@@ -12,34 +12,48 @@ function AWZ_INST(A){
   // per-event patch overrides (ev.mod) on top of the instrument patch
   const withMod = (p, mod) => mod ? Object.assign({}, p, mod) : p;
 
+  // Events are queued and applied at their exact sample inside render(): the block is split at event offsets, so a voice
+  // re-used while still sounding (mono retrigger, steal) keeps rendering its old note right up to the new onset (no gap, no click).
+  function segRender(self, L, R, n){ const P = self.pend; if (!P.length) return self.renderVoices(L, R, n, 0);
+    if (P.length > 1) P.sort((a, b) => a.off - b.off); let pos = 0, any = false;
+    for (let i = 0; i < P.length; i++){ const e = P[i], o = Math.min(n - 1, Math.max(0, e.off | 0)); if (o > pos){ any = self.renderVoices(L.subarray(pos, o), R.subarray(pos, o), o - pos, pos) || any; pos = o; } self.doPlay(0, e.ev, pos); }
+    P.length = 0; if (pos < n) any = self.renderVoices(pos ? L.subarray(pos) : L, pos ? R.subarray(pos) : R, n - pos, pos) || any; return any; }
+  A.segRender = segRender;
+
   A.DrumInst = class { constructor(sr, kind, patch, seed){ this.sr = sr; this.kind = kind; this.patch = patch || {}; this.r = A.rng(seed || 5); this.var = 1;
       const V = {kick: [A.KickVoice, 3], snare: [A.SnareVoice, 4], hat: [A.HatVoice, 6], shaker: [A.ShakerVoice, 6], tom: [A.TomVoice, 6], perc: [A.ResPercVoice, 10]}[kind];
-      this.pool = new A.Pool(() => new V[0](sr), V[1]); }
-    play(off, ev){ const p = withMod(this.patch, ev.mod), r = this.r, k = this.kind, vel = clamp(ev.vel === undefined ? 1 : ev.vel, 0, 1.5); const before = this.pool.clock;
+      this.pool = new A.Pool(() => new V[0](sr), V[1]); this.pend = []; }
+    play(off, ev){ this.pend.push({off, ev}); }
+    doPlay(off, ev){ const p = withMod(this.patch, ev.mod), r = this.r, k = this.kind, vel = clamp(ev.vel === undefined ? 1 : ev.vel, 0, 1.5); const before = this.pool.clock;
       if (k === 'kick'){ this.pool.each(v => { if (v.on) v.ka = Math.exp(-1 / (.01 * this.sr)); }); this.pool.get().start(off, vel, vary(p, r, this.var, {ampTau: .08, click: .3, fStart: .02}), r); }
       else if (k === 'hat'){ if (!ev.open) this.pool.each(v => { if (v.on && v.open) v.choke(); }); this.pool.get().start(off, vel, vary(p, r, this.var, {closedTau: .12, openTau: .1, tune: .01}), r, ev.open); }
       else if (k === 'tom' || k === 'perc'){ this.pool.get().start(off, vel, vary(p, r, this.var, {ampTau: .1, tau: .12, noise: .2}), r, ev.freq || A.mtof(ev.note || 60)); }
       else this.pool.get().start(off, vel, vary(p, r, this.var, {noiseTau: .1, tau: .12, f1: .02, noiseF: .05}), r);
       if (this.pool.clock !== before) for (const v of this.pool.v) if (v.age === this.pool.clock){ panTo(v, ev.pan); break; } }
-    render(L, R, n){ return this.pool.render(L, R, n); }
-    allOff(){ this.pool.each(v => v.on = false); } };
+    render(L, R, n){ return segRender(this, L, R, n); }
+    renderVoices(L, R, n){ return this.pool.render(L, R, n); }
+    allOff(){ this.pend.length = 0; this.pool.each(v => v.on = false); } };
 
   // polyphonic note instrument over any voice class with start(off, note, vel, dur, p) / release()
-  A.PolyInst = class { constructor(sr, Voice, n, patch, seed){ this.sr = sr; this.patch = patch || {}; this.r = A.rng(seed || 9); this.var = 1; let k = 0; this.pool = new A.Pool(() => new Voice(sr, (seed || 1) * 17 + (k++)), n); }
-    play(off, ev){ const v = this.pool.get(); const base = withMod(this.patch, ev.mod), p = this.var ? vary(base, this.r, this.var, {cutoff: .12, ad: .12, fd: .15, res: .1, drive: .15, envAmt: .1, sustain: .1, bright: .12}) : base;
+  A.PolyInst = class { constructor(sr, Voice, n, patch, seed){ this.sr = sr; this.patch = patch || {}; this.r = A.rng(seed || 9); this.var = 1; let k = 0; this.pool = new A.Pool(() => new Voice(sr, (seed || 1) * 17 + (k++)), n); this.pend = []; }
+    play(off, ev){ this.pend.push({off, ev}); }
+    doPlay(off, ev){ const v = this.pool.get(); const base = withMod(this.patch, ev.mod), p = this.var ? vary(base, this.r, this.var, {cutoff: .12, ad: .12, fd: .15, res: .1, drive: .15, envAmt: .1, sustain: .1, bright: .12}) : base;
       v.start(off, ev.note, clamp(ev.vel === undefined ? .8 : ev.vel, 0, 1.3), ev.dur || .25, p); panTo(v, ev.pan); return v; }
-    render(L, R, n){ return this.pool.render(L, R, n); }
-    allOff(){ this.pool.each(v => { if (v.on && v.release) v.release(); }); } };
+    render(L, R, n){ return segRender(this, L, R, n); }
+    renderVoices(L, R, n){ return this.pool.render(L, R, n); }
+    allOff(){ this.pend.length = 0; this.pool.each(v => { if (v.on && v.release) v.release(); }); } };
 
   // monophonic legato instrument (bass / lead): overlapping notes glide, separated notes retrigger
-  A.MonoInst = class { constructor(sr, Voice, patch, seed){ this.sr = sr; this.patch = patch || {}; this.v = new Voice(sr, seed || 3); this.v.on = false; this.r = A.rng(seed || 3); this.endAt = 0; this.t = 0; this.var = 1; }
-    play(off, ev){ const base = withMod(this.patch, ev.mod), p = this.var ? vary(base, this.r, this.var, {cutoff: .1, ad: .1, fd: .12, drive: .1}) : base; const legato = this.v.on && this.t + off < this.endAt && (ev.slide || this.patch.legato);
+  A.MonoInst = class { constructor(sr, Voice, patch, seed){ this.sr = sr; this.patch = patch || {}; this.v = new Voice(sr, seed || 3); this.v.on = false; this.r = A.rng(seed || 3); this.endAt = 0; this.t = 0; this.var = 1; this.pend = []; }
+    play(off, ev){ this.pend.push({off, ev}); }
+    doPlay(off, ev, pos){ const now = this.t + (pos || 0) + off; const base = withMod(this.patch, ev.mod), p = this.var ? vary(base, this.r, this.var, {cutoff: .1, ad: .1, fd: .12, drive: .1}) : base; const legato = this.v.on && now < this.endAt && (ev.slide || this.patch.legato);
       if (legato && this.v.glideTo){ this.v.glideTo(ev.note, ev.dur); this.v.target = A.mtof(ev.note); }
       else this.v.start(off, ev.note, clamp(ev.vel === undefined ? .9 : ev.vel, 0, 1.3), ev.dur || .25, p, legato);
       if (legato && !this.v.glideTo){ this.v.gateLeft = Math.max(1, Math.round((ev.dur || .25) * this.sr)); }
-      this.v.on = true; panTo(this.v, ev.pan); this.endAt = this.t + off + (ev.dur || .25) * this.sr; }
-    render(L, R, n){ if (this.v.on) this.v.on = this.v.render(L, R, n); this.t += n; return this.v.on; }
-    allOff(){ if (this.v.on && this.v.release) this.v.release(); } };
+      this.v.on = true; panTo(this.v, ev.pan); this.endAt = now + (ev.dur || .25) * this.sr; }
+    render(L, R, n){ const r = segRender(this, L, R, n); this.t += n; return r; }
+    renderVoices(L, R, n){ if (this.v.on) this.v.on = this.v.render(L, R, n); return this.v.on; }
+    allOff(){ this.pend.length = 0; if (this.v.on && this.v.release) this.v.release(); } };
 
   // continuous texture voices: rain (Poisson clicks through band-passes), hiss, wind, crackle, drone (just-intonation partials)
   A.TextureInst = class { constructor(sr, patch, seed){ this.sr = sr; this.patch = patch || {kind: 'rain'}; this.nz = new A.Noise(seed || 31); this.r = A.rng(seed || 31); this.a = new A.SVF(); this.b = new A.SVF(); this.c = new A.SVF(); this.lvl = new A.Smooth(0, .8, sr);

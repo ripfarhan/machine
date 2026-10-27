@@ -14,10 +14,10 @@ function AWZ_ENGINE(A){
     makeInst(slot, gp, spec){ const sr = this.sr, seed = A.hash(this.g.seed, slot) & 0xffff, p = gp.p;
       if (gp.inst === 'va' || gp.inst === 'mono' || gp.inst === 'bass') p.live = A.live();
       switch (gp.inst){
-        case 'va': return new A.PolyInst(sr, A.VAVoice, spec.voices || 10, p, seed);
+        case 'va': return new A.PolyInst(sr, A.VAVoice, Math.max(16, (spec.voices || 10) + 6), p, seed);
         case 'mono': return new A.MonoInst(sr, A.VAVoice, p, seed);
         case 'bass': return new A.MonoInst(sr, A.BassVoice, p, seed);
-        case 'modal': return new A.PolyInst(sr, A.ModalVoice, spec.voices || 10, p, seed);
+        case 'modal': return new A.PolyInst(sr, A.ModalVoice, Math.max(14, (spec.voices || 10) + 4), p, seed);
         case 'tex': return new A.TextureInst(sr, p, seed);
         default: return new A.DrumInst(sr, gp.inst, p, seed); } }
     makeTrack(slot, spec, id){ const gp = A.genomePatch(this.g, slot, this.reroll[slot] || 0), inst = this.makeInst(slot, gp, spec), norm = A.PATCH_NORM[gp.name] || 0;
@@ -55,13 +55,14 @@ function AWZ_ENGINE(A){
       if (force || Math.abs(fb - (this._fb || 0)) > .01 || Math.abs(wow - (this._wow || 0)) > 1e-5){ M.delay.set(Object.assign({}, this.baseDelay, {feedback: fb, wow, flutter: fl})); this._fb = fb; this._wow = wow; }
       // ENERGY: below the middle the music bus closes (dark, distant); above it the drums step forward and the tape works harder
       M.musicLP.set(m.energy < .5 ? 1800 * Math.pow(2, m.energy * 2 * 3.5) : 20000);
+      M.phaserMix = Math.max(0, m.motion - .45) * 1.3; if (M.phaser) M.phaser.set({rate: .04 + m.motion * .35, depth: 1, feedback: .35 + m.motion * .3, mix: Math.min(.7, M.phaserMix)});
       // MOOD: tilt; X (warm ↔ glass): tilt + per-track brightness; Y (clean ↔ broken): drive, tape, crush
       M.tiltHigh = this.baseTilt + (m.mood - .5) * 2.5 + (x - .5) * 3; M.tiltLow = 1 + (.5 - x) * .25;
       M.tape.set({drive: 1.1 + y * 1.4 + Math.max(0, m.energy - .5) * .8, bias: .04 + y * .08, lp: 17000 - y * 6000, mix: .6 + .4 * y}); M.crush = Math.max(0, y - .55) / .45;
       for (const tr of M.tracks){ if (tr.dying || !tr.spec) continue; const k = tr.instKind, melodic = k === 'va' || k === 'mono' || k === 'modal';
         if (tr.bus === 'music') tr.drive = tr.baseDrive + y * .55;
         if (tr.bus === 'drums') tr.gain.set(A.dbToGain((tr.spec.db || 0) + (A.PATCH_NORM[tr.patchName] || 0) + (tr.instKind === 'kick' ? 2 : 0) + (m.energy - .5) * 4));
-        if (melodic){ tr.liveT.cut = (x - .5) * 2.4; tr.liveT.lfo = (m.motion - .4) * 1.1; tr.liveT.rate = m.motion * 2.5; }
+        if (melodic){ tr.liveT.cut = (x - .5) * 2.4 + (tr.shCut || 0); tr.liveT.lfo = (m.motion - .3) * 1.8; tr.liveT.rate = m.motion * 5; }
         if (k === 'bass') tr.liveT.cut = (x - .5) * 1.2;
         if (k === 'modal'){ tr.inst.patch.bright = (tr.basePatch.bright || 1) * (.45 + 1.1 * x); tr.inst.patch.sustain = (tr.basePatch.sustain || 1) * (.7 + .8 * s); }
         if (tr.chorus) tr.chorus.mix = clamp(tr.baseChorus * (.5 + x) + m.motion * .2, 0, .9);
@@ -95,10 +96,13 @@ function AWZ_ENGINE(A){
       while (q.size && q.peek().t < end){ const e = q.pop(), tr = this.tracks[e.slot]; if (!tr || tr.dying) continue; const off = Math.max(0, Math.min(n - 1, e.t - this.t));
         tr.inst.play(off, e.ev); if (e.ev.kick && !tr.mute) this.mixer.kickAt(Math.max(this.t, e.t)); }
       // smooth live modulation; slow auto-pan with MOTION; fade dying tracks
+      // CHAOS ≥ .5: sample-and-hold filter jumps on every 16th (melodic tracks), snapping, not gliding
+      const ch = this.macro.chaos; if (this.comp){ const st = Math.floor((this.t - this.pieceStart) / this.comp.stepN); if (st !== this._shStep){ this._shStep = st; const amt = Math.max(0, ch - .5) * 2.4;
+          for (const tr of this.mixer.tracks){ if (tr.bus !== 'music' || !tr.spec) continue; const prev = tr.shCut || 0; tr.shCut = amt ? (Math.random() < .5 ? (Math.random() * 2 - 1) * amt : prev * .5) : 0; tr.liveT.cut += tr.shCut - prev; if (amt && tr.inst.patch && tr.inst.patch.live) tr.inst.patch.live.cut += tr.shCut - prev; } } }
       const kS = 1 - Math.exp(-n / (.12 * this.sr)), mo = this.macro.motion, dt = n / this.sr; let dead = false;
       for (const tr of this.mixer.tracks){ const lv = tr.inst.patch && tr.inst.patch.live;
         if (lv){ lv.cut += (tr.liveT.cut - lv.cut) * kS; lv.lfo += (tr.liveT.lfo - lv.lfo) * kS; lv.rate += (tr.liveT.rate - lv.rate) * kS; }
-        if (tr.bus === 'music' && tr.spec){ tr.panPh += tr.panRate * dt * (.3 + mo * 2); tr.pan = clamp(tr.basePan + Math.sin(tr.panPh * 6.2832) * mo * .45, -1, 1); }
+        if (tr.bus === 'music' && tr.spec){ tr.panPh += tr.panRate * dt * (.3 + mo * 6); tr.pan = clamp(tr.basePan + Math.sin(tr.panPh * 6.2832) * Math.max(0, mo - .2) * .9, -1, 1); }
         if (tr.dying){ tr.fade -= dt / 2.5; if (tr.fade <= 0){ tr.fade = 0; dead = true; } } }
       if (dead) this.mixer.tracks = this.mixer.tracks.filter(t => !(t.dying && t.fade <= 0));
       this.mixer.process(L, R, n, this.t); this.t = end; this.blocks++;

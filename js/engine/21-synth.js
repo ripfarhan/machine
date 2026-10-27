@@ -14,10 +14,11 @@ function AWZ_SYNTH(A){
       this.fL = new A.Ladder(); this.fR = new A.Ladder(); this.sL = new A.SVF(); this.sR = new A.SVF(); this.fenv = new A.ADSR(sr); this.aenv = new A.ADSR(sr); this.nz = new A.Noise(seed * 13 + 5); this.subPh = 0; this.r = A.rng(seed * 31 + 3); }
     start(off, note, vel, dur, p){ const sr = this.sr; this.p = p; this.off = off; this.note = note; this.vel = vel; this.cnt = 0; this.gateLeft = Math.max(1, Math.round(dur * sr));
       this.freq = mtof(note); this.target = this.freq; this.det0 = (this.r() * 2 - 1) * (p.detuneRand === undefined ? 3 : p.detuneRand);
-      const reset = p.phaseReset; for (let k = 0; k < 6; k++) this.o[k].ph = reset ? 0 : this.r();
-      this.subPh = 0; this.cutJ = 1 + (this.r() * 2 - 1) * .045; this.lfoPh = this.r(); this.vibT = 0;
+      const sounding = this.aenv.stage > 0 && this.aenv.v > 1e-3;   // re-used while audible (mono retrigger / steal): keep phase + filter state → no click
+      const reset = p.phaseReset; if (!sounding) for (let k = 0; k < 6; k++) this.o[k].ph = reset ? 0 : this.r();
+      if (!sounding) this.subPh = 0; this.cutJ = 1 + (this.r() * 2 - 1) * .045; this.lfoPh = this.r(); this.vibT = 0;
       this.fenv.setTimes(p.fa || .001, p.fd || .3, p.fs === undefined ? 0 : p.fs, p.fr || .3); this.aenv.setTimes(p.aa || .002, p.ad || .4, p.as === undefined ? .7 : p.as, (p.ar || .3) * (1 + (this.r() * 2 - 1) * .06));
-      this.fenv.v = 0; this.fenv.trigger(1); this.aenv.trigger(1); if (!p.legatoKeep){ this.fL.reset(); this.fR.reset(); this.sL.reset(); this.sR.reset(); }
+      this.fenv.v = 0; this.fenv.trigger(1); this.aenv.trigger(1); if (!p.legatoKeep && !sounding){ this.fL.reset(); this.fR.reset(); this.sL.reset(); this.sR.reset(); }
       this.k = 0; this.panW = 0;
       // unison detune ratios and pan gains are fixed per note: precompute (was pow() per sample per voice)
       const U = Math.max(1, Math.min(3, p.unison || 1)), sp = p.spread || 0, panSp = p.uniPan === undefined ? .6 : p.uniPan; this.U = U;
@@ -65,7 +66,7 @@ function AWZ_SYNTH(A){
   A.BassVoice = class { constructor(sr, seed){ this.sr = sr; this.osc = new A.VAOsc(sr, seed); this.osc2 = new A.VAOsc(sr, seed + 1); this.lad = new A.Ladder(); this.hp = new A.SVF(); this.lp = new A.SVF(); this.slp = new A.SVF(); this.fenv = new A.ADSR(sr); this.aenv = new A.ADSR(sr); this.dc = new A.DCBlock(); this.subPh = 0; }
     start(off, note, vel, dur, p, legato){ const sr = this.sr; this.p = p; this.off = off; this.vel = vel; this.note = note; this.gateLeft = Math.max(1, Math.round(dur * sr)); this.target = mtof(note);
       const sounding = this.aenv.stage > 0 && this.aenv.v > 1e-3;   // retrigger while still sounding: keep phase + env continuous (no click)
-      if (!legato || !this.freq){ this.freq = this.target; if (!sounding){ this.subPh = 0; this.osc.ph = 0; this.osc2.ph = .5; this.lad.reset(); } }
+      if (!legato || !this.freq){ this.freq = this.target; if (!sounding){ this.subPh = 0; this.osc.ph = .5; this.osc2.ph = .5; this.lad.reset(); this.hp.reset(); this.lp.reset(); this.slp.reset(); this.dc.x1 = this.dc.y1 = 0; } }   // saw starts at its zero crossing
       this.fenv.setTimes(.0008, p.fd || .15, p.fs || 0, p.fr || .1); this.aenv.setTimes(p.aa || .003, p.ad || .3, p.as === undefined ? .8 : p.as, p.ar || .06);
       if (!legato && !sounding){ this.fenv.v = 0; this.aenv.v = 0; } this.fenv.trigger(1); this.aenv.trigger(1); this.k = 0;
       this.hp.set(p.harmHP || 110, .7, sr); this.lp.set(p.harmLP || 3500, .7, sr); this.slp.set(p.subLP || 130, .7, sr); }

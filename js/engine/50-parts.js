@@ -28,7 +28,8 @@ function AWZ_PARTS(A){
   // ---------------------------------------------------------------- stabs: 32-step pattern (40–55 % density), short chord hits, cutoff swept by a 2-bar triangle
   A.PARTS.stab = class { constructor(P, o){ this.slot = o.slot || 'stab'; const r = this.r = P.rng('stab'); const k = o.hits || r.int(12, 17); this.pat = A.euclid(k, 32, r.int(0, 6)); for (let i = 0; i < 4; i++){ const j = r.int(0, 31); this.pat[j] = this.pat[j] ? 0 : 1; } this.pat[0] = 1; this.gate = o.gate || 1.4; this.vel = o.vel || .7; this.n = o.notes || 3; }
     bar(c){ const half = (c.barIndex & 1) * 16, notes = c.voicing.notes.slice(-this.n);
-      for (let s = 0; s < 16; s++){ if (!this.pat[half + s]) continue; if (c.E < .55 && (half + s) % 4 !== 0 && this.r() < .4) continue;
+      for (let s = 0; s < 16; s++){ const fill = !this.pat[half + s] && c.density > .62 && s % 2 === 0 && this.r() < (c.density - .62) * 1.6; if (!this.pat[half + s] && !fill) continue;
+        if ((c.E < .55 || c.density < .3) && (half + s) % 4 !== 0 && this.r() < .4 + (c.density < .3 ? .4 : 0)) continue;
         const ph = (half + s) / 32, tri = 1 - 2 * Math.abs(ph - .5), cm = -1.2 + 2.2 * tri * (.4 + .6 * c.E) + (c.brightness - .5);
         notes.forEach((m, i) => c.emit(this.slot, s + i * .03, {note: m, vel: this.vel * (s % 4 === 0 ? 1 : .82), dur: c.step * this.gate, mod: {cutMod: cm}})); } } };
 
@@ -41,8 +42,8 @@ function AWZ_PARTS(A){
       this.dur = o.dur || .8; this.vel0 = o.vel || .7; }
     bar(c){ const pool = []; c.voicing.notes.forEach(m => pool.push(m)); c.voicing.notes.forEach(m => pool.push(m + 12)); pool.sort((a, b) => a - b);
       this.lanes.forEach((L, k) => { if (k > 0 && c.E < .7 && !c.forceAll) return;
-        for (let s = 0; s < 16; s += L.rate){ const gs = c.barIndex * 16 + s; if (!L.gate[gs % L.len] && !(c.density > .75 && gs % 2 === 0)) continue;
-          if (c.density < .35 && s % 4 !== 0) continue;
+        for (let s = 0; s < 16; s += L.rate){ const gs = c.barIndex * 16 + s; if (!L.gate[gs % L.len] && !(c.density > .7 && this.r() < (c.density - .55))) continue;
+          if (c.density < .35 && s % (c.density < .18 ? 4 : 2) !== 0) continue;
           const i = L.n++ % L.period; if (i === 0 && this.r() < c.mutation) L.idx[this.r.int(0, L.period - 1)] = this.r.int(0, 5);
           let m = pool[L.idx[i] % pool.length] + 12 * L.oct; m = fitRange(m, L.lo, L.hi + L.oct * 6);
           const vel = this.vel0 * (.55 + .45 * L.vel[gs % 64]) * (i === 0 ? 1.1 : 1) * (k ? .7 : 1);
@@ -108,7 +109,8 @@ function AWZ_PARTS(A){
     bar(c){ const r = this.r, endPhrase = (c.barInSection % 8) === 7 && r() < .45, last = c.barsLeftInSection === 1 && c.nextBigger;
       let steps = this.mode === 'four' ? [0, 4, 8, 12] : this.mode === 'broken' ? this.alt : this.mode === 'sparse' ? [0, 8] : this.mode === 'halftime' ? [0, 10] : [0, 4, 8, 12];
       if (this.mode === 'four' && c.E > .8 && c.density > .6 && r() < .25) steps = steps.concat([14]);
-      steps.forEach(s => { if ((endPhrase || last) && s >= 12) return; c.emit(this.slot, s, {vel: this.vel * (s === 0 ? 1 : .92) * (.95 + .1 * r()), kick: true}); }); } };
+      if (c.density > .78 && this.mode !== 'sparse' && r() < (c.density - .78) * 3) steps = steps.concat([r.pick([3, 7, 11, 14, 15])]);
+      steps.forEach(s => { if ((endPhrase || last) && s >= 12) return; c.emit(this.slot, s, {vel: this.vel * (s === 0 ? 1 : steps.indexOf(s) > 3 ? .6 : .92) * (.95 + .1 * r()), kick: true}); }); } };
 
   // ---------------------------------------------------------------- backbeat: snare / clap / rim on 2&4 (or 3 in half-time), ghosts with density
   A.PARTS.backbeat = class { constructor(P, o){ this.slot = o.slot || 'snare'; this.mode = o.mode || 'two4'; this.r = P.rng('bb'); this.vel = o.vel || .7; }
@@ -119,7 +121,9 @@ function AWZ_PARTS(A){
   // ---------------------------------------------------------------- hats: offbeat 8ths → 16ths with accents; open on the offbeat at high energy; swing applied by composer
   A.PARTS.hats = class { constructor(P, o){ this.slot = 'hat'; this.r = P.rng('hats'); this.vel = o.vel || .55; this.acc = [1, .45, .75, .45]; this.v = A.voss(this.r, 64, 4); this.open = o.open === undefined ? .5 : o.open; }
     bar(c){ const r = this.r; for (let s = 0; s < 16; s++){ const off8 = s % 4 === 2, on16 = s % 2 === 1;
-        let play = off8 || (c.density > .55 && c.E > .55 && (s % 2 === 0 || r() < (c.density - .55))) || (on16 && c.density > .8 && r() < .5);
+        let play = off8 || (c.density > .5 && c.E > .45 && (s % 2 === 0 || r() < (c.density - .5) * 1.5)) || (on16 && c.density > .75 && r() < .7);
+        if (c.density < .25 && !off8) play = false;
+        if (play && c.density > .85 && r() < (c.density - .85) * 2) c.emit(this.slot, s + .5, {vel: this.vel * .35});
         if (!play) continue; const open = off8 && c.E > .78 && r() < this.open && s !== 14;
         c.emit(this.slot, s, {vel: this.vel * this.acc[s % 4] * (.7 + .3 * this.v[(c.barIndex * 16 + s) % 64]), open}); } } };
 

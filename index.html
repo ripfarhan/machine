@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maut ki Awaaz</title>
+<link rel="stylesheet" href="css/fonts.css">
+<style>
+:root{
+  --bg:#07070a; --panel:rgba(14,14,20,.74); --panel2:rgba(20,20,28,.86); --line:#1f1f2b; --ink:#ececf4; --dim:#7a7a8c; --hot:#ff2e88; --cyan:#22e5ff; --warn:#ffd23f;
+  --f:'Barlow Condensed','Arial Narrow','Roboto Condensed',sans-serif; --m:'Space Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--f);overflow:hidden;user-select:none;-webkit-user-select:none}
+button{font-family:var(--f);color:var(--ink);background:none;border:1px solid var(--line);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+button:hover{border-color:rgba(255,255,255,.3)} button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button.on{border-color:var(--hot);color:#fff;background:rgba(255,46,136,.16)}
+#field{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;display:block}
+#app{position:relative;z-index:1;height:100vh;display:grid;grid-template-rows:52px minmax(0,1fr) 118px 60px;gap:6px;padding:6px}
+.pan{background:var(--panel);border:1px solid var(--line);position:relative;min-height:0;min-width:0;transition:border-color .25s}
+.pan.bar-sweep{border-color:color-mix(in srgb,var(--hot) 45%,var(--line))}
+.lab{position:absolute;top:6px;left:9px;font-size:10px;letter-spacing:.16em;color:var(--dim);font-weight:600;z-index:3;pointer-events:none}
+canvas{display:block;width:100%;height:100%}
+/* top bar */
+#top{display:flex;align-items:center;gap:10px;padding:0 10px;background:var(--panel2);border:1px solid var(--line)}
+#logo{font-weight:800;font-size:22px;letter-spacing:.04em;transform:scaleY(1.3);transform-origin:center;white-space:nowrap;margin-right:6px}
+#logo b{color:var(--hot);font-weight:800}
+#top .grp{display:flex;gap:6px;align-items:center}
+#top button{height:34px;padding:0 12px;font-size:13px}
+#play{min-width:84px}
+.num{font-family:var(--m);font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink);white-space:nowrap}
+.num i{color:var(--dim);font-style:normal}
+#worlds{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0}
+#worlds::-webkit-scrollbar{display:none}
+#worlds button{height:28px;padding:0 6px;font-size:11px;letter-spacing:.04em;white-space:nowrap;border-color:transparent;color:var(--dim)}
+#worlds button.cur{color:#fff;border-color:var(--hot)}
+#worlds button.pick{color:var(--cyan);border-color:rgba(34,229,255,.5)}
+.sp{flex:1}
+/* main */
+#main{display:grid;grid-template-columns:clamp(220px,19vw,300px) minmax(0,1fr) clamp(250px,22vw,330px);gap:6px;min-height:0}
+#left,#right{display:grid;gap:6px;min-height:0}
+#left{grid-template-rows:minmax(0,1fr) minmax(170px,32%) auto}
+#right{grid-template-rows:auto minmax(0,1fr)}
+#center{display:grid;grid-template-rows:minmax(0,1fr) clamp(130px,24%,200px);gap:6px;min-height:0}
+#hero{background:transparent;border-color:rgba(255,255,255,.06)}
+#heroTxt{position:absolute;left:0;top:0;z-index:3;pointer-events:none;padding:12px 40px 14px 14px;background:linear-gradient(100deg,rgba(7,7,10,.78) 0%,rgba(7,7,10,.5) 65%,rgba(7,7,10,0) 100%)}
+#secName{font-size:52px;font-weight:800;letter-spacing:-.01em;line-height:.9;transform:scaleY(1.32);transform-origin:top left;text-transform:uppercase;text-shadow:0 0 30px rgba(0,0,0,.6)}
+#worldName{font-size:14px;letter-spacing:.22em;color:var(--hot);font-weight:600;margin-top:22px}
+#worldDesc{font-size:13px;color:rgba(236,236,244,.7);letter-spacing:.06em;margin-top:2px}
+#chordNow{font-family:var(--m);font-size:12px;color:var(--cyan);margin-top:8px}
+#brain{position:absolute;inset:0;overflow:hidden;padding:24px 10px 8px;font-size:12.5px;line-height:1.35;-webkit-mask-image:linear-gradient(#000 75%,transparent);mask-image:linear-gradient(#000 75%,transparent)}
+.bl{display:flex;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04);animation:fadeIn .3s}
+.bl .bt{font-family:var(--m);font-size:10px;color:var(--dim);flex:none;padding-top:2px}
+.bl.ai .bx{color:var(--hot)} .bl.sec .bx{color:#fff;font-weight:600;letter-spacing:.04em} .bl.you .bx{color:var(--cyan)}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1}}
+#taste{padding:8px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px}
+#taste button{height:38px;font-size:13px}
+#taste .big{font-size:18px}
+#learn{grid-column:1/-1;overflow:hidden;max-height:44px;font-size:11px;color:var(--dim);line-height:1.3;min-height:28px;padding-top:2px;letter-spacing:.03em}
+#learn b{color:var(--ink);font-weight:600}
+/* macros */
+#macros{padding:22px 8px 8px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.knob{position:relative;text-align:center}
+.knob canvas{height:88px;touch-action:none;cursor:ns-resize}
+.knob .kn{font-size:13px;font-weight:700;letter-spacing:.14em}
+.knob .kd{font-size:10px;color:var(--dim);letter-spacing:.05em;height:13px;white-space:nowrap;overflow:hidden}
+.knob input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+#xyWrap{padding:22px 8px 8px;display:flex;flex-direction:column}
+#xy{flex:1;min-height:100px;touch-action:none;cursor:crosshair;border:1px solid rgba(255,255,255,.06)}
+#xyNote{font-size:10px;color:var(--dim);padding-top:4px;letter-spacing:.05em}
+/* bottom */
+#bottom{display:grid;grid-template-columns:minmax(0,1fr) auto 150px 64px;gap:6px;min-height:0}
+#strips{display:flex;gap:4px;padding:6px;overflow:hidden}
+.strip{flex:1;min-width:52px;max-width:110px;border:1px solid rgba(255,255,255,.06);display:grid;grid-template-rows:auto 1fr auto;padding:4px;gap:3px;background:rgba(255,255,255,.015);transition:border-color .15s}
+.strip.flash{border-color:var(--hot)}
+.strip .sn{font-size:12px;font-weight:700;letter-spacing:.1em;white-space:nowrap;overflow:hidden}
+.strip .sp2{font-size:9px;color:var(--dim);font-family:var(--m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip canvas{height:100%;min-height:20px}
+.strip .sb{display:flex;gap:2px}
+.strip .sb button{flex:1;height:20px;font-size:10px;padding:0;letter-spacing:0}
+.strip.off{opacity:.42}
+#nudges{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;padding:8px;width:210px}
+#nudges button{font-size:14px;height:auto}
+#nudges button.q{border-color:var(--cyan);color:var(--cyan)}
+#arc{grid-row:4}
+/* gate */
+#gate{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(255,46,136,.08),rgba(7,7,10,.96) 60%)}
+#gate .card{width:min(560px,92vw);padding:34px;border:1px solid var(--line);background:rgba(10,10,15,.92)}
+#gate h1{font-size:64px;font-weight:800;line-height:.85;transform:scaleY(1.3);transform-origin:top left;letter-spacing:-.01em;margin-bottom:56px}
+#gate h1 b{color:var(--hot)}
+#gate p{color:rgba(236,236,244,.75);font-size:15px;line-height:1.4;letter-spacing:.02em;margin-bottom:14px}
+#gate .row{display:flex;gap:6px;margin:16px 0}
+#gate .row button{flex:1;height:36px;font-size:13px}
+#go{width:100%;height:56px;font-size:22px;letter-spacing:.2em;border-color:var(--hot);background:rgba(255,46,136,.12);margin-top:8px}
+#gate small{display:block;color:var(--dim);font-size:11px;margin-top:14px;letter-spacing:.03em}
+/* toast / export */
+#toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:15;padding:10px 16px;background:rgba(10,10,15,.95);border:1px solid var(--hot);font-size:14px;letter-spacing:.05em;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
+/* reel */
+#reel{position:fixed;inset:0;z-index:12;background:#000;display:none;align-items:center;justify-content:center}
+#reel.show{display:flex}
+#reelCv{height:100vh;width:calc(100vh * 9 / 16);max-width:100vw}
+#reelBar{position:fixed;top:10px;right:10px;display:flex;gap:6px;z-index:13}
+#reelBar button{height:32px;padding:0 12px;background:rgba(0,0,0,.6)}
+body.idle #app .pan:not(#hero),body.idle #top{opacity:.35;transition:opacity 1.2s}
+body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
+@media (max-width:1500px){#logo{font-size:18px}#top .num i{display:none}#top button{padding:0 9px}}
+@media (max-width:1100px){#left{display:none}#main{grid-template-columns:minmax(0,1fr) 270px}}
+</style>
+</head>
+<body>
+<canvas id="field"></canvas>
+<div id="app">
+  <div id="top">
+    <div id="logo">MAUT KI <b>AWAAZ</b></div>
+    <div class="grp"><button id="play" title="Space">▶ PLAY</button><button id="next" title="N — next piece now">NEXT ⏭</button></div>
+    <div id="worlds" role="group" aria-label="worlds"></div>
+    <div class="grp"><span class="num" id="clock"><i>BAR</i> 000:0</span><span class="num" id="bpm"><i>BPM</i> ---</span><span class="num" id="keyTxt"><i>KEY</i> --</span></div>
+    <div class="grp"><button id="rec" title="record what you hear (WAV)">● REC</button><button id="export" title="render this whole piece to WAV">⤓ EXPORT</button><button id="reelBtn" title="R — 9:16 visual for reels">REEL</button><button id="mode" title="V — visual intensity">FULL</button></div>
+  </div>
+  <div id="main">
+    <div id="left">
+      <div class="pan"><div class="lab">BRAIN · WHAT I'M DOING</div><div id="brain"></div></div>
+      <div class="pan"><div class="lab">HARMONY</div><canvas id="wheel"></canvas></div>
+      <div class="pan" id="taste"><button id="like" class="big" title="L — I like this">♥</button><button id="skip" class="big" title="X — skip">✕</button><button id="more" title="more like this">MORE</button><button id="surprise" title="surprise me">SURPRISE</button><div id="learn">The AI learns what you like: ♥ = more of this, ✕ = skip.</div></div>
+    </div>
+    <div id="center">
+      <div class="pan" id="hero"><canvas id="heroCv"></canvas><div id="heroTxt"><div id="secName">—</div><div id="worldName"></div><div id="worldDesc"></div><div id="chordNow"></div></div></div>
+      <div class="pan"><div class="lab" style="left:auto;right:60px">VOICES · FUTURE NOTES ▸</div><canvas id="lanes"></canvas></div>
+    </div>
+    <div id="right">
+      <div class="pan"><div class="lab">MACROS</div><div id="macros"></div></div>
+      <div class="pan" id="xyWrap"><div class="lab">MORPH</div><canvas id="xy"></canvas><div id="xyNote">X: warm → glass · Y: clean → broken</div></div>
+    </div>
+  </div>
+  <div id="bottom">
+    <div class="pan" id="strips"></div>
+    <div class="pan" id="nudges"><button data-n="build" title="B">BUILD</button><button data-n="peak" title="P">PEAK</button><button data-n="break" title="K">BREAK</button><button data-n="hold" title="H">HOLD</button></div>
+    <div class="pan"><div class="lab">STEREO</div><canvas id="gonio"></canvas></div>
+    <div class="pan"><canvas id="meter"></canvas></div>
+  </div>
+  <div class="pan" id="arcP"><canvas id="arc"></canvas></div>
+</div>
+<div id="gate"><div class="card">
+  <h1>MAUT KI<br><b>AWAAZ</b></h1>
+  <p>A machine that writes and plays its own electronic music, live, in eight worlds inspired by the Max Cooper universe. It never plays the same thing twice. Turn the knobs; it listens to what you like.</p>
+  <div class="row" id="gateWorlds"></div>
+  <div class="row"><button data-m="FULL" class="on">FULL VISUALS</button><button data-m="CALM">CALM</button><button data-m="STILL">STILL</button></div>
+  <button id="go">START</button>
+  <small>Visuals react to the music and include pulses. Choose CALM or STILL if you are sensitive to flashing. Headphones or proper speakers recommended — there is real sub-bass.</small>
+</div></div>
+<div id="reel"><canvas id="reelCv"></canvas><div id="reelBar"><button id="reelRec">● RECORD VIDEO</button><button id="reelExit">EXIT</button></div></div>
+<div id="toast"></div>
+<script src="js/engine/00-util.js"></script>
+<script src="js/engine/10-dsp.js"></script>
+<script src="js/engine/20-drums.js"></script>
+<script src="js/engine/21-synth.js"></script>
+<script src="js/engine/22-fx.js"></script>
+<script src="js/engine/25-inst.js"></script>
+<script src="js/engine/30-mixer.js"></script>
+<script src="js/engine/40-theory.js"></script>
+<script src="js/engine/50-parts.js"></script>
+<script src="js/engine/55-composer.js"></script>
+<script src="js/engine/58-target.js"></script>
+<script src="js/engine/59-norm.js"></script>
+<script src="js/engine/60-worlds.js"></script>
+<script src="js/engine/80-engine.js"></script>
+<script src="js/ui/host.js"></script>
+<script src="js/ui/ai.js"></script>
+<script src="js/ui/viz.js"></script>
+<script src="js/ui/reel.js"></script>
+<script src="js/ui/app.js"></script>
+</body>
+</html>
