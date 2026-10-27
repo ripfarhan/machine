@@ -131,6 +131,7 @@ a piece lands on the balance measured across the reference tracks in
 - two polymetric percussion lines on chord tones, a polymetric arpeggio cycle
   (3, 5, 6 or 7 against the bar) with 1/f accents and chaos-driven ratchets,
   a felt piano that plays broken chords in the breakdown and the intro;
+- the arpeggio is a soft synth pluck (two detuned saws and a sub square through a 4-pole low-pass with a falling cutoff, no resonance) or a round FM blip; it plays in 2-bar phrases with rests and runs continuously only in the peaks. String, bell, glass and mallet voices are never picked automatically, only by hand;
 - roles enter one at a time (every few bars in the intro, faster in the second
   build), the break keeps pad + keys (+ one or two others), the outro removes
   them in reverse;

@@ -122,6 +122,22 @@ function SYNTH_CORE(){
       let env; if (i < atk) env = i / atk; else { d *= dk; env = P.sus + (1 - P.sus) * d; } if (i > gN) rel *= rk;
       m[i] = s.lp * env * rel * .5 + (P.sub ? sin1(i * f * (f < 70 ? 1 : .5) / sr) * env * rel * P.sub : 0); }
     fadeTail(m, sr, .01); return {m}; };
+  // synth pluck: two detuned saws + a quiet square an octave down through a 4-pole low-pass whose cutoff falls fast. No resonance, no
+  // inharmonic partials, so it never rings like a bell or a string — the soft analog arp of modern electronica.
+  I.synpluck = (sr, e) => { const P = e.p, f = e.f, n = Math.ceil((Math.min(e.dur, 2) + P.dec * 5 + .03) * sr), m = new Float32Array(n), s1 = svf(), s2 = svf(), nz = rngOf(e.seed);
+    const dt1 = f * (1 - P.det) / sr, dt2 = f * (1 + P.det) / sr, dt3 = f * .5 / sr; let t1 = nz(), t2 = nz(), t3 = nz(), fe = 1, a = 1;
+    const fk = Math.exp(-1 / (P.fdec * sr)), ak = Math.exp(-1 / (P.dec * sr)), atk = Math.max(1, .0025 * sr), br = clamp(e.bright === undefined ? .6 : e.bright, .15, 1.2), vel = e.vel === undefined ? .8 : e.vel;
+    const base = clamp(f * P.cut, 120, 4000), top = clamp(f * P.famt * (.4 + .6 * vel) * (.5 + br), base, 9000);
+    for (let i = 0; i < n; i++){ t1 += dt1; if (t1 >= 1) t1 -= 1; t2 += dt2; if (t2 >= 1) t2 -= 1; t3 += dt3; if (t3 >= 1) t3 -= 1;
+      const x = (2 * t1 - 1 - blep(t1, dt1)) * .5 + (2 * t2 - 1 - blep(t2, dt2)) * .5 + ((t3 < .5 ? 1 : -1) + blep(t3, dt3) - blep((t3 + .5) % 1, dt3)) * P.sub;
+      if ((i & 15) === 0){ const fc = base + (top - base) * fe; svfSet(s1, fc, .62, sr); svfSet(s2, fc, .55, sr); } fe *= fk;
+      const y = svfTick(s2, svfTick(s1, x)); m[i] = y * a * (i < atk ? i / atk : 1) * .45; a *= ak; }
+    fadeTail(m, sr, .01); return {m}; };
+  // blip: a sine with a short harmonic FM transient (ratio 2, index falling to zero in ~25 ms) — soft, round, dry
+  I.blip = (sr, e) => { const P = e.p, f = e.f, n = Math.ceil((P.dec * 5 + .02) * sr), m = new Float32Array(n); let pc = 0, pm = 0, ie = 1, a = 1;
+    const ik = Math.exp(-1 / (.025 * sr)), ak = Math.exp(-1 / (P.dec * sr)), atk = Math.max(1, .003 * sr), I0 = P.index * (e.vel === undefined ? .8 : e.vel);
+    for (let i = 0; i < n; i++){ pc += f / sr; pm += f * 2 / sr; m[i] = sin1(pc + I0 * ie * sin1(pm) / TAU) * a * (i < atk ? i / atk : 1) * .5; ie *= ik; a *= ak; }
+    fadeTail(m, sr, .01); return {m}; };
   // mallet = modal bar/glass struck at pitch
   I.mallet = (sr, e) => I.perc(sr, {f: e.f, body: e.p.body, decay: e.p.decay * (e.dur > .4 ? 1.2 : 1), hard: .4 + .5 * (e.bright || .5), seed: e.seed});
   // keys: a two-pair FM piano (tone pair at 1:1, hammer pair at 1:14), key-tracked decay, three slightly detuned strings per note,
@@ -131,7 +147,7 @@ function SYNTH_CORE(){
     const lp = svf(), lpR = svf(); const fc = kind === 'felt' ? 2600 * (.5 + br) : kind === 'epiano' ? 3600 * (.5 + br) : 6500 * (.5 + br); svfSet(lp, fc, .55, sr); svfSet(lpR, fc * 1.05, .55, sr);
     notes.forEach((mn, j) => { const f = mtof(mn), [gl, gr] = panLR(clamp((mn - 64) / 30, -.55, .55) + (nn > 1 ? (j / (nn - 1) - .5) * .3 : 0));
       const dec = clamp(maxDec * Math.pow(220 / f, .55), .35, maxDec), dk = Math.exp(-1 / (dec * sr)), rk = Math.exp(-1 / ((P.rel || .4) * sr)), atk = Math.max(1, .0025 * sr);
-      const I0 = (kind === 'epiano' ? 1.2 : kind === 'glass' ? 1.7 : 1.0) * (.45 + .9 * vel) * (.6 + .6 * br) * Math.sqrt(clamp(330 / f, .3, 2)), ik = Math.exp(-1 / ((kind === 'glass' ? .9 : .32) * sr)), hamI = (kind === 'felt' ? .5 : .3) * vel, hk = Math.exp(-1 / (.02 * sr));
+      const I0 = (kind === 'epiano' ? 1.2 : kind === 'glass' ? 1.7 : 1.0) * (.45 + .9 * vel) * (.6 + .6 * br) * Math.sqrt(clamp(330 / f, .3, 2)), ik = Math.exp(-1 / ((kind === 'glass' ? .9 : .32) * sr)), hamI = (kind === 'felt' ? .5 : kind === 'glass' ? .08 : .3) * vel, hk = Math.exp(-1 / (.02 * sr));
       const strings = kind === 'epiano' ? [[0, 1]] : [[-1.8, .5], [0, 1], [1.9, .5]];
       for (const [cents, g] of strings){ const fv = f * Math.pow(2, cents / 1200); let pc = nz(), pm = nz(), ph = nz(), ie = 1, he = 1, a = 1, rel = 1, fb = 0;
         for (let i = 0; i < n; i++){ const env = (i < atk ? i / atk : 1) * a; a *= dk; if (i > gN) rel *= rk; if (rel < 1e-4) break;
@@ -188,7 +204,7 @@ function SYNTH_CORE(){
     else if (P.kind === 'glitch'){ let t = .2; const bt = P.beat || .5;
       while (t < e.dur){ const z = lzAt(e, t), ch = e.chordAt(e.t + t), mn = ch[(nz() * ch.length) | 0] + 12 * (1 + ((nz() * 3) | 0)), f = mtof(mn), burst = nz() < .22 ? 2 + ((nz() * 5) | 0) : 1, step = bt / 8 * (nz() < .5 ? 1 : .5);
         for (let b = 0; b < burst; b++){ const s0 = ((t + b * step) * sr) | 0, glen = (.006 + nz() * .045) * sr, [gl, gr] = panLR(nz() < .5 ? -.8 - nz() * .2 : .8 + nz() * .2), g = (.16 + .12 * nz()) * (1 - b / (burst + 1)); let ph = 0, pm = 0;
-          for (let i = 0; i < glen && s0 + i < n; i++){ const w = i < 24 ? i / 24 : Math.exp(-(i - 24) / (glen * .35)); ph += f / sr; pm += f * 3.01 / sr; const x = sin1(ph + .6 * sin1(pm) / TAU) * w * g; l[s0 + i] += x * gl; r[s0 + i] += x * gr; } }
+          for (let i = 0; i < glen && s0 + i < n; i++){ const w = i < 24 ? i / 24 : Math.exp(-(i - 24) / (glen * .35)); ph += f / sr; pm += f * 2 / sr; const x = sin1(ph + .4 * sin1(pm) / TAU) * w * g; l[s0 + i] += x * gl; r[s0 + i] += x * gr; } }
         t += bt / 4 * (1 + ((nz() * (10 - P.density * .6 + 2 * (1 - z))) | 0)); } }
     else if (P.kind === 'crackle'){ const h = svf(); svfSet(h, 2400, .6, sr); let pop = 0, hiss = 0; const pr = 7 * (P.rate || 1) / sr;
       for (let i = 0; i < n; i++){ if (nz() < pr) pop = (nz() * 2 - 1) * (nz() < .12 ? 1 : .3); else pop *= .25; hiss = (nz() * 2 - 1) * .012; svfTick(h, pop + hiss); const x = h.hp * .6; l[i] = x; r[i] = nz() < .5 ? x : x * .7; } }
@@ -316,10 +332,10 @@ function SYNTH_CORE(){
     const form = ['arc', 'rise', 'twin', 'ambient', 'cooper', 'steps'].indexOf(p.form) >= 0 ? p.form : pickW(R, {cooper: 30, steps: 20, arc: 20, rise: 15, twin: 15, ambient: rhythm === 'none' ? 80 : 2});
     const mt = p.metal, ring = Math.max(0, mt - .6) * 5, bright = p.bright;
     // ---------- palette (auto picks lean to what carries an emotional electronic piece: pianos, plucks, lush pads)
-    const SW = (STYLES[p.style] || STYLES.cooper).pal || {}, W = (k, d) => Object.assign({}, d, SW[k] || {});
-    const pal = {bass: pickW(R, W('bass', {sub: 3, fm: 2, subsaw: 3, string: .5})), arp: pickW(R, W('arp', {saw: 3, pluck: 3, glass: 1.5, keys: .6, epiano: .4, mallet: .3 + mt, bell: ring})),
-      pad: pickW(R, W('pad', {lush: 4, fmpad: 2, additive: 1.5, supersaw: 1.5})), lead: pickW(R, W('lead', {pluck: 2.5, glass: 2, sawlead: 1.5, fmlead: 1.5, keys: .5, mallet: ring * .5})),
-      perc: pickW(R, W('perc', {wood: 3, membrane: 2, glass: .5 + ring * .5, metal: ring * .4})), tex: pickW(R, W('tex', {grains: 2 + mt, wind: 2, chaos: 1.5, crackle: .3})), keys: pickW(R, W('keys', {glass: 2, felt: 2, epiano: .5}))};
+    const SW = (STYLES[p.style] || STYLES.cooper).pal || {}, BANNED = {arp: ['pluck', 'mallet', 'bell', 'glass', 'keys', 'epiano'], lead: ['pluck', 'glass', 'keys', 'mallet']}, W = (k, d) => { const o = Object.assign({}, d, SW[k] || {}); (BANNED[k] || []).forEach(x => delete o[x]); return o; };
+    const pal = {bass: pickW(R, W('bass', {sub: 3, fm: 2, subsaw: 3})), arp: pickW(R, W('arp', {synth: 5, blip: 2, saw: 2})),
+      pad: pickW(R, W('pad', {lush: 4, fmpad: 2, additive: 1.5, supersaw: 1.5})), lead: pickW(R, W('lead', {synth: 3, sawlead: 2, fmlead: 1.5})),
+      perc: pickW(R, W('perc', {membrane: 3, wood: 1})), tex: pickW(R, W('tex', {grains: 2 + mt, wind: 2, chaos: 1.5, crackle: .3})), keys: pickW(R, W('keys', {glass: 2, felt: 2, epiano: .5}))};
     for (const k in pal) if (p.palette[k] && p.palette[k] !== 'auto') pal[k] = p.palette[k];
     const malletBody = r => pickW(r, {bar: 3, wood: 2, glass: ring, metal: ring * .6});
     const keysOf = kind => ({inst: 'keys', kind, rel: kind === 'glass' ? .6 : .4});
@@ -332,20 +348,23 @@ function SYNTH_CORE(){
         : pal.bass === 'subsaw' ? {inst: 'saw', cut: rr(R, 1.3, 2.4), famt: rr(R, 2, 8) * (.5 + bright), fdec: rr(R, .06, .25), res: rr(R, .8, 1.8), atk: .004, dec: .35, sus: .75, rel: .07, sub: .6, det: .002}
         : pal.bass === 'string' ? {inst: 'string', t60: rr(R, .9, 2.2), bright: rr(R, .18, .4), rel: .1}
         : {inst: 'mono', kind: 'sub', atk: .008, dec: .6, sus: .85, rel: .09, glide: .04, gain: 1.05},
-      arp: pal.arp === 'bell' ? {inst: 'fm', ratio: pick(R, [3.5, 1.4142, 2.756, 4, 1.618, 3]), index: rr(R, 1.5, 3.2) * (.5 + mt), indexSus: rr(R, 0, .3), idecay: rr(R, .06, .3), atk: .002, dec: rr(R, .25, .8), sus: 0, rel: rr(R, .25, .7)}
+      arp: pal.arp === 'synth' ? {inst: 'synpluck', det: rr(R, .002, .006), cut: rr(R, 1.1, 1.8), famt: rr(R, 4, 9), fdec: rr(R, .05, .14), dec: rr(R, .14, .32), sub: rr(R, 0, .25)}
+        : pal.arp === 'blip' ? {inst: 'blip', index: rr(R, .6, 1.6), dec: rr(R, .08, .2)}
+        : pal.arp === 'bell' ? {inst: 'fm', ratio: pick(R, [3.5, 1.4142, 2.756, 4, 1.618, 3]), index: rr(R, 1.5, 3.2) * (.5 + mt), indexSus: rr(R, 0, .3), idecay: rr(R, .06, .3), atk: .002, dec: rr(R, .25, .8), sus: 0, rel: rr(R, .25, .7)}
         : pal.arp === 'epiano' ? {inst: 'fm', ratio: 1, ratio2: 14, index: rr(R, .9, 1.8) * (.6 + mt * .6), index2: rr(R, .3, .9), indexSus: .2, idecay: rr(R, .15, .4), atk: .002, dec: rr(R, .5, 1.2), sus: .1, rel: .3}
         : pal.arp === 'pluck' ? {inst: 'string', t60: rr(R, .6, 2.2), bright: rr(R, .35, .9), rel: .08}
-        : pal.arp === 'saw' ? {inst: 'saw', cut: rr(R, 1.2, 2.6), famt: rr(R, 3, 10) * (.4 + bright), fdec: rr(R, .04, .2), res: rr(R, .7, 2.2), atk: .002, dec: rr(R, .1, .4), sus: rr(R, 0, .3), rel: rr(R, .05, .25), sq: R() < .4, det: rr(R, .002, .008)}
+        : pal.arp === 'saw' ? {inst: 'saw', cut: rr(R, 1.2, 2.2), famt: rr(R, 3, 8) * (.4 + bright), fdec: rr(R, .04, .16), res: rr(R, .6, 1.1), atk: .002, dec: rr(R, .1, .4), sus: rr(R, 0, .3), rel: rr(R, .05, .25), sq: R() < .4, det: rr(R, .002, .008)}
         : pal.arp === 'keys' ? keysOf(pal.keys) : pal.arp === 'glass' ? keysOf('glass') : {inst: 'mallet', body: malletBody(R), decay: rr(R, .45, 1.1)},
       pad: pal.pad === 'lush' ? {kind: 'lush', det: rr(R, 9, 22), cut: rr(R, 700, 2200) * (.5 + bright), res: rr(R, .5, .8), atk: rr(R, .8, 2.4), rel: rr(R, 1.5, 3.5)}
         : pal.pad === 'supersaw' ? {kind: 'supersaw', det: rr(R, 7, 18), cut: rr(R, 700, 1800) * (.5 + bright), res: rr(R, .6, 1), atk: rr(R, .4, 1.6), rel: rr(R, 1, 2.8)}
         : pal.pad === 'fmpad' ? {kind: 'fmpad', ratio: pick(R, [1, 2, .5, 3]), index: rr(R, .4, 1.4) * (.5 + mt), lfo: rr(R, .04, .2), det: rr(R, 3, 9), atk: rr(R, .6, 2), rel: rr(R, 1.2, 3)}
         : {kind: 'additive', tilt: rr(R, 1, 1.7) - bright * .4, stretch: rr(R, 0, .001), shimmer: rr(R, .05, .35), atk: rr(R, .7, 2), rel: rr(R, 1.2, 3)},
-      lead: pal.lead === 'fmlead' ? {inst: 'fm', ratio: pick(R, [1, 2, 3]), index: rr(R, 1, 2.4) * (.5 + mt), indexSus: rr(R, .4, 1.1), idecay: rr(R, .15, .5), atk: .012, dec: .45, sus: .7, rel: .25, vib: .004, fb: rr(R, 0, .4)}
+      lead: pal.lead === 'synth' ? {inst: 'synpluck', det: rr(R, .003, .007), cut: rr(R, 1.4, 2.2), famt: rr(R, 3, 6), fdec: rr(R, .12, .3), dec: rr(R, .35, .7), sub: rr(R, .1, .3)}
+        : pal.lead === 'fmlead' ? {inst: 'fm', ratio: pick(R, [1, 2]), index: rr(R, .8, 1.6) * (.5 + mt * .5), indexSus: rr(R, .4, 1.1), idecay: rr(R, .15, .5), atk: .012, dec: .45, sus: .7, rel: .25, vib: .004, fb: rr(R, 0, .4)}
         : pal.lead === 'sawlead' ? {inst: 'saw', cut: 2, famt: rr(R, 3, 7) * (.4 + bright), fdec: .3, res: rr(R, .8, 1.8), atk: .01, dec: .5, sus: .7, rel: .2, vib: .0045, det: .006}
         : pal.lead === 'pluck' ? {inst: 'string', t60: rr(R, 1.4, 3.2), bright: rr(R, .5, 1), rel: .15}
         : pal.lead === 'glass' ? keysOf('glass') : pal.lead === 'keys' ? keysOf(pal.keys) : {inst: 'mallet', body: malletBody(R), decay: rr(R, .8, 1.3)},
-      keys: keysOf(pal.keys), perc: {body: pal.perc, decay: rr(R, .45, .9), reg: pal.perc === 'glass' || pal.perc === 'metal' ? 60 : pal.perc === 'wood' ? 55 : 50},
+      keys: keysOf(pal.keys), perc: {body: pal.perc, decay: rr(R, .3, .55), reg: pal.perc === 'glass' || pal.perc === 'metal' ? 60 : pal.perc === 'wood' ? 50 : 43},
       tex: pal.tex === 'grains' ? {kind: 'grains', density: rr(R, 5, 14), fm: rr(R, .1, .8) * (.3 + mt)} : pal.tex === 'wind' ? {kind: 'wind', q: rr(R, 3, 9)} : pal.tex === 'crackle' ? {kind: 'crackle', rate: 1} : pal.tex === 'glitch' ? {kind: 'glitch', density: rr(R, 4, 11), beat: 60 / p.bpm} : {kind: 'chaos'}};
 
     // ---------- form: sections with an energy curve
@@ -420,7 +439,7 @@ function SYNTH_CORE(){
     const bassEu = euclid(5, 16, Math.floor(V() * 4) * 2);
     const polyLens = p.poly < .25 ? [8, 16] : p.poly < .55 ? [6, 12, 10] : p.poly < .8 ? [5, 7, 9, 11] : [7, 9, 11, 13, 5];
     const pA = {len: pick(V, polyLens)}, pB = {len: pick(V, polyLens)}; pA.pat = euclid(2 + Math.floor(V() * 3), pA.len, Math.floor(V() * pA.len)); pB.pat = euclid(2 + Math.floor(V() * 2), pB.len, Math.floor(V() * pB.len));
-    pA.tone = Array.from({length: pA.len}, () => pick(V, [0, 0, 1, 2])); pB.tone = Array.from({length: pB.len}, () => pick(V, [0, 1]));   // chord-tone index, never a random scale degree
+    pA.tone = Array.from({length: pA.len}, () => pick(V, [0, 0, 0, 2])); pB.tone = Array.from({length: pB.len}, () => 0);   // chord-tone index, never a random scale degree
     const hatAcc = euclid(pick(V, [5, 7, 3]), 16, Math.floor(V() * 16)), hatVoss = voss(V, 64, 5);
 
     // ---------- motif: rhythm from Euclid / a Fibonacci word / a cellular automaton; pitch from a 1/f walk, an L-system or a Lorenz slice; everything on chord-tone rungs
@@ -487,8 +506,8 @@ function SYNTH_CORE(){
     const T = (gs, s) => gs * ST + ((s & 1) ? (p.swing - .5) * 2 * ST : 0) + ((s & 3) ? (V() * 2 - 1) * p.humanize * .006 : 0);
     const add = o => { o.seed = hashSeed(p.seed, p.vary, seq++); ev.push(o); return o; };
     const G = {kick: .78, snare: .7, hat: .4, perc: .15, bass: .3, arp: .21, pad: .26, keys: .39, lead: .24, tex: .24, drone: .1, riser: .17, impact: .42};
-    const ARPMUL = {keys: 1.15, pluck: 1, saw: .85, epiano: 1.1, mallet: 1, bell: .8}, LEADMUL = {keys: 1.3, pluck: 1.1, glass: 1.1, sawlead: .8, fmlead: .9, mallet: 1};
-    let arpCfg = null, arpCfg2 = null, lastFillBar = -9, phraseCache = null;
+    const ARPMUL = {synth: 1.25, blip: 1.1, keys: 1.15, pluck: 1, saw: .85, epiano: 1.1, mallet: 1, bell: .8}, LEADMUL = {synth: 1.2, keys: 1.3, pluck: 1.1, glass: 1.1, sawlead: .8, fmlead: .9, mallet: 1};
+    let arpCfg = null, arpCfg2 = null, lastFillBar = -9, phraseCache = null; const arpMask = pick(V, [[1, 1, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1], [1, 0, 1, 0]]);
     const bassNotes = []; let bassStart = 0;
     const flushBass = endBar => { if (bassNotes.length){ const t0 = bassStart * BT, len = endBar * BT - t0; add({inst: 'mono', t: t0, len, notes: bassNotes.map(n => Object.assign({}, n, {t: n.t - t0, dur: Math.min(n.dur, len - (n.t - t0))})), p: PT.bass, bus: 'bass', pan: 0, v: G.bass}); } bassNotes.length = 0; };
     const playBass = (t, bar, pitch, dur, v) => { if (PT.bass.inst === 'mono'){ if (!bassNotes.length) bassStart = bar; bassNotes.push({t, m: pitch, dur, v}); } else add({inst: PT.bass.inst, t, v: v * G.bass, f: mtof(pitch), dur, p: PT.bass, bright: .6, bus: 'bass', pan: 0}); };
@@ -528,8 +547,8 @@ function SYNTH_CORE(){
           const open = (rhythm === 'four' && (s & 3) === 2 && e > .55 && (bassStyle !== 'offbeat' || (bar & 1))) || (s === 14 && hRow[s] && e > .75);
           if (pl && (e > .45 || (s & 1) === 0)) add({inst: 'hat', t, v: acc * (.7 + .3 * hatVoss[gs % 64]) * G.hat * dyn * (open ? 1.25 : 1), open, p: PT.hat, bus: 'drums', pan: (s & 2 ? .5 : -.5) * p.width}); }
         // two polymetric percussion lines on chord tones, thinned by the automaton
-        if (set.has('perc')){ const ia = gs % pA.len, ib = gs % pB.len, pcsA = ladderOf(ch, PT.perc.reg, PT.perc.reg + 12);
-          if (pA.pat[ia] && (pRow[s] || e < .5 || lg > .35)) add({inst: 'perc', t, v: (.5 + .5 * lg) * G.perc * (.5 + .5 * dyn), f: mtof(pcsA[pA.tone[ia] % pcsA.length]), body: PT.perc.body, decay: PT.perc.decay, hard: .3 + .5 * lg, bus: 'duck', pan: ((ia / pA.len) - .5) * 1.6 * p.width, sv: .18, sd: .12 * p.delay});
+        if (set.has('perc') && e > .5){ const ia = gs % pA.len, ib = gs % pB.len, pcsA = ladderOf(ch, PT.perc.reg, PT.perc.reg + 12);
+          if (pA.pat[ia] && (pRow[s] || lg > .55)) add({inst: 'perc', t, v: (.5 + .5 * lg) * G.perc * (.5 + .5 * dyn), f: mtof(pcsA[pA.tone[ia] % pcsA.length]), body: PT.perc.body, decay: PT.perc.decay, hard: .3 + .5 * lg, bus: 'duck', pan: ((ia / pA.len) - .5) * 1.6 * p.width, sv: .18, sd: .12 * p.delay});
           if (pB.pat[ib] && e > .35 && lg > .3){ const pcsB = ladderOf(ch, 43, 55); add({inst: 'perc', t: t + .001, v: (.35 + .4 * lg) * G.perc, f: mtof(pcsB[pB.tone[ib] % pcsB.length]), body: pB.len % 2 ? 'wood' : 'membrane', decay: .6, hard: .6, bus: 'duck', pan: -((ib / pB.len) - .5) * 1.4 * p.width, sv: .12, sd: .1 * p.delay}); } }
         // bass: the root, held across the chord or moving under the kick; a fifth or octave now and then
         if (set.has('bass')){ let hit = false, len = 2, d = 0;
@@ -555,8 +574,8 @@ function SYNTH_CORE(){
             const vel = (.55 + .45 * cfg.vel[gs % 32]) * (ci === 0 ? 1.12 : 1) * (.45 + .55 * dyn) * vMul, gate = cfg.rate * ST * (.6 + 1.2 * lg);
             const ratchet = chaosOn > .4 && lg > .93 && cfg.rate === 1 ? 2 : 1;
             for (let q = 0; q < ratchet; q++) add({inst: PT.arp.inst, t: t + q * ST / 2, v: vel * G.arp * (ARPMUL[pal.arp] || 1) * (q ? .7 : 1), f: mtof(mn), vel, dur: gate / ratchet, p: PT.arp, body: PT.arp.body, decay: PT.arp.decay, bright: brt, bus: 'duck', pan: clamp(panSign * (ci / Math.max(1, cfg.plen - 1) - .5) * 1.6 * p.width, -1, 1), sv: .28, sd: .35 * p.delay * sdMul}); };
-          arpStep(arpCfg, 1, 1, 0, 1);
-          if (p.poly > .45 && (isPeak(S) || (S.name === 'groove' && e > .6)) && e > .7) arpStep(arpCfg2, .55, -1, 12, 1.6); }
+          const arpOn = isPeak(S) ? ((bar - S.bar0) % 8 < 6 || e > .9) : arpMask[((bar - S.bar0) >> 1) & 3]; if (arpOn) arpStep(arpCfg, 1, 1, 0, 1);
+          if (p.poly > .45 && isPeak(S) && e > .8 && ((bar - S.bar0) >> 2) % 2 === 1) arpStep(arpCfg2, .45, -1, 12, 1.6); }
         // keys: broken chords in the calm sections, long chords on changes elsewhere — the piano in the breakdown
         if (set.has('keys')){ const calm = isCalm(S) || S.name === 'swell' || S.name === 'groove', lad = ladderOf(ch, 48, 76);
           if (keysPat === 'block' || !calm){ if (!calm && !keysInPeak && !isBuild(S)){} else if (s === 0 && (bar === ch.bar || (!calm && (bar - ch.bar) % 2 === 0))){ const vl = .5 + .3 * e; add({inst: 'keys', t, v: G.keys * .8, vel: vl, notes: ch.voicing.map(m => m - (ch.voicing[0] > 60 ? 12 : 0)), dur: (calm ? Math.min(ch.bars, 2) : 1) * BT * .95, p: PT.keys, bright: brt, bus: 'duck', pan: 0, sv: .4, sd: .1 * p.delay}); } }
@@ -887,13 +906,13 @@ function SYNTH_CORE(){
   // the genre styles (GS) are loop grammars and are only reached by choosing them explicitly.
   const STYLES = {
     cooper: {name: 'emergence — evolving, Max Cooper-leaning', w: 6, bpm: [116, 128], rhythm: {four: 4, drive: 3, broken: 3, ca: 1}, form: {cooper: 4, steps: 3, rise: 1, twin: 1}, mode: {minor: 6, dorian: 1, major: 1, lydian: .5}, color: [.05, .4], motion: [.1, .5], develop: [.4, .75], chaos: [.2, .5], poly: [.55, .95], density: [.6, .85], bright: [.4, .62], metal: [.1, .4], swing: [.53, .62], humanize: [.15, .4], pump: [.2, .5], drive: [.15, .4], verb: [.45, .7], delay: [.35, .6], width: [.9, 1], keysPeak: .05, leadW: .35, vamp: true,
-      pal: {arp: {saw: 3, pluck: 4, glass: 3, keys: .1, epiano: 0, bell: .3}, lead: {pluck: 2, glass: 3, sawlead: 1, fmlead: 1.5, keys: 0}, pad: {lush: 4, fmpad: 3, additive: 1, supersaw: 2}, keys: {glass: 3, felt: 1.5, epiano: 0}, tex: {glitch: 4, grains: 3, wind: 1.5, chaos: 1.5, crackle: 0}, bass: {sub: 3, fm: 2, subsaw: 3, string: 0}}, fx: {sweep: 3, reverse: 2, stutter: 3, chorus: 1, tape: 1}},
-    cinematic: {vamp: false, name: 'cinematic', w: 2, bpm: [104, 122], rhythm: {broken: 2, four: 1, half: 1}, form: {rise: 2, arc: 2}, mode: {minor: 2, lydian: 1, dorian: 1, major: 1}, color: [.3, .7], keysPeak: .5, pal: {arp: {keys: 2, pluck: 3, glass: 2, saw: 1}, lead: {keys: 1.5, glass: 2, pluck: 2}, keys: {felt: 3, glass: 2}}, develop: [.5, .85], motion: [.35, .7], chaos: [.15, .4], verb: [.55, .8], width: [.85, 1], pump: [.1, .35], drive: [.05, .25], metal: [.1, .4], fx: {reverse: 2, sweep: 2, chorus: 1, tape: 1}},
+      pal: {arp: {synth: 5, blip: 2, saw: 2}, lead: {synth: 3, sawlead: 1.5, fmlead: 1}, pad: {lush: 4, fmpad: 3, additive: 1, supersaw: 2}, keys: {felt: 4, glass: .5, epiano: 0}, tex: {glitch: 3, grains: 3, wind: 2, chaos: 1.5, crackle: 0}, bass: {sub: 3, fm: 2, subsaw: 3}}, fx: {sweep: 3, reverse: 2, stutter: 3, chorus: 1, tape: 1}},
+    cinematic: {vamp: false, name: 'cinematic', w: 2, bpm: [104, 122], rhythm: {broken: 2, four: 1, half: 1}, form: {rise: 2, arc: 2}, mode: {minor: 2, lydian: 1, dorian: 1, major: 1}, color: [.3, .7], keysPeak: .5, pal: {arp: {synth: 4, blip: 2, saw: 1}, lead: {synth: 3, sawlead: 1}, keys: {felt: 3, glass: 1}}, develop: [.5, .85], motion: [.35, .7], chaos: [.15, .4], verb: [.55, .8], width: [.85, 1], pump: [.1, .35], drive: [.05, .25], metal: [.1, .4], fx: {reverse: 2, sweep: 2, chorus: 1, tape: 1}},
     broken: {vamp: false, name: 'broken beat / IDM', w: 2, bpm: [120, 138], rhythm: {broken: 4, ca: 2}, form: {arc: 2, twin: 2, steps: 2, rise: 1}, mode: {minor: 2, dorian: 2, pentMinor: 1, lydian: 1}, swing: [.55, .64], density: [.5, .75], pump: [.15, .4], drive: [.15, .45], color: [.15, .55], motion: [.2, .6], develop: [.5, .85], chaos: [.35, .7], poly: [.55, .9], humanize: [.3, .6], fx: {stutter: 3, crush: 2, phaser: 1, sweep: 1}},
-    deep: {vamp: false, name: 'deep house (evolving)', w: 2, bpm: [118, 125], rhythm: {four: 5, broken: 1}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 3, dorian: 3, mixolydian: 1}, swing: [.53, .6], density: [.5, .72], pump: [.35, .6], drive: [.15, .4], color: [.45, .8], motion: [.3, .6], chaos: [.15, .4], metal: [.1, .3], keysPeak: .5, pal: {arp: {keys: 2, epiano: 2, pluck: 2, saw: 1}, keys: {epiano: 2, felt: 2}}, fx: {chorus: 2, tape: 2, sweep: 2, dubthrow: 1}},
-    technoE: {name: 'techno (evolving)', w: 2, bpm: [126, 134], rhythm: {drive: 3, four: 3, ca: 1}, form: {rise: 2, arc: 2, twin: 1}, mode: {minor: 3, phrygian: 2, harmonicMinor: 1}, swing: [.5, .54], density: [.6, .85], pump: [.4, .7], drive: [.3, .6], color: [.05, .35], motion: [.05, .3], develop: [.3, .6], chaos: [.3, .6], bright: [.35, .6], metal: [.2, .5], verb: [.35, .6], keysPeak: 0, leadW: .4, vamp: true, form: {steps: 3, rise: 2, cooper: 1}, pal: {arp: {saw: 4, pluck: 2, glass: 1, keys: 0}, lead: {sawlead: 2, fmlead: 2, pluck: 1, glass: 1, keys: 0}, tex: {glitch: 3, chaos: 2, wind: 1}}, fx: {sweep: 3, stutter: 2, crush: 1, phaser: 1}},
+    deep: {vamp: false, name: 'deep house (evolving)', w: 2, bpm: [118, 125], rhythm: {four: 5, broken: 1}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 3, dorian: 3, mixolydian: 1}, swing: [.53, .6], density: [.5, .72], pump: [.35, .6], drive: [.15, .4], color: [.45, .8], motion: [.3, .6], chaos: [.15, .4], metal: [.1, .3], keysPeak: .5, pal: {arp: {synth: 3, saw: 2, blip: 1}, keys: {felt: 2, epiano: 1}}, fx: {chorus: 2, tape: 2, sweep: 2, dubthrow: 1}},
+    technoE: {name: 'techno (evolving)', w: 2, bpm: [126, 134], rhythm: {drive: 3, four: 3, ca: 1}, form: {rise: 2, arc: 2, twin: 1}, mode: {minor: 3, phrygian: 2, harmonicMinor: 1}, swing: [.5, .54], density: [.6, .85], pump: [.4, .7], drive: [.3, .6], color: [.05, .35], motion: [.05, .3], develop: [.3, .6], chaos: [.3, .6], bright: [.35, .6], metal: [.2, .5], verb: [.35, .6], keysPeak: 0, leadW: .4, vamp: true, form: {steps: 3, rise: 2, cooper: 1}, pal: {arp: {saw: 3, synth: 4, blip: 1}, lead: {sawlead: 2, fmlead: 2, synth: 2}, tex: {glitch: 3, chaos: 2, wind: 1}}, fx: {sweep: 3, stutter: 2, crush: 1, phaser: 1}},
     halftime: {vamp: false, name: 'downtempo', w: 1.5, bpm: [84, 100], rhythm: {half: 1}, form: {arc: 2, twin: 1, rise: 1}, mode: {minor: 3, harmonicMinor: 1, dorian: 1, pentMinor: 1}, swing: [.54, .62], density: [.4, .62], pump: [.2, .45], drive: [.2, .5], color: [.2, .55], motion: [.3, .6], verb: [.4, .65], fx: {tape: 2, lofi: 1, reverse: 1, sweep: 1}},
-    ambient: {vamp: false, name: 'ambient', w: 1, bpm: [70, 100], bars: [64, 80, 96], rhythm: {none: 1}, form: {ambient: 1}, mode: {major: 1, lydian: 2, dorian: 1, minor: 1}, density: [.3, .5], pump: [0, .1], drive: [0, .2], verb: [.65, .9], delay: [.4, .7], color: [.35, .8], motion: [.2, .5], chaos: [.2, .45], swing: [.5, .55], keysPeak: .6, pal: {arp: {glass: 3, keys: 2, pluck: 2}, keys: {glass: 2, felt: 2}}, fx: {chorus: 2, tape: 2, phaser: 1}}};
+    ambient: {vamp: false, name: 'ambient', w: 1, bpm: [70, 100], bars: [64, 80, 96], rhythm: {none: 1}, form: {ambient: 1}, mode: {major: 1, lydian: 2, dorian: 1, minor: 1}, density: [.3, .5], pump: [0, .1], drive: [0, .2], verb: [.65, .9], delay: [.4, .7], color: [.35, .8], motion: [.2, .5], chaos: [.2, .45], swing: [.5, .55], keysPeak: .6, pal: {arp: {blip: 3, synth: 2}, keys: {felt: 3, glass: 1}}, fx: {chorus: 2, tape: 2, phaser: 1}}};
   const ALL = Object.assign({}, STYLES, GS);
   const GEN = {swing: [.5, .56], density: [.45, .75], pump: [.2, .5], drive: [.1, .4], color: [.1, .5], motion: [.25, .65], develop: [.4, .8], chaos: [.2, .55], poly: [.4, .85], bright: [.4, .62], metal: [.1, .4], humanize: [.25, .6], verb: [.4, .7], delay: [.25, .55], width: [.8, 1]};
   // full = every dial; otherwise the song's identity (style, seed, key, mode, tempo, groove, swing, form, length, sounds, effects) and the user's other dials stay
