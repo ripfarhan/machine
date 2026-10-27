@@ -23,7 +23,9 @@
   const PALS = [['stPalBass', 'bass'], ['stPalArp', 'arp'], ['stPalPad', 'pad'], ['stPalLead', 'lead'], ['stPalPerc', 'perc'], ['stPalTex', 'tex']];
   PALS.forEach(([id, key]) => { $s(id).onchange = e => { P.palette[key] = e.target.value; changed(); }; });
   $s('stSeed').onchange = e => { P.seed = Math.max(1, +e.target.value | 0); P.vary = 0; changed(true); };
-  $s('stGen').onclick = () => { P.seed = 1 + Math.floor(Math.random() * 999998); P.vary = 0; $s('stSeed').value = P.seed; changed(true); };
+  const roll = full => { const o = CORE.randomize(P, full); for (const k in o) P[k] = o[k]; syncUI(); changed(true); };
+  $s('stGen').onclick = () => roll(false);
+  $s('stRand').onclick = () => roll(true);
   $s('stVary').onclick = () => { P.vary = (P.vary | 0) + 1; changed(true); };
   function syncUI(){ $s('stSeed').value = P.seed; DIALS.forEach(([id, key]) => { $s(id).value = P[key]; $s(id).oninput(); });
     SELS.forEach(([id, key]) => { $s(id).value = String(P[key]); }); PALS.forEach(([id, key]) => { $s(id).value = P.palette[key] || 'auto'; });
@@ -52,7 +54,7 @@
   function overview(L, R){ const W = 1120, o = new Float32Array(W * 2), step = Math.max(1, Math.floor(L.length / W)); for (let x = 0; x < W; x++){ let mn = 0, mx = 0; const a = x * step, b = Math.min(L.length, a + step); for (let i = a; i < b; i += 7){ const v = (L[i] + R[i]) * .5; if (v < mn) mn = v; if (v > mx) mx = v; } o[x * 2] = mn; o[x * 2 + 1] = mx; } return o; }
   let deb = null; function changed(now){ planNow = CORE.plan(P); info(planNow.meta, true); draw(); clearTimeout(deb); deb = setTimeout(render, now ? 0 : 450); }
   function status(t){ $s('stStatus').textContent = t; }
-  function info(m, pending){ $s('stInfo').textContent = m.key + ' · ' + m.bpm + ' BPM · ' + m.rhythm + ' · ' + m.form + ' form · ' + m.bars + ' bars (' + fmt0(m.duration) + ') · bass ' + m.palette.bass + ', arp ' + m.palette.arp + ', pad ' + m.palette.pad + ', lead ' + m.palette.lead + ', perc ' + m.palette.perc + ', texture ' + m.palette.tex + ' · polymeter ' + m.poly + ' · motif ' + m.motif + (pending ? '' : ''); }
+  function info(m, pending){ $s('stInfo').textContent = (P.style ? P.style + ' · ' : '') + m.key + ' · ' + m.bpm + ' BPM · ' + m.rhythm + ' · ' + m.form + ' form · ' + m.bars + ' bars (' + fmt0(m.duration) + ') · bass ' + m.palette.bass + ', arp ' + m.palette.arp + ', pad ' + m.palette.pad + ', lead ' + m.palette.lead + ', perc ' + m.palette.perc + ', texture ' + m.palette.tex + ' · polymeter ' + m.poly + ' · motif ' + m.motif + (pending ? '' : ''); }
 
   // ---------------------------------------------------------------- playback
   let AC2 = null, src = null, startedAt = 0, offset = 0, abuf = null;

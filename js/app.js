@@ -384,6 +384,18 @@ function drawText(ev, t, pulse){
   else { ctx.save(); ctx.translate(ev.x * W + jx, ev.y * H); ctx.rotate(ev.rot); drawWord(ctx, w, ev.font, 0, 0, W * rr(mulberry32(ev.seed | 0), .45, .8), H * .22, Math.min(st, 1.5), col, pop); ctx.restore(); }
 }
 const decoColor = r => { const k = r(); return k < .4 ? '#ffffff' : k < .65 ? '#000000' : pick(r, BRIGHTS); };
+// camera HUD: dashed edge ticks at mid-height and a square reticle on the split line
+function drawHud(rx, ry){ const ctx = xText, u = W / 360, lw = Math.max(2, u * 1.2); ctx.save(); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = lw;
+  for (const ex of [.06, .94]){ const x = ex * W - u * 1.6; for (let k = 0; k < 4; k++) ctx.fillRect(x, H * .5 - u * 14 + k * u * 7.5, u * 3.2, u * 5); }
+  const s = u * 15, cx = rx * W, cy = (1 - ry) * H; ctx.strokeRect(cx - s / 2, cy - s / 2, s, s); ctx.beginPath(); ctx.moveTo(cx - s / 2, cy); ctx.lineTo(cx - s / 2 + s * .32, cy); ctx.stroke(); ctx.restore(); }
+// type wall: two of your words tiled as a wallpaper — big word in one column, the smaller one stacked beside it — one row lit per pulse
+function drawWall(pk, palKey){ const ws = parseWords(), list = ws.length ? ws : ['MAUT', 'KI', 'MACHINE']; const a = list[(pk >> 3) % list.length], b = list[((pk >> 3) + 1) % list.length];
+  const ctx = xText, cols = 4, cw = W / cols, big = cw * .42, small = big * .52, rowH = big * 1.35, rows = Math.ceil(H / rowH) + 1, lit = pk % rows, pal = PAL[palKey] || PAL.jelly;
+  ctx.save(); ctx.textBaseline = 'middle'; ctx.lineWidth = Math.max(1, W / 540);
+  for (let r = 0; r < rows; r++) for (let col = 0; col < cols; col++){ const x = col * cw + cw * .08, y = r * rowH + rowH * .5, isBig = col % 2 === 0, on = r === lit;
+    if (isBig){ const f = fontForWord('mono', a); ctx.font = f.css.replace('{S}', Math.round(big * (on ? 1.06 : 1))); if (on){ ctx.fillStyle = pal[2]; ctx.fillText(a, x, y); } else { ctx.strokeStyle = pal[3]; ctx.globalAlpha = .75; ctx.strokeText(a, x, y); ctx.globalAlpha = 1; } }
+    else { const f = fontForWord('mono', b); ctx.font = f.css.replace('{S}', Math.round(small)); for (let k = 0; k < 2; k++){ const yy = y + (k - .5) * small * 1.15; if (on){ ctx.fillStyle = pal[2]; ctx.fillText(b, x, yy); } else { ctx.strokeStyle = pal[2]; ctx.globalAlpha = .6; ctx.strokeText(b, x, yy); ctx.globalAlpha = 1; } } } }
+  ctx.restore(); }
 function drawDeco(c, t, pulse){
   const ctx = xText;
   for (const d of c.deco){ const r = mulberry32(d.seed | 0);
@@ -432,7 +444,14 @@ function renderAt(t){
   const card = q => { if (q.shadow){ xOver.fillStyle = q.shadow.color; xOver.fillRect(q.x + q.shadow.dx, q.y + q.shadow.dy, q.w, q.h); } drawCover(xOver, M(q.m), fi + 5, q.x, q.y, q.w, q.h, lerp(q.z0, q.z1, k), q.px * (k - .5), q.py * (k - .5), false); };
   if (c.layout === 'pip'){ c.rects.forEach(card); overOn = 1; } else if (c.layout === 'tile'){ card(c.card); overOn = 1; }
   else if (c.layout === 'shards'){ overOn = 1; for (const p of c.polys){ xOver.save(); xOver.translate(p.cx, p.cy); xOver.rotate(p.spin * k); xOver.translate(-p.cx, -p.cy); xOver.beginPath(); p.pts.forEach((q, i) => i ? xOver.lineTo(q[0], q[1]) : xOver.moveTo(q[0], q[1])); xOver.closePath(); xOver.clip(); drawCover(xOver, M(p.m), fi + 3, 0, 0, W, H, p.z, 0, 0, false); xOver.restore(); } }
-  xText.clearRect(0, 0, W, H); drawDeco(c, t, pulse); const ev = textAt(t); if (ev) drawText(ev, t, pu);
+  // frame mechanisms: each dial is the chance this cut uses it; inside a cut, treatments flip on a fixed visual pulse (not the beat)
+  const mech = (id, k) => { const a = v(id); return a > 0 && hash1(c.seed * 7.31 + k * 13.7) < a; };
+  const mSplit = mech('splitTint', 1), mQuad = !mSplit && mech('quadGrid', 2), mInset = !mQuad && mech('inset', 3), mErode = !mQuad && !mSplit && mech('erode', 4), mHud = mech('hud', 5), mWall = mech('typeWall', 6);
+  const pulseLen = Math.max(.08, (state.grid ? state.grid.per : .5) * lerp(2, .33, v('tintRate'))), pk = Math.floor(t / pulseLen);
+  const palsS = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['mint', 'olive', 'thermo', 'slate'], palS = palsS[Math.floor(hash1(pk * 3.7 + c.seed) * palsS.length) % palsS.length];
+  const splitX = .5 + (hash1(c.seed * 3.3) - .5) * .16, splitDir = hash1(c.seed * 5.1) < .65 ? 1 : 0, splitSide = hash1(c.seed * 9.2) < .5 ? 1 : 0;
+  xText.clearRect(0, 0, W, H); if (mWall) drawWall(pk, palS); drawDeco(c, t, pulse); const ev = textAt(t); if (ev) drawText(ev, t, pu);
+  if (mHud) drawHud(mSplit ? (splitDir ? .5 : splitX) : .5, mSplit && splitDir ? 1 - splitX : .5);
   const pat = v('pattern'); if (pat > .02 && patKey !== c.id){ drawPattern(c); patKey = c.id; }
   // flicker
   const inv = flicker('invertFlk', t, FLK_PATTERNS[state.flkPattern] || FLK_PATTERNS.burst);
@@ -442,12 +461,12 @@ function renderAt(t){
   const lookSwap = (() => { const a = v('lookSwap'); const L = S.trig[P.lookSwap.src] || (S.trig[P.lookSwap.src] = triggers(P.lookSwap.src, .5, .1)); const i = lastTrig(L, t); if (i < 0) return 0; return hash1(i * 1.9 + state.seed + c.id) < a ? (Math.floor((t - L[i]) * 8) % 2 === 0 ? 1 : 0) : 0; })();
   // GL
   gl.useProgram(prog); upload(texBase, 0, cBase); if (overOn) upload(texOver, 1, cOver); else bindOnly(texOver, 1);
-  const textOn = (ev || c.deco.length) ? 1 : 0; if (textOn) upload(texText, 2, cText); else bindOnly(texText, 2);
+  const textOn = (ev || c.deco.length || mHud || mWall) ? 1 : 0; if (textOn) upload(texText, 2, cText); else bindOnly(texText, 2);
   bindOnly(fboTex[1 - cur], 3); bindOnly(texPat, 4);
   const f1 = (n, x) => U[n] && gl.uniform1f(U[n], x), i1 = (n, x) => U[n] && gl.uniform1i(U[n], x);
   gl.uniform2f(U.uRes, W, H);
   f1('uTime', tq); f1('uPulse', pulse); f1('uHue', c.hue0 + v('hueShift') * 6.28 * (sig('bar', t) + t * .05)); f1('uCycle', c.cyc0 + t * .2 * v('hueShift')); f1('uReps', c.reps);
-  f1('uSplit', v('rgbSplit') * I * fxMul); f1('uTear', clamp(v('tear') * I * fxMul, 0, 1)); f1('uPix', v('pixelate') * fxMul > .03 ? 4 + v('pixelate') * 40 : 0); f1('uBlur', v('punchBlur') * I * pulse * fxMul); f1('uDisp', v('displace') * fxMul); f1('uLeak', v('lightLeak') * fxMul); f1('uBlendAmt', c.blendAmt || 1); f1('uTone', v('tone') * fxMul); i1('uBlendMode', blendMode); f1('uTextAlpha', v('wordOpacity'));
+  f1('uSplit', v('rgbSplit') * I * fxMul); f1('uTear', clamp(v('tear') * I * fxMul, 0, 1)); f1('uPix', v('pixelate') * fxMul > .03 ? 4 + v('pixelate') * 40 : 0); f1('uBlur', v('punchBlur') * I * pulse * fxMul); f1('uDisp', v('displace') * fxMul); f1('uLeak', v('lightLeak') * fxMul); f1('uBlendAmt', c.blendAmt || 1); f1('uTone', v('tone') * fxMul); i1('uBlendMode', blendMode); f1('uTextAlpha', (mHud || mWall) && !ev ? 1 : v('wordOpacity'));
   f1('uScan', v('scanlines')); f1('uGrain', v('grain')); f1('uFeed', clamp(v('feedback') * fxMul, 0, 1)); f1('uRings', v('rings') * fxMul); f1('uGlow', v('glow') * fxMul); f1('uWarp', v('warp') * fxMul);
   f1('uThresh', M(c.m).lum || .5); f1('uPattern', pat * fxMul); f1('uPatInv', (M(c.m).lum || .5) > .55 ? 1 : (M(c.m).lum || .5) < .4 ? 0 : (c.seed % 1 < .5 ? 1 : 0)); f1('uTextSplit', ev ? v('wordGlitch') * 1.5 : .3);
   f1('uMirror', v('mirror')); f1('uSeed', c.seed); f1('uDim', c.layout === 'pip' ? .5 : 0); f1('uOverOn', overOn); f1('uTextOn', textOn);
@@ -456,6 +475,12 @@ function renderAt(t){
   { const L = S.trig.kick || [], ki = lastTrig(L, tq); f1('uShock', v('shockwave') * I * fxMul); f1('uShockT', ki >= 0 ? tq - L[ki] : 9); f1('uShockN', ki); }
   f1('uVar', c.seed); f1('uVar2', c.seed + Math.floor(tq * 2.3) * .137); f1('uSmear', v('smear') * I * fxMul); f1('uSmearA', c.seed * 2.39996); f1('uTaffy', v('taffy') * I * fxMul); f1('uSlit', v('slitscan') * fxMul); f1('uWeave', v('weave') * fxMul);
   f1('uCorrupt', v('corrupt') * I * fxMul); f1('uOil', v('oilslick') * fxMul); f1('uContour', v('contour') * fxMul); f1('uLed', v('led')); f1('uVeil', v('staticveil') * fxMul); f1('uHalf', v('halftone')); f1('uDither', v('dither')); f1('uLookSwap', lookSwap * fxMul);
+  f1('uSplitOn', mSplit ? 1 : 0); f1('uSplitX', splitX); f1('uSplitDir', splitDir); f1('uSplitSide', splitSide); f1('uSplitPost', hash1(pk * 1.7 + c.seed) < .3 ? 1 : 0);
+  if (U.uPalS) gl.uniform3fv(U.uPalS, PAL[palS].flatMap(hexRgb));
+  f1('uQuadOn', mQuad ? 1 : 0); if (U.uQuadT){ const pm = [0, 1, 2, 3, 4, 5]; for (let i = 5; i > 0; i--){ const j = Math.floor(hash1(pk * 2.9 + c.seed + i * 1.13) * (i + 1)); const x = pm[i]; pm[i] = pm[j]; pm[j] = x; } gl.uniform4f(U.uQuadT, pm[0], pm[1], pm[2], pm[3]); }
+  f1('uInsetOn', mInset ? 1 : 0); if (U.uInsetR){ const iw = .45 + hash1(c.seed * 4.1) * .35, ih = .12 + hash1(c.seed * 6.7) * .2, ix = hash1(c.seed * 8.3) * (1 - iw), iy = .1 + hash1(c.seed * 2.2) * (.8 - ih); gl.uniform4f(U.uInsetR, ix, iy, ix + iw, iy + ih); }
+  f1('uInsetT', [0, 2, 1, 4, 2, 5][Math.floor(hash1(pk * 1.3 + c.seed * .7) * 6)]);
+  f1('uErodeOn', mErode ? 1 : 0); if (U.uErodeM) gl.uniform2f(U.uErodeM, .06 + hash1(c.seed * 3.9) * .08, .1 + hash1(c.seed * 7.7) * .1); f1('uErodeB', hash1(c.seed * 5.5));
   i1('uLookA', c.lookA); i1('uLookB', c.lookB); i1('uLook2', c.look2); i1('uTextMode', ev ? ev.mode : 0);
   gl.uniform3fv(U.uPalA, PAL[c.palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[cur]); gl.viewport(0, 0, W, H); gl.drawArrays(gl.TRIANGLES, 0, 3);

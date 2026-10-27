@@ -10,7 +10,9 @@ uniform vec2 uRes;
 uniform float uTime, uPulse, uHue, uCycle, uReps, uSplit, uTear, uPix, uScan, uGrain, uFeed, uRings, uGlow, uWarp, uThresh,
   uPattern, uPatInv, uTextSplit, uMirror, uSeed, uDim, uOverOn, uTextOn, uSat, uCon, uPoster, uLookMix, uSlice, uSort, uRoll, uMelt, uZoom, uShake, uKaleido, uSpin,
   uEdges, uHalf, uDither, uLookSwap, uBlur, uDisp, uLeak, uBlendAmt, uTone, uTextAlpha, uPolar, uGhost, uBands,
-  uSmear, uSmearA, uShock, uShockT, uShockN, uTaffy, uSlit, uWeave, uCorrupt, uOil, uContour, uLed, uVeil, uVar, uVar2;
+  uSmear, uSmearA, uShock, uShockT, uShockN, uTaffy, uSlit, uWeave, uCorrupt, uOil, uContour, uLed, uVeil, uVar, uVar2,
+  uSplitOn, uSplitX, uSplitDir, uSplitSide, uSplitPost, uQuadOn, uInsetOn, uInsetT, uErodeOn, uErodeB;
+uniform vec4 uQuadT, uInsetR; uniform vec2 uErodeM; uniform vec3 uPalS[4];
 uniform int uLookA, uLookB, uLook2, uTextMode, uBlendMode;
 uniform vec3 uPalA[4]; uniform vec3 uPalB[4]; uniform vec3 uPal2[4];
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
@@ -35,6 +37,16 @@ vec3 look(vec3 c, int id, vec3 p[4], float th){
   return clamp(c,0.,1.);
 }
 float bayer(vec2 p){ ivec2 i = ivec2(mod(p,4.)); int m[16] = int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5); return float(m[i.y*4+i.x])/16.; }
+// treatments for the analysis grid and the inset: the same shot read different ways
+const vec3 TH[4] = vec3[4](vec3(.04,.08,.4), vec3(.07,.7,.69), vec3(.96,.89,.35), vec3(.91,.14,.11));
+vec3 treat(int id, vec2 tuv, vec3 b){ float l = luma(b);
+  if(id==0) return vec3(step(.5 + (bayer(gl_FragCoord.xy)-.5)*.25, l));                                             // threshold
+  if(id==1){ vec2 e = 1.5/uRes; float gx = luma(texture(tBase,tuv+vec2(e.x,0.)).rgb)-luma(texture(tBase,tuv-vec2(e.x,0.)).rgb), gy = luma(texture(tBase,tuv+vec2(0.,e.y)).rgb)-luma(texture(tBase,tuv-vec2(0.,e.y)).rgb);
+    return vec3(smoothstep(.04,.22,length(vec2(gx,gy)))); }                                                         // edge lines
+  if(id==2) return gmap(clamp(l*1.15 + (hash(gl_FragCoord.xy*.37 + uTime)-.5)*.14, 0., 1.), TH);                  // thermal camera
+  if(id==3) return vec3(clamp((l-.5)*1.7+.5, 0., 1.));                                                               // hard grey
+  if(id==4) return vec3(1.) - vec3(smoothstep(.35, .62, l));                                                         // inverted silhouette
+  return gmap(l, uPalS); }                                                                                           // the style's palette
 vec3 sampleBase(vec2 uv, float s, vec2 dir){ return vec3(texture(tBase,uv+dir*s).r, texture(tBase,uv).g, texture(tBase,uv-dir*s).b); }
 vec3 blendMode(vec3 a, vec3 b, int m){
   if(m==1) return 1.-(1.-a)*(1.-b);           // screen
@@ -50,6 +62,9 @@ void main(){
   float V1 = fract(uVar*1.73+.13), V2 = fract(uVar*3.11+.37), V3 = fract(uVar*5.87+.71),
         V4 = fract(uVar*9.31+.29), V5 = fract(uVar*13.7+.53), V6 = fract(uVar*21.3+.17),
         V7 = fract(uVar*7.19+.61), V8 = fract(uVar*17.1+.83), B1 = fract(uVar2*2.71+.41);
+  // ---- frame mechanisms: remap before any other geometry ----
+  int quadQ = 0; if(uQuadOn>.5){ quadQ = int(step(.5, vUv.x)) + 2*int(step(.5, vUv.y)); uv = fract(vUv*2.); }
+  if(uErodeOn>.5) uv = (uv - uErodeM) / (1. - 2.*uErodeM);
   // ---- geometry ----
   vec2 c = uv-.5; c /= (1.+uZoom*.18);
   if(uSpin>0.){ float a = uSpin*sin(uTime*1.7)*.6; float ca=cos(a), sa=sin(a); c = vec2(c.x*ca - c.y*sa/asp, c.x*sa*asp + c.y*ca); }
@@ -119,6 +134,11 @@ void main(){
   if(uPoster>0.){ float lv = mix(24.,3.,uPoster); col = mix(col, floor(col*lv+.5)/lv, smoothstep(0.,.1,uPoster)); }
   if(uCorrupt>0.){ vec2 b2 = floor(uv*uRes/16.); float h1 = hash(b2+tq*.37+uSeed*3.); if(h1 > 1.-uCorrupt*.5){ float h2 = hash(b2+2.3);
     col = h2<.33 ? col.brg : h2<.66 ? col.gbr : clamp(col + (vec3(hash(b2+3.1),hash(b2+4.2),hash(b2+5.3))-.5)*.85, 0., 1.); } }
+  if(uSplitOn>.5){ float co = uSplitDir<.5 ? vUv.x : 1.-vUv.y; bool tinted = (co < uSplitX) != (uSplitSide > .5);
+    if(tinted){ float l = clamp((luma(base)-.06)*1.15, 0., 1.); if(uSplitPost>.5) l = floor(l*4. + bayer(gl_FragCoord.xy)*.99)/4.; col = gmap(l, uPalS); }
+    else col = clamp((base-.5)*1.06+.5, 0., 1.); }
+  if(uQuadOn>.5) col = treat(int(uQuadT[quadQ]), uv, base);
+  if(uInsetOn>.5 && vUv.x>uInsetR.x && vUv.x<uInsetR.z && vUv.y>uInsetR.y && vUv.y<uInsetR.w) col = treat(int(uInsetT), uv, base);
   col *= 1.-uDim;
   if(uPattern>0.){ float m = smoothstep(uThresh-.07,uThresh+.07,luma(base)); m = mix(m,1.-m,uPatInv); vec4 pt = texture(tPat, vUv); col = mix(col, mix(pt.rgb, 1.-(1.-col)*(1.-pt.rgb), .5), pt.a*m*uPattern*.85); }
   if(uOverOn>.5){ vec4 ov = texture(tOver, uv); vec3 oc = vec3(texture(tOver,uv+vec2(s*.6,0.)).r, ov.g, texture(tOver,uv-vec2(s*.6,0.)).b);
@@ -170,6 +190,16 @@ void main(){
       float mn = fbm(vUv*grain+tq*.13+uSeed);
       float m = smoothstep(.42, .62, mn)*uMelt;   // fbm sits near .5, so the old .7 gate almost never opened
       vec3 mv = texture(tPrev, vUv + flow*uMelt*.05*mn).rgb; col = mix(col, max(col*.55, mv), m*.75); } }
+  // ---- frame mechanisms: crisp borders and the eroded box, after feedback so they never smear ----
+  if(uQuadOn>.5){ vec2 g = abs(vUv-.5); float w = 2.5/uRes.x, wy = 2.5/uRes.y; if(g.x < w || g.y < wy || vUv.x < w || vUv.x > 1.-w || vUv.y < wy || vUv.y > 1.-wy) col = uPalS[3]; }
+  if(uInsetOn>.5){ vec4 r = uInsetR; float bw = 3./uRes.x, bh = 3./uRes.y; bool outer = vUv.x>r.x-bw && vUv.x<r.z+bw && vUv.y>r.y-bh && vUv.y<r.w+bh, inner = vUv.x>r.x && vUv.x<r.z && vUv.y>r.y && vUv.y<r.w; if(outer && !inner) col = vec3(1.); }
+  if(uErodeOn>.5){ vec2 bs = vec2(26., 26./asp), bc = floor(vUv*bs), bf = (bc+.5)/bs, m = uErodeM;
+    float d = max(max(m.x - bf.x, bf.x - (1.-m.x))*bs.x, max(m.y - bf.y, bf.y - (1.-m.y))*bs.y);      // blocks outside the box > 0, inside < 0
+    float h = hash(bc + floor(uTime*.25)*7.31 + uSeed);
+    bool keep = d <= 0. ? !(d > -1.6 && h < .22) : h < .55*exp(-d*.8);                                   // edges eaten in, fragments left out
+    float dg = vUv.x*asp - vUv.y + (uErodeB-.5)*1.2;
+    if(abs(dg - .35) < .07) col = mix(uPalS[2], uPalS[3], step(.5 + (bayer(gl_FragCoord.xy)-.5)*.3, luma(base)));   // the diagonal band
+    else if(!keep) col = vec3(0.); }
   // ---- text ----
   vec2 to = vec2(uTextSplit*.009*(1.+uPulse*2.), 0.);
   vec4 tr = texture(tText, vUv+to), tg = texture(tText, vUv), tb = texture(tText, vUv-to);

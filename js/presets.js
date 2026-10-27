@@ -8,7 +8,9 @@ const PAL = {
   lime:['#0d0021','#a100ff','#b6ff00','#ffffff'], blood:['#000000','#5a0000','#ff0a0a','#fff0f0'], heat:['#000000','#5a00a8','#ff2d00','#fff200'],
   xerox:['#0b0b0b','#2a2a2a','#d8d8d8','#ffffff'], pastel:['#2b1b3d','#ff9de2','#9df7ff','#fff6a8'], chrome:['#050a12','#2a5bff','#9ad7ff','#ffffff'],
   bolly:['#2d0036','#ff2e63','#ffb800','#08f7fe'], news:['#1a1611','#5a4b32','#b8a888','#f4ecdc'], noir:['#000000','#101e3a','#ff2bd6','#9cfcff'],
-  ink:['#000000','#1a1a1a','#f2f2f2','#ffffff'], jungle:['#021a0a','#0e6b2f','#8cff3a','#f5ffd6'], rose:['#1a000d','#8a0043','#ff5aa0','#ffe4ee']
+  ink:['#000000','#1a1a1a','#f2f2f2','#ffffff'], jungle:['#021a0a','#0e6b2f','#8cff3a','#f5ffd6'], rose:['#1a000d','#8a0043','#ff5aa0','#ffe4ee'],
+  thermo:['#0a1466','#12b3b0','#f6e45a','#e8231b'], mint:['#0f2b20','#4c9a74','#a9e8c6','#f0fff7'], olive:['#151a03','#5b6a12','#b8c63c','#f4f8cc'], ochre:['#241003','#8b470d','#e2973a','#fff0c6'],
+  jelly:['#12031a','#5e1665','#e04fd0','#ffd8fb'], neon:['#02031f','#1a2dff','#59e4ff','#ffffff'], slate:['#0e0f12','#4a4f57','#a9adb3','#f2f3f5'], heatmap:['#1c0526','#41701f','#e83a17','#ffe14d']
 };
 const LOOK = {punch:0, hue:1, grad:2, solar:3, invert:4, sil:5, duo:6, poster:7, vhs:8, mash:9};
 const LOOK_COLOR = ['#e8d6c0','#ff4fd8','#3cf2ff','#fff35c','#7a5cff','#ffffff','#ff1a1a','#5dff6a','#c9a477','#ff7a00'];
@@ -79,6 +81,13 @@ const PARAMS = [
   ['oilslick','Texture','Oil slick',0,1,0,'loud',0,'iridescent rainbow sheen along edges'],
   ['contour','Texture','Contour',0,1,0,'const',0,'topographic map lines over the image'],
   ['led','Texture','LED wall',0,1,0,'const',0,'stadium screen dots'],
+  ['splitTint','Frame','Split tint',0,1,0,'const',0,'chance a cut splits: one half gradient-mapped, the other natural'],
+  ['quadGrid','Frame','Analysis grid',0,1,0,'const',0,'chance a cut becomes a 2×2 grid, each quadrant a different treatment'],
+  ['inset','Frame','Treated inset',0,1,0,'const',0,'chance of a white-framed window showing the shot under another treatment'],
+  ['erode','Frame','Eroded frame',0,1,0,'const',0,'chance the footage is boxed on black with block-eaten edges'],
+  ['hud','Frame','Camera HUD',0,1,0,'const',0,'chance of edge ticks and a reticle over the frame'],
+  ['typeWall','Frame','Type wall',0,1,0,'const',0,'chance your words tile the frame as a wallpaper, one row lit'],
+  ['tintRate','Frame','Treatment pulse',0,1,.75,'const',0,'how fast split, grid and inset treatments flip (fixed visual grid)'],
   ['wordRate','Words','Word rate',0,1,.6,'hype',.5,'how often a word fires'],
   ['wordSize','Words','Word size',0,1,.7,'punch',.3,''],
   ['stretch','Words','Stretch',0,1,.5,'punch',.2,'vertical stretch of big words, Arial-Narrow style'],
@@ -86,7 +95,7 @@ const PARAMS = [
   ['wordOpacity','Words','Word opacity',0,1,.75,'const',0,'words blend into the footage instead of covering it'],
   ['pattern','Words','Pattern fill',0,1,.2,'drop',.5,'words or motifs fill the silhouette'],
 ];
-const GROUP_ORDER = ['Cutting','Layers','Flicker','Color','Glitch','Motion','Texture','Words'];
+const GROUP_ORDER = ['Cutting','Layers','Frame','Flicker','Color','Glitch','Motion','Texture','Words'];
 // A style = looks + palettes + layouts + type + decorations + fonts + dial overrides. Dials not listed keep PARAMS defaults.
 // deco weights: splat, spiral, scatter, mandala, frame, column, giant, trail. patMotif: chance the silhouette fill uses motifs rather than words.
 const PRESETS = {
@@ -227,6 +236,20 @@ const PRESETS = {
     dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], melt:[.35,'sub',.5], taffy:[.3,'bass',.5], hueShift:[.6,'bar',.6], warp:[.1,'mid',.5], displace:[.2,'mid',.4], feedback:[.3,'loud',.3], cutRate:[.5,'hype',.4], cleanHits:[.45], lookMix:[.4], invertFlk:[.4,'snare',.5], saturate:[1.35,'loud',.3], contrast:[1.3,'punch',.3], glow:[.15,'loud',.3]}},
   billboardburn: {name:'Billboard Burn', fx:true, sw:'riot', looks:['punch','poster','hue','invert'], pals:['riot','bolly','heat','ink'], layouts:{full:8,bands:1,pip:1}, textStyles:['small'], textModes:[0], deco:{}, flk:'burst', fonts:['narrow'], patMotif:0,
     dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], led:[.5,'const',0], corrupt:[.4,'snare',.5], whiteFlash:[.5,'kick',.6], strobe:[.3,'drop',.7], zoomPunch:[.5,'kick',.8], saturate:[1.5,'loud',.3], cutRate:[.75,'hype',.5], flashCuts:[.6,'punch',.6], cleanHits:[.6], lookMix:[.6], invertFlk:[.6,'snare',.6], badTV:[.1,'bass',.4]}},
+  fieldreport: {name:'Field Report', fx:true, sw:'thermo', looks:['duo','punch','sil','poster','hue'], pals:['thermo','mint','olive','ochre','jelly','neon','heatmap','slate'], layouts:{full:9,pip:1}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], splitTint:[.32], quadGrid:[.16], inset:[.22], erode:[.14], hud:[.4], typeWall:[.1], tintRate:[.75], cutRate:[.55,'hype',.4], flashCuts:[.3,'punch',.5], lookMix:[.7], saturate:[1.35,'loud',.2], contrast:[1.2,'punch',.2], grain:[.35], halftone:[.08], glow:[.2,'loud',.3], rgbSplit:[.2,'punch',.5], invertFlk:[.25,'snare',.5], whiteFlash:[.15,'kick',.5], cleanHits:[.3]}},
+  splittint: {name:'Split Tint', fx:true, sw:'mint', looks:['duo','punch'], pals:['mint','olive','thermo','slate','ochre','jelly'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], splitTint:[1], hud:[.85], tintRate:[.75], cutRate:[.28,'hype',.3], clipHold:[.6], lookMix:[.15], saturate:[1.1], contrast:[1.1], grain:[.3], halftone:[.06], invertFlk:[.1,'snare',.4], whiteFlash:[.05,'kick',.4], cleanHits:[0]}},
+  quadscan: {name:'Analysis Grid', fx:true, sw:'thermo', looks:['duo','sil','punch'], pals:['thermo','mono','slate','mint'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'pair', fonts:['narrow'], patMotif:0,
+    dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], quadGrid:[1], hud:[.3], tintRate:[.7], cutRate:[.4,'hype',.4], grain:[.35], scanlines:[.25], contrast:[1.15], lookMix:[.3], invertFlk:[.15,'snare',.4], cleanHits:[.15]}},
+  neonbloom: {name:'Neon Bloom', fx:true, sw:'neon', looks:['duo','hue','punch'], pals:['neon','ultra','chrome','noir'], layouts:{full:9,pip:1}, textStyles:['small'], textModes:[0], deco:{}, flk:'burst', fonts:['narrow'], patMotif:0,
+    dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], inset:[.4], tintRate:[.6], glow:[.7,'loud',.3], lightLeak:[.35,'snare',.3], saturate:[1.6,'loud',.2], rgbSplit:[.35,'punch',.6], lookMix:[.6], feedback:[.25,'loud',.3], hueShift:[.1,'bar',.4], contrast:[1.2,'punch',.2], grain:[.2], cutRate:[.45,'hype',.4], cleanHits:[.3], invertFlk:[.2,'snare',.5]}},
+  heatmap: {name:'Heat Map', fx:true, sw:'heatmap', looks:['duo','poster'], pals:['heatmap','heat','ember','thermo'], layouts:{full:9,bands:1}, textStyles:['small'], textModes:[0], deco:{}, flk:'burst', fonts:['narrow'], patMotif:0,
+    dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], lookMix:[.9], posterize:[.35,'drop',.3], ghost:[.35,'punch',.4], feedback:[.3,'loud',.3], contrast:[1.25,'punch',.2], saturate:[1.3,'loud',.2], grain:[.25], displace:[.08,'mid',.4], cutRate:[.5,'hype',.4], flashCuts:[.3,'punch',.5], invertFlk:[.25,'snare',.5], cleanHits:[.25]}},
+  eroded: {name:'Eroded Frame', fx:true, sw:'ultra', looks:['poster','duo','hue'], pals:['ultra','riot','neon','jelly'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'pair', fonts:['narrow'], patMotif:0,
+    dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], erode:[1], tintRate:[.55], posterize:[.3,'drop',.3], saturate:[1.6,'loud',.2], contrast:[1.35,'punch',.2], lookMix:[.75], corrupt:[.15,'snare',.4], grain:[.3], cutRate:[.45,'hype',.4], invertFlk:[.2,'snare',.5], rgbSplit:[.25,'punch',.5], cleanHits:[.2]}},
+  typewall: {name:'Type Wall', sw:'jelly', looks:['duo','hue'], pals:['jelly','rose','noir'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['mono'], patMotif:0,
+    dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], typeWall:[1], inset:[.45], tintRate:[.7], lookMix:[.8], saturate:[1.4,'loud',.2], contrast:[1.2], grain:[.35], halftone:[.12], cutRate:[.4,'hype',.4], invertFlk:[.15,'snare',.4], glow:[.2,'loud',.3], cleanHits:[.2]}},
   chaos: {name:'Chaos', sw:'ultra'}
 };
 const STYLE_KEYS = Object.keys(PRESETS).filter(k => k !== 'chaos');
