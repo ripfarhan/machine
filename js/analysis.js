@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — audio analysis: FFT, band energies, onsets, hype, drops, beat grid */
+/* Maut ki machine — audio analysis: FFT, band energies, onsets, hype, drops, beat grid */
 'use strict';
 const AFPS = 100;
 

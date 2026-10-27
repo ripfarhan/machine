@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — SYNTH: a math-based generative synthesiser.
+/* Maut ki machine — SYNTH: a math-based generative synthesiser.
    Every sample is computed: FM operators, Karplus–Strong strings, modal resonator banks (membrane, bar, glass, metal
    mode ratios), PolyBLEP oscillators through TPT state-variable filters, granular clouds, a feedback-delay-network reverb.
    The music comes from systems that evolve rather than loop: Markov harmony with voice leading, a motif that develops

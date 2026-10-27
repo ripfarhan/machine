@@ -1,4 +1,4 @@
-# Glitch Reel Machine
+# Maut ki machine
 
 A browser-based engine for audio-reactive, experimental 9:16 video reels.
 Drop in photos, GIFs and clips plus a song; the song is analyzed into signals

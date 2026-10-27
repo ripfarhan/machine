@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — Studio panel: drives the math synthesiser (js/synth.js).
+/* Maut ki machine — Studio panel: drives the math synthesiser (js/synth.js).
    Rendering happens in a Web Worker built from SYNTH_CORE's own source, so the page never blocks; playback is a plain
    AudioBuffer, so seeking is instant. The plan (form, chords, sections) is computed on the main thread in milliseconds
    and drawn immediately while the audio renders. */
@@ -7,6 +7,7 @@
   const $s = id => document.getElementById(id);
   if (!$s('stGen') || typeof SYNTH_CORE !== 'function') return;
   const CORE = SYNTH_CORE(), DEF = CORE.DEF;
+  const APP = window.__app || {toast: m => console.log(m), saveBlob: () => false, loadSongFile: async () => { throw new Error('reel engine not loaded'); }, IDB: null};
   const P = JSON.parse(JSON.stringify(DEF));
 
   // ---------------------------------------------------------------- controls
@@ -97,12 +98,12 @@
     let o = 44; for (let i = 0; i < n; i++){ const l = Math.max(-1, Math.min(1, cur.L[i])), r = Math.max(-1, Math.min(1, cur.R[i])); v.setInt16(o, l < 0 ? l * 32768 : l * 32767, true); v.setInt16(o + 2, r < 0 ? r * 32768 : r * 32767, true); o += 4; }
     return new Blob([b], {type: 'audio/wav'}); }
   const fname = () => 'synth-' + CORE.NOTE[P.tonic].replace('#', 's') + '-' + P.mode + '-' + P.bpm + '-seed' + P.seed + (P.vary ? 'v' + P.vary : '') + '.wav';
-  $s('stExport').onclick = () => { if (!cur) return toast('Still rendering'); saveBlob(fname(), wavBlob()); toast('WAV saved'); };
-  $s('stUse').onclick = async () => { if (!cur) return toast('Still rendering'); if (playing()) pause(); try { const f = new File([wavBlob()], fname(), {type: 'audio/wav'}); if (typeof IDB !== 'undefined') IDB.put('song', 'current', {name: f.name, type: f.type, blob: f}); await loadSongFile(f); toast('Studio track is now the reel song'); } catch(e){ console.error(e); toast('Could not hand the track to the reel: ' + e.message); } };
-  const recipe = () => JSON.stringify(Object.assign({app: 'glitch-reel-machine-synth', v: 1}, P));
-  function applyRecipe(o){ if (!o || o.app !== 'glitch-reel-machine-synth') throw new Error('not a synth recipe'); for (const k in DEF) if (k in o) P[k] = k === 'layers' ? Object.assign({}, DEF.layers, o.layers) : k === 'palette' ? Object.assign({}, o.palette) : o[k]; }
-  $s('stCopy').onclick = async () => { const code = recipe(); try { await navigator.clipboard.writeText(code); toast('Music recipe copied'); } catch(e){ prompt('Music recipe', code); } };
-  $s('stPaste').onclick = () => { const code = prompt('Paste a music recipe'); if (!code) return; try { applyRecipe(JSON.parse(code)); syncUI(); changed(true); toast('Recipe applied'); } catch(e){ toast('That is not a music recipe'); } };
+  $s('stExport').onclick = () => { if (!cur) return APP.toast('Still rendering'); APP.saveBlob(fname(), wavBlob()); APP.toast('WAV saved'); };
+  $s('stUse').onclick = async () => { if (!cur) return APP.toast('Still rendering'); if (playing()) pause(); try { const f = new File([wavBlob()], fname(), {type: 'audio/wav'}); if (APP.IDB) APP.IDB.put('song', 'current', {name: f.name, type: f.type, blob: f}); await APP.loadSongFile(f); APP.toast('Studio track is now the reel song'); } catch(e){ console.error(e); APP.toast('Could not hand the track to the reel: ' + e.message); } };
+  const recipe = () => JSON.stringify(Object.assign({app: 'maut-ki-machine-synth', v: 1}, P));
+  function applyRecipe(o){ if (!o || (o.app !== 'maut-ki-machine-synth' && o.app !== 'glitch-reel-machine-synth')) /* accepts recipes saved under the old name */ throw new Error('not a synth recipe'); for (const k in DEF) if (k in o) P[k] = k === 'layers' ? Object.assign({}, DEF.layers, o.layers) : k === 'palette' ? Object.assign({}, o.palette) : o[k]; }
+  $s('stCopy').onclick = async () => { const code = recipe(); try { await navigator.clipboard.writeText(code); APP.toast('Music recipe copied'); } catch(e){ prompt('Music recipe', code); } };
+  $s('stPaste').onclick = () => { const code = prompt('Paste a music recipe'); if (!code) return; try { applyRecipe(JSON.parse(code)); syncUI(); changed(true); APP.toast('Recipe applied'); } catch(e){ APP.toast('That is not a music recipe'); } };
   setInterval(() => { try { localStorage.setItem('grm.synth', recipe()); } catch(e){} }, 4000);
   try { const s0 = localStorage.getItem('grm.synth'); if (s0) applyRecipe(JSON.parse(s0)); } catch(e){}
   syncUI(); changed(true);

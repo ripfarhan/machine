@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — palettes, looks, dial definitions and the style presets */
+/* Maut ki machine — palettes, looks, dial definitions and the style presets */
 'use strict';
 const SIGNALS = ['const','sub','bass','kick','snare','hat','mid','high','punch','loud','hype','drop','build','beat','bar','bright','rand','lfo'];
 const PAL = {

@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — shared helpers */
+/* Maut ki machine — shared helpers */
 'use strict';
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const lerp = (a, b, k) => a + (b - a) * k;

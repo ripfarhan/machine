@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Glitch Reel Machine — music reverse-engineering pipeline.
+"""Maut ki machine — music reverse-engineering pipeline.
 
 Pure numpy/scipy, no librosa, so every number here is explainable and the same
 math can be ported into the browser engine. Run:

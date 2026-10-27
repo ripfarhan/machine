@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — flat MP4 muxer (H.264 + AAC/PCM) and codec picker, no library */
+/* Maut ki machine — flat MP4 muxer (H.264 + AAC/PCM) and codec picker, no library */
 'use strict';
 function mp4Mux(video, audio){
   // video: {w,h,fps,avcC:Uint8Array,samples:[{data,key}]}  audio: null | {kind:'aac',sr,ch,asc,samples:[{data}]} | {kind:'pcm',sr,ch,pcm:Int16Array}

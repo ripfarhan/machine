@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — motif library: symbols drawn as paths, plus arrangements (scatter, mandala, frame, column, giant, trail, wallpaper) */
+/* Maut ki machine — motif library: symbols drawn as paths, plus arrangements (scatter, mandala, frame, column, giant, trail, wallpaper) */
 'use strict';
 // Every motif draws centered on (0,0) at radius s, using the ctx's current fillStyle / strokeStyle / lineWidth.
 // mode: 'fill' or 'stroke'. Motifs that only make sense one way ignore mode.

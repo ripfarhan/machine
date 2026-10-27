@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — font library and font sets (condensed workhorses, clean sans, real serifs; no novelty faces) */
+/* Maut ki machine — font library and font sets (condensed workhorses, clean sans, real serifs; no novelty faces) */
 'use strict';
 // Each face: family stack, weight, whether it covers Devanagari. Google Fonts are linked from index.html; stacks fall back to system faces.
 const FONTS = {

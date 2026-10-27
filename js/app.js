@@ -1,4 +1,4 @@
-/* Glitch Reel Machine — main: state, media, sequencer, renderer, export, UI */
+/* Maut ki machine — main: state, media, sequencer, renderer, export, UI */
 (() => {
 'use strict';
 let W = 720, H = 1280, SC = 1;
@@ -636,7 +636,7 @@ function renderThumbs(){ const box = $('#thumbs'); box.innerHTML = '';
 const IDB = {
   _db: null,
   open(){ if (this._db) return this._db; // one connection, reused: a new one per call leaked handles until writes started failing
-    this._db = new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('glitch-reel-machine', 1);
+    this._db = new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('glitch-reel-machine', 1);   // storage name kept from the old project name: renaming it would orphan saved footage and songs
       q.onupgradeneeded = () => { const d = q.result; if (!d.objectStoreNames.contains('media')) d.createObjectStore('media'); if (!d.objectStoreNames.contains('song')) d.createObjectStore('song'); };
       q.onsuccess = () => { q.result.onclose = () => { IDB._db = null; }; res(q.result); }; q.onerror = () => { IDB._db = null; rej(q.error); }; });
     return this._db; },
@@ -765,7 +765,7 @@ document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(doc
 
 
 /* ---- recipes: the whole setup as a small JSON ---- */
-function recipe(){ return {v: 2, app: 'glitch-reel-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate, preDrop: state.preDrop, preCalm: state.preCalm, dropAt: state.dropAt, wordMode: state.wordMode, cues: state.cues, lyOff: state.lyOff, lyHow: state.lyHow, lyHold: state.lyHold,
+function recipe(){ return {v: 2, app: 'maut-ki-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate, preDrop: state.preDrop, preCalm: state.preCalm, dropAt: state.dropAt, wordMode: state.wordMode, cues: state.cues, lyOff: state.lyOff, lyHow: state.lyHow, lyHold: state.lyHold,
   lengthSel: state.lengthSel, fps: state.fps, bpm: state.bpm, beatSeed: state.beatSeed, words: $('#lyrics').value, dials: JSON.parse(JSON.stringify(P))}; }
 function applyRecipe(R){
   if (!R || !R.dials) throw new Error('not a recipe');
@@ -825,5 +825,7 @@ window.__reel = { state, P, renderAt, __val: val, exportVideo, mp4Mux, resizeAll
     ws(0, 'RIFF'); v.setUint32(4, 36 + n * ch * 2, true); ws(8, 'WAVE'); ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true); v.setUint32(24, sr, true); v.setUint32(28, sr * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); ws(36, 'data'); v.setUint32(40, n * ch * 2, true);
     const L = b.getChannelData(0), R = b.numberOfChannels > 1 ? b.getChannelData(1) : L; let o = 44; for (let i = 0; i < n; i++){ for (const C of [L, R]){ v.setInt16(o, clamp(C[s0 + i] || 0, -1, 1) * 32767, true); o += 2; } }
     let bin = ''; const u8 = new Uint8Array(buf); for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 32768)); return btoa(bin); }, ready: null };
+// the few app functions other panels need; app.js keeps everything else private
+window.__app = {toast, saveBlob, loadSongFile, IDB};
 window.__reel.ready = boot();
 })();
