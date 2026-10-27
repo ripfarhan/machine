@@ -185,6 +185,11 @@ function SYNTH_CORE(){
         t += 1 / Math.max(1, dens) * (.4 + nz() * 1.2); } }
     else if (P.kind === 'wind'){ const a = svf(), b = svf(); for (let i = 0; i < n; i++){ if ((i & 63) === 0){ const z = lzAt(e, i / sr); svfSet(a, 300 + 2600 * (z * .5 + .5), P.q, sr); svfSet(b, 360 + 2400 * (.5 - z * .5), P.q, sr); }
         svfTick(a, nz() * 2 - 1); svfTick(b, nz() * 2 - 1); l[i] = a.bp * .5; r[i] = b.bp * .5; } }
+    else if (P.kind === 'glitch'){ let t = .2; const bt = P.beat || .5;
+      while (t < e.dur){ const z = lzAt(e, t), ch = e.chordAt(e.t + t), mn = ch[(nz() * ch.length) | 0] + 12 * (1 + ((nz() * 3) | 0)), f = mtof(mn), burst = nz() < .22 ? 2 + ((nz() * 5) | 0) : 1, step = bt / 8 * (nz() < .5 ? 1 : .5);
+        for (let b = 0; b < burst; b++){ const s0 = ((t + b * step) * sr) | 0, glen = (.006 + nz() * .045) * sr, [gl, gr] = panLR(nz() < .5 ? -.8 - nz() * .2 : .8 + nz() * .2), g = (.16 + .12 * nz()) * (1 - b / (burst + 1)); let ph = 0, pm = 0;
+          for (let i = 0; i < glen && s0 + i < n; i++){ const w = i < 24 ? i / 24 : Math.exp(-(i - 24) / (glen * .35)); ph += f / sr; pm += f * 3.01 / sr; const x = sin1(ph + .6 * sin1(pm) / TAU) * w * g; l[s0 + i] += x * gl; r[s0 + i] += x * gr; } }
+        t += bt / 4 * (1 + ((nz() * (10 - P.density * .6 + 2 * (1 - z))) | 0)); } }
     else if (P.kind === 'crackle'){ const h = svf(); svfSet(h, 2400, .6, sr); let pop = 0, hiss = 0; const pr = 7 * (P.rate || 1) / sr;
       for (let i = 0; i < n; i++){ if (nz() < pr) pop = (nz() * 2 - 1) * (nz() < .12 ? 1 : .3); else pop *= .25; hiss = (nz() * 2 - 1) * .012; svfTick(h, pop + hiss); const x = h.hp * .6; l[i] = x; r[i] = nz() < .5 ? x : x * .7; } }
     else { const f = mtof(e.root); let pc = 0, pm = 0; for (let i = 0; i < n; i++){ const z = lzAt(e, i / sr), ratio = 1.5 + z * 1.2, idx = .8 + (z * .5 + .5) * 1.6; pc += f / sr; pm += f * ratio / sr; const x = sin1(pc + idx * sin1(pm) / TAU) * .18; l[i] = x * (.6 + .4 * z); r[i] = x * (.6 - .4 * z); } }
@@ -281,8 +286,8 @@ function SYNTH_CORE(){
     return (inp, oL, oR, n) => { for (let s = 0; s < n; s++){ const dl = bl[i], dr = br[i]; ll = dl + (ll - dl) * a; lr = dr + (lr - dr) * a; hl += (inp[s] - hl) * .02; bl[i] = (inp[s] - hl) + lr * fb; br[i] = ll * fb; if (++i >= N) i = 0; oL[s] += dl; oR[s] += dr; } }; }
 
   // =========================================================== composition — the evolving engine
-  const DEF = {seed: 7, vary: 0, style: '', fx: null, bpm: 120, tonic: 9, mode: 'minor', bars: 112, rhythm: 'auto', form: 'auto', melody: 'auto', color: .65, motion: .4, develop: .5, chaos: .35, poly: .6,
-    density: .6, bright: .5, metal: .25, swing: .55, humanize: .35, pump: .35, drive: .2, verb: .55, delay: .4, width: .9, arpRate: 16,
+  const DEF = {seed: 7, vary: 0, style: '', fx: null, bpm: 120, tonic: 9, mode: 'minor', bars: 112, rhythm: 'auto', form: 'auto', melody: 'auto', color: .3, motion: .3, develop: .5, chaos: .35, poly: .6,
+    density: .62, bright: .5, metal: .25, swing: .52, humanize: .35, pump: .35, drive: .2, verb: .55, delay: .4, width: .9, arpRate: 16,
     layers: {kick: 1, snare: 1, hat: 1, perc: 1, bass: 1, arp: 1, pad: 1, keys: 1, lead: 1, tex: 1}, palette: {}};
 
   // progression grammar, in scale-degree indices (0 = tonic). Each loop is a phrase people have loved for decades; the mode decides the chord qualities.
@@ -293,9 +298,12 @@ function SYNTH_CORE(){
     major: {4: [[0, 4, 5, 3], [0, 5, 3, 4], [5, 3, 0, 4], [0, 3, 5, 4], [0, 3, 0, 4], [1, 4, 0, 0], [0, 5, 1, 4], [3, 0, 4, 5], [0, 2, 3, 5]], 2: [[0, 3], [0, 5], [0, 4], [5, 3]], 8: [[0, 4, 5, 3, 0, 4, 1, 3]]},
     lydian: {4: [[0, 1, 0, 1], [0, 1, 5, 4], [0, 4, 1, 0], [0, 1, 2, 1]], 2: [[0, 1], [0, 4]], 8: [[0, 1, 0, 1, 5, 4, 0, 1]]},
     mixolydian: {4: [[0, 6, 3, 0], [0, 6, 0, 6], [0, 3, 6, 0], [0, 4, 6, 3]], 2: [[0, 6], [0, 3]], 8: [[0, 6, 3, 0, 0, 6, 4, 3]]}};
+  // vamp family measured off the reference tracks: two chords that trade places for bars at a time (i↔VI, i↔iv, i↔III, I↔vi…)
+  PROG.vampMinor = {2: [[0, 5], [0, 5], [0, 3], [0, 2], [0, 6], [5, 0]], 3: [[0, 5, 3], [0, 3, 6], [0, 5, 6], [0, 2, 5]], 4: [[0, 5, 2, 6], [0, 3, 5, 6], [0, 5, 0, 3]]};
+  PROG.vampMajor = {2: [[5, 0], [5, 0], [0, 3], [0, 5], [0, 4]], 3: [[5, 0, 3], [5, 3, 0], [0, 3, 5]], 4: [[5, 3, 0, 4], [0, 4, 5, 3]]};
   PROG.phrygian = {4: [[0, 1, 0, 1], [0, 1, 6, 1], [0, 6, 1, 0], [0, 2, 1, 0]], 2: [[0, 1], [0, 6]], 8: [[0, 1, 0, 1, 0, 6, 1, 0]]};
   PROG.harmonicMinor = PROG.minor; PROG.pentMinor = {4: [[0, 2, 0, 3], [0, 3, 2, 0], [0, 4, 3, 0]], 2: [[0, 3], [0, 2]], 8: [[0, 2, 0, 3, 0, 4, 3, 0]]};
-  const STACK = {tri: [0, 2, 4], sev: [0, 2, 4, 6], sus2: [0, 1, 4], sus4: [0, 3, 4], add9: [0, 2, 4, 8], nine: [0, 2, 4, 6, 8], quart: [0, 3, 6], six: [0, 2, 4, 5], m11: [0, 2, 6, 8, 10]};
+  const STACK = {tri: [0, 2, 4], sev: [0, 2, 4, 6], sus2: [0, 1, 4], sus4: [0, 3, 4], add9: [0, 2, 4, 8], nine: [0, 2, 4, 6, 8], quart: [0, 3, 6], six: [0, 2, 4, 5], m11: [0, 2, 6, 8, 10], open: [0, 4, 7], sus2o: [0, 1, 4, 7]};
 
   function plan(p){
     if (GS[p.style]) return planGenre(p, GS[p.style]);
@@ -305,12 +313,13 @@ function SYNTH_CORE(){
     const dpc = d => (tonic + scale[((d % nS) + nS) % nS]) % 12;
     const dmidi = (d, base) => base + 12 * Math.floor(d / nS) + tonic + scale[((d % nS) + nS) % nS];
     const rhythm = p.rhythm && p.rhythm !== 'auto' ? p.rhythm : pickW(R, {four: 36, drive: 10, broken: 26, half: 12, ca: 10, none: 6});
-    const form = ['arc', 'rise', 'twin', 'ambient'].indexOf(p.form) >= 0 ? p.form : pickW(R, {arc: 36, rise: 22, twin: 30, ambient: rhythm === 'none' ? 80 : 4});
+    const form = ['arc', 'rise', 'twin', 'ambient', 'cooper', 'steps'].indexOf(p.form) >= 0 ? p.form : pickW(R, {cooper: 30, steps: 20, arc: 20, rise: 15, twin: 15, ambient: rhythm === 'none' ? 80 : 2});
     const mt = p.metal, ring = Math.max(0, mt - .6) * 5, bright = p.bright;
     // ---------- palette (auto picks lean to what carries an emotional electronic piece: pianos, plucks, lush pads)
-    const pal = {bass: pickW(R, {sub: 3, fm: 2, subsaw: 2, string: 1}), arp: pickW(R, {keys: 3, pluck: 3, saw: 1.5, epiano: 1.5, mallet: .4 + mt, bell: ring}),
-      pad: pickW(R, {lush: 4, fmpad: 2, additive: 1.5, supersaw: 1}), lead: pickW(R, {keys: 2.5, pluck: 2, glass: 1, sawlead: 1, fmlead: 1, mallet: ring * .5}),
-      perc: pickW(R, {wood: 3, membrane: 3, glass: ring * .5, metal: ring * .4}), tex: pickW(R, {grains: 1.5 + mt, wind: 2, chaos: 1, crackle: .6}), keys: pickW(R, {felt: 3, epiano: 1.5, glass: 1})};
+    const SW = (STYLES[p.style] || STYLES.cooper).pal || {}, W = (k, d) => Object.assign({}, d, SW[k] || {});
+    const pal = {bass: pickW(R, W('bass', {sub: 3, fm: 2, subsaw: 3, string: .5})), arp: pickW(R, W('arp', {saw: 3, pluck: 3, glass: 1.5, keys: .6, epiano: .4, mallet: .3 + mt, bell: ring})),
+      pad: pickW(R, W('pad', {lush: 4, fmpad: 2, additive: 1.5, supersaw: 1.5})), lead: pickW(R, W('lead', {pluck: 2.5, glass: 2, sawlead: 1.5, fmlead: 1.5, keys: .5, mallet: ring * .5})),
+      perc: pickW(R, W('perc', {wood: 3, membrane: 2, glass: .5 + ring * .5, metal: ring * .4})), tex: pickW(R, W('tex', {grains: 2 + mt, wind: 2, chaos: 1.5, crackle: .3})), keys: pickW(R, W('keys', {glass: 2, felt: 2, epiano: .5}))};
     for (const k in pal) if (p.palette[k] && p.palette[k] !== 'auto') pal[k] = p.palette[k];
     const malletBody = r => pickW(r, {bar: 3, wood: 2, glass: ring, metal: ring * .6});
     const keysOf = kind => ({inst: 'keys', kind, rel: kind === 'glass' ? .6 : .4});
@@ -327,7 +336,7 @@ function SYNTH_CORE(){
         : pal.arp === 'epiano' ? {inst: 'fm', ratio: 1, ratio2: 14, index: rr(R, .9, 1.8) * (.6 + mt * .6), index2: rr(R, .3, .9), indexSus: .2, idecay: rr(R, .15, .4), atk: .002, dec: rr(R, .5, 1.2), sus: .1, rel: .3}
         : pal.arp === 'pluck' ? {inst: 'string', t60: rr(R, .6, 2.2), bright: rr(R, .35, .9), rel: .08}
         : pal.arp === 'saw' ? {inst: 'saw', cut: rr(R, 1.2, 2.6), famt: rr(R, 3, 10) * (.4 + bright), fdec: rr(R, .04, .2), res: rr(R, .7, 2.2), atk: .002, dec: rr(R, .1, .4), sus: rr(R, 0, .3), rel: rr(R, .05, .25), sq: R() < .4, det: rr(R, .002, .008)}
-        : pal.arp === 'keys' ? keysOf(pal.keys) : {inst: 'mallet', body: malletBody(R), decay: rr(R, .45, 1.1)},
+        : pal.arp === 'keys' ? keysOf(pal.keys) : pal.arp === 'glass' ? keysOf('glass') : {inst: 'mallet', body: malletBody(R), decay: rr(R, .45, 1.1)},
       pad: pal.pad === 'lush' ? {kind: 'lush', det: rr(R, 9, 22), cut: rr(R, 700, 2200) * (.5 + bright), res: rr(R, .5, .8), atk: rr(R, .8, 2.4), rel: rr(R, 1.5, 3.5)}
         : pal.pad === 'supersaw' ? {kind: 'supersaw', det: rr(R, 7, 18), cut: rr(R, 700, 1800) * (.5 + bright), res: rr(R, .6, 1), atk: rr(R, .4, 1.6), rel: rr(R, 1, 2.8)}
         : pal.pad === 'fmpad' ? {kind: 'fmpad', ratio: pick(R, [1, 2, .5, 3]), index: rr(R, .4, 1.4) * (.5 + mt), lfo: rr(R, .04, .2), det: rr(R, 3, 9), atk: rr(R, .6, 2), rel: rr(R, 1.2, 3)}
@@ -337,13 +346,15 @@ function SYNTH_CORE(){
         : pal.lead === 'pluck' ? {inst: 'string', t60: rr(R, 1.4, 3.2), bright: rr(R, .5, 1), rel: .15}
         : pal.lead === 'glass' ? keysOf('glass') : pal.lead === 'keys' ? keysOf(pal.keys) : {inst: 'mallet', body: malletBody(R), decay: rr(R, .8, 1.3)},
       keys: keysOf(pal.keys), perc: {body: pal.perc, decay: rr(R, .45, .9), reg: pal.perc === 'glass' || pal.perc === 'metal' ? 60 : pal.perc === 'wood' ? 55 : 50},
-      tex: pal.tex === 'grains' ? {kind: 'grains', density: rr(R, 5, 14), fm: rr(R, .1, .8) * (.3 + mt)} : pal.tex === 'wind' ? {kind: 'wind', q: rr(R, 3, 9)} : pal.tex === 'crackle' ? {kind: 'crackle', rate: 1} : {kind: 'chaos'}};
+      tex: pal.tex === 'grains' ? {kind: 'grains', density: rr(R, 5, 14), fm: rr(R, .1, .8) * (.3 + mt)} : pal.tex === 'wind' ? {kind: 'wind', q: rr(R, 3, 9)} : pal.tex === 'crackle' ? {kind: 'crackle', rate: 1} : pal.tex === 'glitch' ? {kind: 'glitch', density: rr(R, 4, 11), beat: 60 / p.bpm} : {kind: 'chaos'}};
 
     // ---------- form: sections with an energy curve
     const FORMS = {arc: [['intro', .12, .3], ['build', .12, .55], ['peak', .24, 1], ['break', .13, .35], ['build', .07, .65], ['peak', .19, 1], ['outro', .13, .3]],
       rise: [['intro', .1, .25], ['rise', .22, .4], ['rise', .22, .65], ['peak', .32, 1], ['outro', .14, .32]],
       twin: [['intro', .1, .3], ['groove', .18, .7], ['peak', .2, 1], ['break', .14, .35], ['groove', .1, .75], ['peak', .16, 1], ['outro', .12, .3]],
-      ambient: [['intro', .2, .2], ['swell', .3, .38], ['bloom', .3, .6], ['outro', .2, .22]]};
+      ambient: [['intro', .2, .2], ['swell', .3, .38], ['bloom', .3, .6], ['outro', .2, .22]],
+      cooper: [['intro', .09, .22], ['low', .07, .32], ['groove', .16, .55], ['groove', .16, .75], ['peak', .2, 1], ['low', .06, .35], ['peak', .18, 1], ['outro', .08, .28]],
+      steps: [['intro', .08, .2], ['groove', .12, .45], ['groove', .14, .62], ['groove', .14, .78], ['peak', .3, 1], ['low', .05, .3], ['peak', .1, 1], ['outro', .07, .25]]};
     const B = Math.max(16, Math.round(p.bars / 4) * 4), F = FORMS[form];
     const secs = []; let acc = 0;
     F.forEach(([name, f, e], i) => { const bars = Math.max(4, Math.round(f * B / 4) * 4); secs.push({name, bar0: acc, bars, e, eTo: e, chaosMul: 1, idx: i}); acc += bars; });
@@ -352,7 +363,7 @@ function SYNTH_CORE(){
     const NB = acc, NSTEP = NB * 16;
     const secOf = bar => { for (let i = secs.length - 1; i >= 0; i--) if (bar >= secs[i].bar0) return secs[i]; return secs[0]; };
     const energy = bar => { const s = secOf(bar), k = (bar - s.bar0) / s.bars; return lerp(s.e, s.eTo, k); };
-    const isPeak = S => S.name === 'peak' || S.name === 'bloom', isBuild = S => S.name === 'build' || S.name === 'rise' || S.name === 'swell', isCalm = S => S.name === 'intro' || S.name === 'break' || S.name === 'outro';
+    const isPeak = S => S.name === 'peak' || S.name === 'bloom', isBuild = S => S.name === 'build' || S.name === 'rise' || S.name === 'swell', isCalm = S => S.name === 'intro' || S.name === 'break' || S.name === 'outro' || S.name === 'low';
     const peaks = secs.filter(isPeak), firstPeak = peaks.length ? peaks[0] : secs[Math.floor(secs.length / 2)];
 
     // ---------- chaos and continuous modulation
@@ -363,12 +374,13 @@ function SYNTH_CORE(){
     // ---------- harmony: a loop from the grammar, one colour palette for the whole piece, voice-led
     const isDim = d => nS === 7 && ((dpc(d + 4) - dpc(d) + 12) % 12) === 6;
     const chordType = (root, r) => { const c = p.color, maj = ((dpc(root + 2) - dpc(root) + 12) % 12) === 4;
-      if (c < .3) return pickW(r, {tri: 7, sus2: 1, add9: .5});
-      if (c < .6) return pickW(r, maj ? {add9: 3, sev: 2, tri: 2, sus2: 1} : {sev: 4, add9: 2, tri: 1.5, sus2: 1});
+      if (c < .2) return pickW(r, {open: 4, tri: 3, sus2: 2, sus2o: 1});
+      if (c < .4) return pickW(r, {tri: 5, sus2: 3, open: 2, add9: 1, sus4: .5});
+      if (c < .6) return pickW(r, maj ? {add9: 3, tri: 3, sus2: 2, sev: 1} : {tri: 3, add9: 2, sus2: 2, sev: 2});
       if (c < .85) return pickW(r, maj ? {add9: 3, nine: 2, sev: 2, sus2: 1.5, six: 1} : {sev: 3, nine: 3, add9: 2, sus2: 1, m11: .5});
       return pickW(r, maj ? {nine: 3, add9: 2, quart: 1.5, sus2: 1.5, six: 1} : {nine: 3, m11: 1.5, quart: 2, add9: 1.5, sev: 1}); };
     const chordName = (root, type) => { const pcs = STACK[type].map(x => dpc(root + x)), rp = pcs[0], iv = pcs.map(q => (q - rp + 12) % 12), has = x => iv.indexOf(x) >= 0;
-      if (type === 'quart') return NOTE[rp] + '⁴'; if (type === 'sus2') return NOTE[rp] + 'sus2'; if (type === 'sus4') return NOTE[rp] + 'sus4';
+      if (type === 'quart') return NOTE[rp] + '⁴'; if (type === 'open') return NOTE[rp] + '5'; if (type === 'sus2' || type === 'sus2o') return NOTE[rp] + 'sus2'; if (type === 'sus4') return NOTE[rp] + 'sus4';
       const m = has(3) && !has(4), dim = m && has(6) && !has(7); let q = dim ? (has(10) ? 'm7♭5' : 'dim') : m ? 'm' : '';
       if (!dim){ if (has(11)) q += 'maj7'; else if (has(10)) q += '7'; } if (type === 'add9') q += 'add9'; if (type === 'six') q += '6'; if (type === 'm11') q += '11'; if (type === 'nine') q = q.replace('7', '9'); return NOTE[rp] + q; };
     let lastVoice = null;
@@ -379,16 +391,19 @@ function SYNTH_CORE(){
           for (let k = 1; k < s.length; k++) if (s[k] - s[k - 1] === 2 && s[k] < 64) c += 1.5;   // close seconds low down turn to mud
           c += H() * .7; if (c < bc){ bc = c; best = s; } return; } for (const m of opts[i]){ cur.push(m); rec(i + 1); cur.pop(); } };
       rec(0); if (!best) best = pcs.map(pc => 57 + ((pc - 57) % 12 + 12) % 12).sort((a, b) => a - b); lastVoice = best; return best; };
-    const lib = PROG[p.mode] || PROG.minor, loopLen = p.motion < .25 ? pickW(H, {2: 3, 4: 2}) : p.motion < .75 ? pickW(H, {4: 5, 2: 1, 8: 1}) : pickW(H, {4: 3, 8: 2});
-    const degs = pick(H, lib[loopLen] || lib[4]).map(d => isDim(d) ? (d + (H() < .5 ? 1 : -1) + nS) % nS : d);
+    const STY = STYLES[p.style] || STYLES.cooper, vampy = STY.vamp === undefined ? true : STY.vamp;
+    const lib = vampy && nS === 7 ? (minorish ? PROG.vampMinor : PROG.vampMajor) : (PROG[p.mode] || PROG.minor), loopLen = vampy ? (p.motion < .3 ? 2 : p.motion < .7 ? pickW(H, {2: 3, 3: 2, 4: 1}) : pickW(H, {3: 2, 4: 3})) : (p.motion < .25 ? pickW(H, {2: 3, 4: 2}) : p.motion < .75 ? pickW(H, {4: 5, 2: 1, 8: 1}) : pickW(H, {4: 3, 8: 2}));
+    const degs = pick(H, lib[loopLen] || lib[4] || lib[2]).map(d => isDim(d) ? (d + (H() < .5 ? 1 : -1) + nS) % nS : d);
+    // uneven bar lengths per chord (the home chord lingers): the reference tracks sit on one chord ~60 % of the time
+    const lenPat = vampy ? pick(H, loopLen === 2 ? [[3, 1], [2, 2], [4, 2], [6, 2], [2, 1], [3, 1]] : loopLen === 3 ? [[2, 1, 1], [4, 2, 2], [2, 2, 2]] : [[2, 1, 1, 2], [1, 1, 1, 1], [2, 2, 2, 2]]) : null;
     const mkChord = (root, type) => { const pcs = STACK[type].map(x => dpc(root + x)); return {root, type, pcs, name: chordName(root, type), bass: 33 + ((dpc(root) - 33) % 12 + 12) % 12}; };
     const loopA = degs.map(d => mkChord(d, chordType(d, H)));
     // the break's loop: the same chords with one substitution (relative, or the sixth degree), so the breakdown feels like a new room in the same house
     const loopB = loopA.map((c, i) => { if (i !== 1 && i !== loopA.length - 1) return c; if (H() > .55 + p.develop * .3) return c; const alt = (c.root + (minorish ? 5 : 5)) % nS; return isDim(alt) ? c : mkChord(alt, chordType(alt, H)); });
     const hrBase = p.motion < .3 ? 4 : p.motion < .65 ? 2 : 1;
     const chords = [], chordBar = [];
-    secs.forEach(S => { const calm = isCalm(S) || S.name === 'swell', hr = Math.min(S.bars, calm ? Math.min(8, hrBase * 2) : hrBase), lp = S.name === 'break' ? loopB : loopA;
-      let b = S.bar0, ti = 0; while (b < S.bar0 + S.bars){ const bars = Math.min(hr, S.bar0 + S.bars - b), c = lp[ti % lp.length]; chords.push(Object.assign({bar: b, bars}, c)); b += bars; ti++; } });
+    let ti = 0; secs.forEach(S => { const calm = isCalm(S) || S.name === 'swell', hr = Math.min(S.bars, calm ? Math.min(8, hrBase * 2) : hrBase), lp = S.name === 'break' || S.name === 'low' ? loopB : loopA, slow = p.motion < .25 ? 2 : 1;
+      let b = S.bar0; while (b < S.bar0 + S.bars){ const want = lenPat ? lenPat[ti % lenPat.length] * slow : hr, bars = Math.min(want, S.bar0 + S.bars - b), c = lp[ti % lp.length]; chords.push(Object.assign({bar: b, bars}, c)); b += bars; ti++; } });
     chords.forEach(c => { c.voicing = voice(c.pcs); for (let b = c.bar; b < c.bar + c.bars; b++) chordBar[b] = c; });
     const chordAtBar = bar => chordBar[clamp(bar, 0, NB - 1)];
     const chordAtT = t => chordAtBar(Math.floor(t / BT)).voicing;
@@ -448,16 +463,21 @@ function SYNTH_CORE(){
 
     // ---------- arrangement: roles enter one at a time (every 4 bars in the intro, faster in the second build), leave in reverse in the outro
     const L = Object.assign({keys: 1}, p.layers);
-    const roleOK = {kick: L.kick && rhythm !== 'none', snare: L.snare && rhythm !== 'none', hat: L.hat && rhythm !== 'none', perc: L.perc, bass: L.bass, arp: L.arp, pad: L.pad, keys: L.keys, lead: L.lead, tex: L.tex};
+    const roleOK = {kick: L.kick && rhythm !== 'none', snare: L.snare && rhythm !== 'none', hat: L.hat && rhythm !== 'none', perc: L.perc, bass: L.bass, arp: L.arp, pad: L.pad, keys: L.keys, lead: L.lead && A() < ((STYLES[p.style] || STYLES.cooper).leadW === undefined ? 1 : (STYLES[p.style] || STYLES.cooper).leadW), tex: L.tex};
     const ROLES = Object.keys(roleOK).filter(k => roleOK[k]);
     const firstW = pickW(A, {pad: 3, keys: 3, arp: 2, tex: 1.5}), order = [firstW].concat(['tex', 'pad', 'keys', 'hat', 'perc', 'arp', 'bass', 'kick', 'snare', 'lead'].filter(x => x !== firstW).map(x => ({x, w: {tex: 1, pad: 2, keys: 2, hat: 3, perc: 3.5, arp: 4, bass: 5, kick: 6, snare: 6.5, lead: 8}[x] + A() * 2.5})).sort((a, b) => a.w - b.w).map(o => o.x)).filter(x => roleOK[x]);
     const act = []; const all = new Set(ROLES), breakKeep = new Set(['pad', 'keys', 'tex']); if (A() < .45 && roleOK.arp) breakKeep.add('arp'); if (A() < .3 && roleOK.hat) breakKeep.add('hat'); if (A() < .25 && roleOK.bass) breakKeep.add('bass'); if (A() < .35 && roleOK.lead) breakKeep.add('lead');
+    const leadW = STY.leadW === undefined ? 1 : STY.leadW;
     const introLen = secs[0].bars + (isBuild(secs[1] || {}) ? secs[1].bars : 0), step0 = Math.max(2, Math.round(introLen / Math.max(1, order.length)) >> 1 << 1);
     secs.forEach((S, si) => { for (let b = 0; b < S.bars; b++){ const bar = S.bar0 + b; let set;
-      if (si < firstPeak.idx){ const nIn = Math.min(order.length, 1 + Math.floor(bar / step0)); set = new Set(order.slice(0, nIn)); if (isBuild(S)){ if (b < S.bars - 1 && S.bars > 4) set.delete('kick'); if (b < S.bars * .5) set.delete('snare'); } if (!set.has('lead') && isBuild(S) && b >= S.bars - 4 && roleOK.lead && A() < .2) set.add('lead'); }
+      if (si < firstPeak.idx){ const steppy = form === 'cooper' || form === 'steps', barQ = Math.floor(bar / 4) * 4, nIn = steppy ? Math.min(order.length, Math.max(1, Math.ceil(order.length * (barQ + 4) / Math.max(4, firstPeak.bar0)))) : Math.min(order.length, 1 + Math.floor(bar / step0));
+        set = new Set(order.slice(0, nIn));
+        if (S.name === 'intro'){ set.delete('kick'); set.delete('snare'); } if (S.name === 'low'){ set.delete('kick'); set.delete('snare'); set.delete('bass'); if (b > 1) set.delete('hat'); }
+        if (isBuild(S)){ if (b < S.bars - 1 && S.bars > 4) set.delete('kick'); if (b < S.bars * .5) set.delete('snare'); } if (!set.has('lead') && isBuild(S) && b >= S.bars - 4 && roleOK.lead && A() < .2) set.add('lead');
+        if (S.name === 'groove' && si > 0 && secs[si - 1].name === 'groove' && roleOK.kick) set.add('kick'); }
       else if (isPeak(S)) set = new Set(all);
       else if (S.name === 'groove') set = new Set([...all].filter(r => r !== 'lead' || b >= S.bars / 2));
-      else if (S.name === 'break'){ set = new Set([...all].filter(r => breakKeep.has(r))); if (!set.size) set.add(ROLES[0]); }
+      else if (S.name === 'break' || S.name === 'low'){ set = new Set([...all].filter(r => breakKeep.has(r))); if (S.name === 'low' && roleOK.arp) set.add('arp'); if (!set.size) set.add(ROLES[0]); }
       else if (isBuild(S)){ const prev = act[S.bar0 - 1] || new Set(), back = order.filter(r => !prev.has(r)), nIn = Math.ceil(back.length * (b + 1) / S.bars); set = new Set([...prev, ...back.slice(0, nIn)]); if (b < S.bars - 1 && roleOK.kick) set.delete('kick'); if (b === S.bars - 1 && roleOK.kick) set.add('kick'); }
       else { const nOut = Math.floor(order.length * b / S.bars), gone = order.slice().reverse().slice(0, nOut); set = new Set([...all].filter(r => gone.indexOf(r) < 0)); if (!set.size) set.add(order[0]); }
       act[bar] = set; } });
@@ -468,11 +488,11 @@ function SYNTH_CORE(){
     const add = o => { o.seed = hashSeed(p.seed, p.vary, seq++); ev.push(o); return o; };
     const G = {kick: .78, snare: .7, hat: .4, perc: .15, bass: .3, arp: .21, pad: .26, keys: .39, lead: .24, tex: .24, drone: .1, riser: .17, impact: .42};
     const ARPMUL = {keys: 1.15, pluck: 1, saw: .85, epiano: 1.1, mallet: 1, bell: .8}, LEADMUL = {keys: 1.3, pluck: 1.1, glass: 1.1, sawlead: .8, fmlead: .9, mallet: 1};
-    let arpN = 0, arpCfg = null, lastFillBar = -9, phraseCache = null;
+    let arpCfg = null, arpCfg2 = null, lastFillBar = -9, phraseCache = null;
     const bassNotes = []; let bassStart = 0;
     const flushBass = endBar => { if (bassNotes.length){ const t0 = bassStart * BT, len = endBar * BT - t0; add({inst: 'mono', t: t0, len, notes: bassNotes.map(n => Object.assign({}, n, {t: n.t - t0, dur: Math.min(n.dur, len - (n.t - t0))})), p: PT.bass, bus: 'bass', pan: 0, v: G.bass}); } bassNotes.length = 0; };
     const playBass = (t, bar, pitch, dur, v) => { if (PT.bass.inst === 'mono'){ if (!bassNotes.length) bassStart = bar; bassNotes.push({t, m: pitch, dur, v}); } else add({inst: PT.bass.inst, t, v: v * G.bass, f: mtof(pitch), dur, p: PT.bass, bright: .6, bus: 'bass', pan: 0}); };
-    const keysInPeak = A() < .45, keysPat = pick(V, ['broken', 'broken', 'block', 'roll']), keysSteps = pick(V, [[0, 4, 8, 12], [0, 6, 8, 14], [0, 3, 6, 8, 11, 14], [0, 8]]), keysVoss = voss(V, 128, 5);
+    const keysInPeak = A() < ((STYLES[p.style] || STYLES.cooper).keysPeak === undefined ? .2 : (STYLES[p.style] || STYLES.cooper).keysPeak), keysPat = pick(V, ['broken', 'broken', 'block', 'roll']), keysSteps = pick(V, [[0, 4, 8, 12], [0, 6, 8, 14], [0, 3, 6, 8, 11, 14], [0, 8]]), keysVoss = voss(V, 128, 5);
     for (let bar = 0; bar < NB; bar++){
       const S = secOf(bar), k = (bar - S.bar0) / S.bars, e = energy(bar), ch = chordAtBar(bar), set = act[bar], nextS = secOf(bar + 1), last = bar === S.bar0 + S.bars - 1;
       const lastBarOfBuild = isBuild(S) && last && nextS !== S && nextS.e > S.e + .15 && rhythm !== 'none';
@@ -485,7 +505,7 @@ function SYNTH_CORE(){
         if (gap(s)) continue;
         // kick
         if (set.has('kick')){ let v = 0;
-          if (rhythm === 'four') v = s % 4 === 0 ? 1 : (s === 14 && lg > 1 - dens * .4 && chaosOn > .3 ? .4 : 0);
+          if (rhythm === 'four') v = s % 4 === 0 ? 1 : ((s === 6 || s === 14) && dens > .6 && e > .8 ? .42 : (s === 14 && lg > 1 - dens * .4 && chaosOn > .3 ? .4 : 0));
           else if (rhythm === 'drive') v = s % 2 === 0 ? (s % 4 === 0 ? 1 : .6) : 0;
           else if (rhythm === 'broken') v = kickEu[s] ? (s === 0 ? 1 : .88) : (kRow[s] && lg > .85 && s % 2 === 0 && chaosOn > .4 ? .45 : 0);
           else if (rhythm === 'half') v = s === 0 || s === 10 ? 1 : (s === 7 && lg > .7 && chaosOn > .3 ? .5 : 0);
@@ -522,18 +542,21 @@ function SYNTH_CORE(){
             playBass(t, bar, ch.bass + d, len * ST, (s === 0 ? 1 : .85) * dyn); } }
         // arpeggio: chord tones in a polymetric cycle; accents from 1/f noise; ratchets when chaos is up
         if (set.has('arp')){ if (!arpCfg || bar === S.bar0){ const rate = isCalm(S) || S.name === 'swell' ? 2 : (p.arpRate === 8 ? 2 : 1);
-            arpCfg = {rate, pat: pick(V, ['up', 'down', 'updown', 'converge', 'walk', 'thirds', 'up']), plen: pick(V, p.poly < .3 ? [4, 8] : [3, 5, 7, 5, 6]), oct: isPeak(S) ? 1 : 0, gate: euclid(Math.round(lerp(6, 14, dens)), 16, Math.floor(V() * 4) * 2), walk: 0, vel: voss(V, 32, 4)}; }
-          if (s % arpCfg.rate === 0 && (arpCfg.gate[s] || (p.poly > .6 && hRow[s] && lg > .5)) && (e > .5 || lg > .2 || strong)){
-            const P = pool.length, n = arpN++, ci = n % arpCfg.plen, cyc = Math.floor(n / arpCfg.plen); let ix;
-            if (arpCfg.pat === 'up') ix = (ci + cyc) % P; else if (arpCfg.pat === 'down') ix = P - 1 - (ci + cyc) % P;
-            else if (arpCfg.pat === 'updown'){ const per = Math.max(1, 2 * P - 2), q = (ci + cyc * 2) % per; ix = q < P ? q : per - q; }
-            else if (arpCfg.pat === 'converge') ix = ci % 2 ? P - 1 - ((ci >> 1) + cyc) % P : ((ci >> 1) + cyc) % P;
-            else if (arpCfg.pat === 'thirds') ix = (ci * 2 + cyc) % P;
-            else { arpCfg.walk = clamp(arpCfg.walk + (lg > .5 ? 1 : -1), 0, P - 1); ix = arpCfg.walk; }
-            let mn = pool[clamp(ix, 0, P - 1)]; if (arpCfg.oct && ci === 0 && cyc % 2) mn += 12; while (mn > 84) mn -= 12; while (mn < 57) mn += 12;
-            const vel = (.55 + .45 * arpCfg.vel[gs % 32]) * (ci === 0 ? 1.12 : 1) * (.45 + .55 * dyn), gate = arpCfg.rate * ST * (.6 + 1.2 * lg);
-            const ratchet = chaosOn > .4 && lg > .93 && arpCfg.rate === 1 ? 2 : 1;
-            for (let q = 0; q < ratchet; q++) add({inst: PT.arp.inst, t: t + q * ST / 2, v: vel * G.arp * (ARPMUL[pal.arp] || 1) * (q ? .7 : 1), f: mtof(mn), vel, dur: gate / ratchet, p: PT.arp, body: PT.arp.body, decay: PT.arp.decay, bright: brt, bus: 'duck', pan: clamp((ci / Math.max(1, arpCfg.plen - 1) - .5) * 1.6 * p.width, -1, 1), sv: .28, sd: .35 * p.delay}); } }
+            arpCfg = {rate, pat: pick(V, ['up', 'down', 'updown', 'converge', 'walk', 'thirds', 'up']), plen: pick(V, p.poly < .3 ? [4, 8] : [3, 5, 7, 5, 6]), oct: isPeak(S) ? 1 : 0, gate: euclid(Math.round(lerp(6, 14, dens)), 16, Math.floor(V() * 4) * 2), walk: 0, vel: voss(V, 32, 4), n: 0};
+            arpCfg2 = {rate: 1, pat: pick(V, ['down', 'thirds', 'updown']), plen: pick(V, [3, 5, 7].filter(x => x !== arpCfg.plen)), oct: 1, gate: euclid(Math.round(lerp(4, 9, dens)), 16, 1 + Math.floor(V() * 4) * 2), walk: 0, vel: voss(V, 32, 4), n: 0}; }
+          const arpStep = (cfg, vMul, panSign, octOff, sdMul) => { if (s % cfg.rate !== 0 || !(cfg.gate[s] || (p.poly > .6 && hRow[s] && lg > .5)) || !(e > .5 || lg > .2 || strong)) return;
+            const P = pool.length, n = cfg.n++, ci = n % cfg.plen, cyc = Math.floor(n / cfg.plen); let ix;
+            if (cfg.pat === 'up') ix = (ci + cyc) % P; else if (cfg.pat === 'down') ix = P - 1 - (ci + cyc) % P;
+            else if (cfg.pat === 'updown'){ const per = Math.max(1, 2 * P - 2), q = (ci + cyc * 2) % per; ix = q < P ? q : per - q; }
+            else if (cfg.pat === 'converge') ix = ci % 2 ? P - 1 - ((ci >> 1) + cyc) % P : ((ci >> 1) + cyc) % P;
+            else if (cfg.pat === 'thirds') ix = (ci * 2 + cyc) % P;
+            else { cfg.walk = clamp(cfg.walk + (lg > .5 ? 1 : -1), 0, P - 1); ix = cfg.walk; }
+            let mn = pool[clamp(ix, 0, P - 1)] + octOff; if (cfg.oct && ci === 0 && cyc % 2) mn += 12; while (mn > 84 + octOff) mn -= 12; while (mn < 57 + octOff) mn += 12;
+            const vel = (.55 + .45 * cfg.vel[gs % 32]) * (ci === 0 ? 1.12 : 1) * (.45 + .55 * dyn) * vMul, gate = cfg.rate * ST * (.6 + 1.2 * lg);
+            const ratchet = chaosOn > .4 && lg > .93 && cfg.rate === 1 ? 2 : 1;
+            for (let q = 0; q < ratchet; q++) add({inst: PT.arp.inst, t: t + q * ST / 2, v: vel * G.arp * (ARPMUL[pal.arp] || 1) * (q ? .7 : 1), f: mtof(mn), vel, dur: gate / ratchet, p: PT.arp, body: PT.arp.body, decay: PT.arp.decay, bright: brt, bus: 'duck', pan: clamp(panSign * (ci / Math.max(1, cfg.plen - 1) - .5) * 1.6 * p.width, -1, 1), sv: .28, sd: .35 * p.delay * sdMul}); };
+          arpStep(arpCfg, 1, 1, 0, 1);
+          if (p.poly > .45 && (isPeak(S) || (S.name === 'groove' && e > .6)) && e > .7) arpStep(arpCfg2, .55, -1, 12, 1.6); }
         // keys: broken chords in the calm sections, long chords on changes elsewhere — the piano in the breakdown
         if (set.has('keys')){ const calm = isCalm(S) || S.name === 'swell' || S.name === 'groove', lad = ladderOf(ch, 48, 76);
           if (keysPat === 'block' || !calm){ if (!calm && !keysInPeak && !isBuild(S)){} else if (s === 0 && (bar === ch.bar || (!calm && (bar - ch.bar) % 2 === 0))){ const vl = .5 + .3 * e; add({inst: 'keys', t, v: G.keys * .8, vel: vl, notes: ch.voicing.map(m => m - (ch.voicing[0] > 60 ? 12 : 0)), dur: (calm ? Math.min(ch.bars, 2) : 1) * BT * .95, p: PT.keys, bright: brt, bus: 'duck', pan: 0, sv: .4, sd: .1 * p.delay}); } }
@@ -559,8 +582,8 @@ function SYNTH_CORE(){
       if (set.has('pad') && bar === S.bar0 && (isCalm(S) || form === 'ambient') && p.color > .3) add({inst: 'drone', t: bar * BT, v: G.drone, root: dmidi(0, 36), dur: S.bars * BT, bus: 'bass', sv: .3});
       if (set.has('tex') && (bar === S.bar0 || (act[bar - 1] && !act[bar - 1].has('tex')))){ let nb = 0; while (bar + nb < NB && secOf(bar + nb) === S && act[bar + nb].has('tex')) nb++;
         add({inst: 'tex', t: bar * BT, v: G.tex * (isPeak(S) ? .55 : 1) * (pal.tex === 'crackle' ? .8 : 1), dur: nb * BT, p: PT.tex, root: dmidi(ch.root, 36), chordAt: chordAtT, mod: LZ2.subarray(bar * 16, Math.min(NSTEP, (bar + nb) * 16 + 16)), modT: ST, bus: 'duck', sv: .55}); }
-      if (bar === S.bar0 && isPeak(S) && bar > 0 && rhythm !== 'none' && !p.noSweeteners) add({inst: 'impact', t: bar * BT, v: G.impact, bus: 'drums', sv: .45});
-      if (isBuild(S) && nextS !== S && !p.noSweeteners && bar === S.bar0 + S.bars - Math.min(8, Math.max(4, S.bars >> 1))){ const nb = S.bar0 + S.bars - bar;
+      if (bar === S.bar0 && bar > 0 && (isPeak(S) || S.e > secs[S.idx - 1].e + .15) && set.has('kick') && rhythm !== 'none' && !p.noSweeteners) add({inst: 'impact', t: bar * BT, v: G.impact, bus: 'drums', sv: .45});
+      if ((isBuild(S) || ((S.name === 'groove' || S.name === 'low') && nextS !== S && nextS.e > S.e + .15)) && nextS !== S && !p.noSweeteners && bar === S.bar0 + S.bars - Math.min(8, Math.max(4, S.bars >> 1))){ const nb = S.bar0 + S.bars - bar;
         add({inst: 'shepard', t: bar * BT, v: G.riser * .9, dur: nb * BT - ST * 4, f0: mtof(dmidi(0, 24)), cycle: BT * 2, rise: true, bus: 'duck', sv: .5});
         if (rhythm !== 'none') add({inst: 'riser', t: (bar + Math.max(0, nb - 4)) * BT, v: G.riser * .8, dur: Math.min(nb, 4) * BT - ST * 4, bus: 'duck', sv: .5}); }
     }
@@ -581,11 +604,11 @@ function SYNTH_CORE(){
     if (o.lofi && o.tape) o.tape = false; return o; }
   // section-level automation: filter sweeps per bar, and edits applied to the finished mix (stutters, tape stops, reverse swells)
   function fxPlan(secs, NB, BT, beat, fx, r){ const lp = new Float32Array(NB + 2).fill(20000), hp = new Float32Array(NB + 2).fill(20), post = [];
-    const isDrop = s => /drop|peak|hook/.test(s.name), isBuild = s => /build|rise/.test(s.name);
+    const isDrop = s => /drop|peak|hook|groove/.test(s.name), isBuild = s => /build|rise|groove|low/.test(s.name);
     secs.forEach((S, i) => { const nx = secs[i + 1];
-      if (fx.sweep){ if (S.name === 'break' || S.name === 'swell' || (S.name === 'intro' && r() < .6)){ const lo = rr(r, 350, 900); for (let b = 0; b < S.bars; b++) lp[S.bar0 + b] = lo * Math.pow(20000 / lo, Math.pow(b / S.bars, 2.2)); }
-        if (isBuild(S) && nx && isDrop(nx)){ const nb = Math.min(S.bars, 8); for (let b = 0; b < nb; b++) hp[S.bar0 + S.bars - nb + b] = 20 + 650 * Math.pow((b + 1) / nb, 2); } }
-      if (nx && isDrop(nx) && i > 0){ const tD = nx.bar0 * BT;
+      if (fx.sweep){ if (S.name === 'break' || S.name === 'low' || S.name === 'swell' || (S.name === 'intro' && r() < .6)){ const lo = rr(r, 350, 900); for (let b = 0; b < S.bars; b++) lp[S.bar0 + b] = lo * Math.pow(20000 / lo, Math.pow(b / S.bars, 2.2)); }
+        if (isBuild(S) && nx && isDrop(nx) && nx.e > S.e + .12){ const nb = Math.min(S.bars, 8); for (let b = 0; b < nb; b++) hp[S.bar0 + S.bars - nb + b] = 20 + 650 * Math.pow((b + 1) / nb, 2); } }
+      if (nx && isDrop(nx) && nx.e > S.e + .12 && i > 0){ const tD = nx.bar0 * BT;
         if (fx.tapestop && r() < .75) post.push({type: 'tapestop', t0: tD - 2 * beat, t1: tD});
         else if (fx.stutter && r() < .65) post.push({type: 'buildrepeat', t0: tD - 4 * beat, t1: tD});
         if (fx.reverse) post.push({type: 'reverse', t: tD, len: beat * (r() < .5 ? 2 : 1)}); }
@@ -863,15 +886,16 @@ function SYNTH_CORE(){
   // each style is a set of ranges that make sense together; a roll stays inside one style. These run on the evolving engine;
   // the genre styles (GS) are loop grammars and are only reached by choosing them explicitly.
   const STYLES = {
-    cooper: {name: 'emergence — evolving, Max Cooper-leaning', w: 5, bpm: [114, 126], rhythm: {four: 3, broken: 3, half: 1, ca: 1}, form: {arc: 3, twin: 2, rise: 2}, mode: {minor: 3, dorian: 2, major: 1.5, lydian: 1}, color: [.55, .9], motion: [.25, .6], develop: [.4, .75], chaos: [.2, .5], poly: [.5, .9], density: [.5, .72], bright: [.4, .6], metal: [.1, .35], swing: [.5, .58], humanize: [.3, .6], pump: [.25, .5], drive: [.1, .3], verb: [.5, .75], delay: [.3, .55], width: [.85, 1], fx: {sweep: 3, reverse: 2, stutter: 2, chorus: 1, tape: 1}},
-    cinematic: {name: 'cinematic', w: 2, bpm: [104, 122], rhythm: {broken: 2, four: 1, half: 1}, form: {rise: 2, arc: 2}, mode: {minor: 2, lydian: 1, dorian: 1, major: 1}, color: [.65, .95], develop: [.5, .85], motion: [.35, .7], chaos: [.15, .4], verb: [.55, .8], width: [.85, 1], pump: [.1, .35], drive: [.05, .25], metal: [.1, .4], fx: {reverse: 2, sweep: 2, chorus: 1, tape: 1}},
-    broken: {name: 'broken beat / IDM', w: 2, bpm: [120, 138], rhythm: {broken: 4, ca: 2}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 2, dorian: 2, pentMinor: 1, lydian: 1}, swing: [.55, .64], density: [.5, .75], pump: [.15, .4], drive: [.15, .45], color: [.5, .85], motion: [.3, .7], develop: [.5, .85], chaos: [.35, .7], poly: [.55, .9], humanize: [.4, .7], fx: {stutter: 3, crush: 2, phaser: 1, sweep: 1}},
-    deep: {name: 'deep house (evolving)', w: 2, bpm: [118, 125], rhythm: {four: 5, broken: 1}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 3, dorian: 3, mixolydian: 1}, swing: [.53, .6], density: [.5, .72], pump: [.35, .6], drive: [.15, .4], color: [.6, .9], motion: [.3, .6], chaos: [.15, .4], metal: [.1, .3], fx: {chorus: 2, tape: 2, sweep: 2, dubthrow: 1}},
-    technoE: {name: 'techno (evolving)', w: 2, bpm: [126, 134], rhythm: {drive: 3, four: 3, ca: 1}, form: {rise: 2, arc: 2, twin: 1}, mode: {minor: 3, phrygian: 2, harmonicMinor: 1}, swing: [.5, .54], density: [.6, .85], pump: [.4, .7], drive: [.3, .6], color: [.3, .6], motion: [.1, .4], develop: [.3, .6], chaos: [.3, .6], bright: [.35, .6], metal: [.2, .5], verb: [.35, .6], fx: {sweep: 3, stutter: 2, crush: 1, phaser: 1}},
-    halftime: {name: 'downtempo', w: 1.5, bpm: [84, 100], rhythm: {half: 1}, form: {arc: 2, twin: 1, rise: 1}, mode: {minor: 3, harmonicMinor: 1, dorian: 1, pentMinor: 1}, swing: [.56, .66], density: [.4, .62], pump: [.2, .45], drive: [.2, .5], color: [.4, .75], motion: [.3, .6], verb: [.4, .65], fx: {tape: 2, lofi: 1, reverse: 1, sweep: 1}},
-    ambient: {name: 'ambient', w: 1, bpm: [70, 100], bars: [64, 80, 96], rhythm: {none: 1}, form: {ambient: 1}, mode: {major: 1, lydian: 2, dorian: 1, minor: 1}, density: [.3, .5], pump: [0, .1], drive: [0, .2], verb: [.65, .9], delay: [.4, .7], color: [.6, .95], motion: [.2, .5], chaos: [.2, .45], swing: [.5, .55], fx: {chorus: 2, tape: 2, phaser: 1}}};
+    cooper: {name: 'emergence — evolving, Max Cooper-leaning', w: 6, bpm: [116, 128], rhythm: {four: 4, drive: 3, broken: 3, ca: 1}, form: {cooper: 4, steps: 3, rise: 1, twin: 1}, mode: {minor: 6, dorian: 1, major: 1, lydian: .5}, color: [.05, .4], motion: [.1, .5], develop: [.4, .75], chaos: [.2, .5], poly: [.55, .95], density: [.6, .85], bright: [.4, .62], metal: [.1, .4], swing: [.53, .62], humanize: [.15, .4], pump: [.2, .5], drive: [.15, .4], verb: [.45, .7], delay: [.35, .6], width: [.9, 1], keysPeak: .05, leadW: .35, vamp: true,
+      pal: {arp: {saw: 3, pluck: 4, glass: 3, keys: .1, epiano: 0, bell: .3}, lead: {pluck: 2, glass: 3, sawlead: 1, fmlead: 1.5, keys: 0}, pad: {lush: 4, fmpad: 3, additive: 1, supersaw: 2}, keys: {glass: 3, felt: 1.5, epiano: 0}, tex: {glitch: 4, grains: 3, wind: 1.5, chaos: 1.5, crackle: 0}, bass: {sub: 3, fm: 2, subsaw: 3, string: 0}}, fx: {sweep: 3, reverse: 2, stutter: 3, chorus: 1, tape: 1}},
+    cinematic: {vamp: false, name: 'cinematic', w: 2, bpm: [104, 122], rhythm: {broken: 2, four: 1, half: 1}, form: {rise: 2, arc: 2}, mode: {minor: 2, lydian: 1, dorian: 1, major: 1}, color: [.3, .7], keysPeak: .5, pal: {arp: {keys: 2, pluck: 3, glass: 2, saw: 1}, lead: {keys: 1.5, glass: 2, pluck: 2}, keys: {felt: 3, glass: 2}}, develop: [.5, .85], motion: [.35, .7], chaos: [.15, .4], verb: [.55, .8], width: [.85, 1], pump: [.1, .35], drive: [.05, .25], metal: [.1, .4], fx: {reverse: 2, sweep: 2, chorus: 1, tape: 1}},
+    broken: {vamp: false, name: 'broken beat / IDM', w: 2, bpm: [120, 138], rhythm: {broken: 4, ca: 2}, form: {arc: 2, twin: 2, steps: 2, rise: 1}, mode: {minor: 2, dorian: 2, pentMinor: 1, lydian: 1}, swing: [.55, .64], density: [.5, .75], pump: [.15, .4], drive: [.15, .45], color: [.15, .55], motion: [.2, .6], develop: [.5, .85], chaos: [.35, .7], poly: [.55, .9], humanize: [.3, .6], fx: {stutter: 3, crush: 2, phaser: 1, sweep: 1}},
+    deep: {vamp: false, name: 'deep house (evolving)', w: 2, bpm: [118, 125], rhythm: {four: 5, broken: 1}, form: {arc: 2, twin: 2, rise: 1}, mode: {minor: 3, dorian: 3, mixolydian: 1}, swing: [.53, .6], density: [.5, .72], pump: [.35, .6], drive: [.15, .4], color: [.45, .8], motion: [.3, .6], chaos: [.15, .4], metal: [.1, .3], keysPeak: .5, pal: {arp: {keys: 2, epiano: 2, pluck: 2, saw: 1}, keys: {epiano: 2, felt: 2}}, fx: {chorus: 2, tape: 2, sweep: 2, dubthrow: 1}},
+    technoE: {name: 'techno (evolving)', w: 2, bpm: [126, 134], rhythm: {drive: 3, four: 3, ca: 1}, form: {rise: 2, arc: 2, twin: 1}, mode: {minor: 3, phrygian: 2, harmonicMinor: 1}, swing: [.5, .54], density: [.6, .85], pump: [.4, .7], drive: [.3, .6], color: [.05, .35], motion: [.05, .3], develop: [.3, .6], chaos: [.3, .6], bright: [.35, .6], metal: [.2, .5], verb: [.35, .6], keysPeak: 0, leadW: .4, vamp: true, form: {steps: 3, rise: 2, cooper: 1}, pal: {arp: {saw: 4, pluck: 2, glass: 1, keys: 0}, lead: {sawlead: 2, fmlead: 2, pluck: 1, glass: 1, keys: 0}, tex: {glitch: 3, chaos: 2, wind: 1}}, fx: {sweep: 3, stutter: 2, crush: 1, phaser: 1}},
+    halftime: {vamp: false, name: 'downtempo', w: 1.5, bpm: [84, 100], rhythm: {half: 1}, form: {arc: 2, twin: 1, rise: 1}, mode: {minor: 3, harmonicMinor: 1, dorian: 1, pentMinor: 1}, swing: [.54, .62], density: [.4, .62], pump: [.2, .45], drive: [.2, .5], color: [.2, .55], motion: [.3, .6], verb: [.4, .65], fx: {tape: 2, lofi: 1, reverse: 1, sweep: 1}},
+    ambient: {vamp: false, name: 'ambient', w: 1, bpm: [70, 100], bars: [64, 80, 96], rhythm: {none: 1}, form: {ambient: 1}, mode: {major: 1, lydian: 2, dorian: 1, minor: 1}, density: [.3, .5], pump: [0, .1], drive: [0, .2], verb: [.65, .9], delay: [.4, .7], color: [.35, .8], motion: [.2, .5], chaos: [.2, .45], swing: [.5, .55], keysPeak: .6, pal: {arp: {glass: 3, keys: 2, pluck: 2}, keys: {glass: 2, felt: 2}}, fx: {chorus: 2, tape: 2, phaser: 1}}};
   const ALL = Object.assign({}, STYLES, GS);
-  const GEN = {swing: [.5, .6], density: [.45, .75], pump: [.2, .5], drive: [.1, .4], color: [.4, .85], motion: [.25, .65], develop: [.4, .8], chaos: [.2, .55], poly: [.4, .85], bright: [.4, .62], metal: [.1, .4], humanize: [.25, .6], verb: [.4, .7], delay: [.25, .55], width: [.8, 1]};
+  const GEN = {swing: [.5, .56], density: [.45, .75], pump: [.2, .5], drive: [.1, .4], color: [.1, .5], motion: [.25, .65], develop: [.4, .8], chaos: [.2, .55], poly: [.4, .85], bright: [.4, .62], metal: [.1, .4], humanize: [.25, .6], verb: [.4, .7], delay: [.25, .55], width: [.8, 1]};
   // full = every dial; otherwise the song's identity (style, seed, key, mode, tempo, groove, swing, form, length, sounds, effects) and the user's other dials stay
   function randomize(cur, full, rnd){ const r = rnd || Math.random, o = JSON.parse(JSON.stringify(Object.assign({}, DEF, cur || {})));
     const others = Object.fromEntries(Object.entries(STYLES).map(([k, v]) => [k, k === o.style && !full ? 0 : v.w]));   // New piece moves to another style 3 times in 4

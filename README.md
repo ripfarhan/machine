@@ -137,7 +137,7 @@ a piece lands on the balance measured across the reference tracks in
 - chaos (logistic map) drives velocities, ghosts, ratchets and timbre, not the
   grid; Lorenz attractors drive filters and textures.
 
-Forms: arc, rise (chaos decays into order), twin peaks, ambient. Styles for
+Harmony in the emergence and techno styles follows the vamp grammar measured off the reference tracks: two or three chords trading places for bars at a time (i↔VI, i↔iv, i↔III, I↔vi), the home chord lingering, chord changes every 1–4 bars. Forms: emergence (intro, low, long groove in steps, peak, dip, peak), steps, arc, rise (chaos decays into order), twin peaks, ambient. Drops are every energy step up, not only the peaks: impact, filter sweep, a Shepard riser into them. When polymeter is high a second arpeggio runs an octave up in a different cycle length against the first. A glitch texture scatters micro-blips and 1/32 ratchet bursts on chord tones. Styles for
 *New piece* / *Randomize*: emergence (Max Cooper-leaning), cinematic, broken
 beat / IDM, deep house, techno, downtempo, ambient — all on the evolving
 engine. The genre loop styles (house, dub techno, acid, electro, garage, D&B,
