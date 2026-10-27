@@ -177,42 +177,53 @@ DOOBE RAHO</textarea>
     </div>
 
     <div class="sec" id="studioSec">
-      <h2>Studio <b>generative music · everything synthesized</b></h2>
+      <h2>Studio <b>math synthesiser · every sample computed</b></h2>
       <div class="row">
-        <button class="btn primary" id="stGen">Generate</button>
+        <button class="btn primary" id="stGen" title="New seed: new harmony, form, sounds">New piece</button>
+        <button class="btn" id="stVary" title="Keep harmony, form and sounds — new melodies and rhythms">Variation</button>
         <button class="btn play" id="stPlay" aria-label="Play">&#9654;</button>
-        <button class="btn sm ghost" id="stDice" title="New seed">&#127922; seed</button>
-        <input class="num" id="stSeed" type="number" min="1" max="999999" value="7" style="width:84px" aria-label="Studio seed">
-        <span class="note" id="stInfo" style="flex:1"></span>
+        <input class="num" id="stSeed" type="number" min="1" max="999999" value="7" style="width:84px" aria-label="Seed">
+        <span class="note" id="stStatus" style="flex:1;text-align:right"></span>
       </div>
-      <div class="strip" id="stArcWrap" style="height:48px;touch-action:none"><canvas id="stArc" width="1120" height="96" style="width:100%;height:100%"></canvas></div>
+      <p class="note" id="stInfo" style="margin:2px 0 6px"></p>
+      <div class="strip" id="stArcWrap" style="height:84px;touch-action:none"><canvas id="stArc" width="1120" height="168" style="width:100%;height:100%"></canvas></div>
       <div class="row" style="gap:10px;align-items:center">
         <span class="note" id="stPos" style="font-family:var(--mono);min-width:92px">0:00.0 / 0:00</span>
         <input type="range" id="stSeek" min="0" max="1000" step="1" value="0" style="flex:1" aria-label="Studio playback position">
       </div>
-      <div class="two" style="grid-template-columns:1fr 1fr 1fr 1fr">
-        <label class="f"><span>Tempo <output id="stTempoOut">118</output></span><input type="range" id="stTempo" min="90" max="150" step="1" value="118"></label>
+      <div class="two" style="grid-template-columns:repeat(2,1fr)">
+        <label class="f"><span>Rhythm</span><select id="stRhythm"><option value="auto">auto</option><option value="four">four on the floor</option><option value="drive">8th-note drive</option><option value="broken">broken</option><option value="half">half-time</option><option value="ca">cellular automata</option><option value="none">none (ambient)</option></select></label>
+        <label class="f"><span>Form</span><select id="stForm"><option value="auto">auto</option><option value="arc">arc — build/peak/break</option><option value="rise">rise — chaos → order</option><option value="twin">twin peaks</option><option value="ambient">ambient swell</option></select></label>
         <label class="f"><span>Key</span><select id="stKey"></select></label>
         <label class="f"><span>Mode</span><select id="stMode"></select></label>
-        <label class="f"><span>Length <output id="stBarsOut">112 bars</output></span><input type="range" id="stBars" min="16" max="160" step="16" value="112"></label>
       </div>
-      <div class="two" style="grid-template-columns:1fr 1fr 1fr">
-        <label class="f"><span>Kick pulse</span><select id="stPulse"><option value="four">four on the floor</option><option value="eighths">8th-note drive</option><option value="broken">broken / euclidean</option></select></label>
-        <label class="f"><span>Arp rate</span><select id="stArpRate"><option value="8">8ths</option><option value="16" selected>16ths</option></select></label>
+      <div class="two" style="grid-template-columns:repeat(3,1fr)">
+        <label class="f"><span>Tempo <output id="stTempoOut">118</output></span><input type="range" id="stTempo" min="80" max="150" step="1" value="118"></label>
+        <label class="f"><span>Length <output id="stBarsOut">112 bars</output></span><input type="range" id="stBars" min="16" max="192" step="16" value="112"></label>
+        <label class="f"><span>Chord motion <output id="stMotionOut">0.45</output></span><input type="range" id="stMotion" min="0" max="1" step="0.01" value="0.45"></label>
+        <label class="f"><span>Harmonic colour <output id="stColorOut">0.50</output></span><input type="range" id="stColor" min="0" max="1" step="0.01" value="0.5"></label>
+        <label class="f"><span>Development <output id="stDevelopOut">0.55</output></span><input type="range" id="stDevelop" min="0" max="1" step="0.01" value="0.55"></label>
+        <label class="f"><span>Chaos <output id="stChaosOut">0.45</output></span><input type="range" id="stChaos" min="0" max="1" step="0.01" value="0.45"></label>
         <label class="f"><span>Polymeter <output id="stPolyOut">0.50</output></span><input type="range" id="stPoly" min="0" max="1" step="0.01" value="0.5"></label>
-      </div>
-      <div class="two" style="grid-template-columns:repeat(4,1fr)">
         <label class="f"><span>Density <output id="stDensityOut">0.60</output></span><input type="range" id="stDensity" min="0" max="1" step="0.01" value="0.6"></label>
-        <label class="f"><span>Swing <output id="stSwingOut">0.54</output></span><input type="range" id="stSwing" min="0.5" max="0.72" step="0.01" value="0.54"></label>
-        <label class="f"><span>Pump <output id="stPumpOut">0.35</output></span><input type="range" id="stPump" min="0" max="1" step="0.01" value="0.35"></label>
-        <label class="f"><span>Cutoff <output id="stCutoffOut">0.55</output></span><input type="range" id="stCutoff" min="0" max="1" step="0.01" value="0.55"></label>
+        <label class="f"><span>Brightness <output id="stBrightOut">0.55</output></span><input type="range" id="stBright" min="0" max="1" step="0.01" value="0.55"></label>
+        <label class="f"><span>Metal (FM) <output id="stMetalOut">0.50</output></span><input type="range" id="stMetal" min="0" max="1" step="0.01" value="0.5"></label>
+        <label class="f"><span>Swing <output id="stSwingOut">0.57</output></span><input type="range" id="stSwing" min="0.5" max="0.72" step="0.01" value="0.57"></label>
+        <label class="f"><span>Humanize <output id="stHumanOut">0.40</output></span><input type="range" id="stHuman" min="0" max="1" step="0.01" value="0.4"></label>
+        <label class="f"><span>Pump <output id="stPumpOut">0.30</output></span><input type="range" id="stPump" min="0" max="1" step="0.01" value="0.3"></label>
         <label class="f"><span>Drive <output id="stDriveOut">0.30</output></span><input type="range" id="stDrive" min="0" max="1" step="0.01" value="0.3"></label>
-        <label class="f"><span>Delay <output id="stDelayOut">0.30</output></span><input type="range" id="stDelay" min="0" max="1" step="0.01" value="0.3"></label>
-        <label class="f"><span>Reverb <output id="stVerbOut">0.35</output></span><input type="range" id="stVerb" min="0" max="1" step="0.01" value="0.35"></label>
-        <label class="f"><span>Texture <output id="stTexOut">0.40</output></span><input type="range" id="stTex" min="0" max="1" step="0.01" value="0.4"></label>
-        <label class="f"><span>Chord motion <output id="stMotionOut">0.40</output></span><input type="range" id="stMotion" min="0" max="1" step="0.01" value="0.4"></label>
-        <label class="f"><span>Sub <output id="stSubOut">0.80</output></span><input type="range" id="stSub" min="0" max="1" step="0.01" value="0.8"></label>
-        <label class="f"><span>Humanize <output id="stHumanOut">0.50</output></span><input type="range" id="stHuman" min="0" max="1" step="0.01" value="0.5"></label>
+        <label class="f"><span>Reverb <output id="stVerbOut">0.45</output></span><input type="range" id="stVerb" min="0" max="1" step="0.01" value="0.45"></label>
+        <label class="f"><span>Delay <output id="stDelayOut">0.35</output></span><input type="range" id="stDelay" min="0" max="1" step="0.01" value="0.35"></label>
+        <label class="f"><span>Width <output id="stWidthOut">0.90</output></span><input type="range" id="stWidth" min="0" max="1" step="0.01" value="0.9"></label>
+        <label class="f"><span>Arp rate</span><select id="stArpRate"><option value="16">16ths</option><option value="8">8ths</option></select></label>
+      </div>
+      <div class="two" style="grid-template-columns:repeat(3,1fr)">
+        <label class="f"><span>Bass</span><select id="stPalBass"><option value="auto">auto</option><option value="fm">FM</option><option value="subsaw">sub + saw</option><option value="string">plucked string</option></select></label>
+        <label class="f"><span>Arp</span><select id="stPalArp"><option value="auto">auto</option><option value="bell">FM bell</option><option value="epiano">FM e-piano</option><option value="pluck">plucked string</option><option value="saw">filtered saw</option><option value="mallet">modal mallet</option></select></label>
+        <label class="f"><span>Pad</span><select id="stPalPad"><option value="auto">auto</option><option value="supersaw">supersaw</option><option value="fmpad">FM pad</option><option value="additive">additive</option></select></label>
+        <label class="f"><span>Lead</span><select id="stPalLead"><option value="auto">auto</option><option value="fmlead">FM lead</option><option value="sawlead">saw lead</option><option value="mallet">mallet</option><option value="pluck">string</option></select></label>
+        <label class="f"><span>Percussion</span><select id="stPalPerc"><option value="auto">auto</option><option value="wood">wood</option><option value="glass">glass</option><option value="membrane">membrane</option><option value="metal">metal</option></select></label>
+        <label class="f"><span>Texture</span><select id="stPalTex"><option value="auto">auto</option><option value="grains">granular</option><option value="wind">wind</option><option value="chaos">Lorenz drone</option></select></label>
       </div>
       <div class="row" id="stLayers" style="flex-wrap:wrap;gap:6px 14px"></div>
       <div class="row">
@@ -220,9 +231,8 @@ DOOBE RAHO</textarea>
         <button class="btn" id="stUse">Use as song &rarr; reel</button>
         <button class="btn sm ghost" id="stCopy">Copy music recipe</button>
         <button class="btn sm ghost" id="stPaste">Apply recipe</button>
-        <span class="note" id="stStatus"></span>
       </div>
-      <p class="note">Shaped by the Max Cooper analysis in <code>music/analysis</code>: tempo range, four-on-the-floor vs 8th-note kick pulse vs broken grooves, odd-length hat/perc/arp cycles that phase against the bar, a long-intro / build / peak / breakdown / second-peak arc, and sidechain pump depth. Same seed + same dials = the same track. <em>Use as song</em> drops it straight into the reel engine.</p>
+      <p class="note">Every sample is computed: FM operators, Karplus–Strong strings, modal resonators (membrane, bar, glass, metal), band-limited oscillators through state-variable filters, granular clouds, an 8-line feedback-delay reverb. The music comes from systems that evolve rather than loop — Markov harmony with voice leading, a motif that develops and mutates, cellular automata rewriting rhythms every bar, logistic-map and Lorenz-attractor modulation. <em>New piece</em> changes everything; <em>Variation</em> keeps the harmony and sounds and rewrites the parts. Same seed + same dials = the same track.</p>
     </div>
   </aside>
 </main>
@@ -238,7 +248,7 @@ DOOBE RAHO</textarea>
 <script src="js/mp4.js"></script>
 <script src="js/samples.js"></script>
 <script src="js/app.js"></script>
-<script src="js/studio.js"></script>
+<script src="js/synth.js"></script>
 <script src="js/studio-ui.js"></script>
 </body>
 </html>

@@ -42,8 +42,8 @@ No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 | `js/mp4.js` | MP4 muxer and codec picker |
 | `js/samples.js` | sample footage, inlined so the app runs from a local file |
 | `js/app.js` | state, media (GIF decoder, clip bursts), sequencer, renderer, export, UI, recipes, local library, timed lyrics |
-| `js/studio.js` | Studio: generative music engine (Web Audio, all synthesized, seed-reproducible) |
-| `js/studio-ui.js` | Studio panel wiring |
+| `js/synth.js` | Studio: the math synthesiser — DSP + composition, runs in a Worker and in Node |
+| `js/studio-ui.js` | Studio panel: controls, background rendering, playback, export |
 | `music/analyze.py` | music reverse-engineering pipeline (numpy/scipy, no librosa) |
 | `music/analysis/` | per-track JSON, `profile.json` (cross-track medians the generator is parameterised from), charts |
 | `music/REPORT.html` | the readable analysis report |
@@ -92,14 +92,32 @@ to *Max hold*. Cues save into recipes.
 
 ## Studio
 
-A generative music engine built from the analysis of ten Max Cooper tracks
-(`music/REPORT.html`). Everything is synthesized — kick, snare/clap, hats,
-two percussion lines, bass, arp, pad, texture, riser, impact — so a seed plus
-the dials reproduces a track exactly. The sequencer runs independent cycle
-lengths per layer (polymeter), three kick pulses (four-on-the-floor,
-8th-note drive, broken/euclidean), a long-intro → build → peak → breakdown →
-second-peak arc, sidechain pump, delay, reverb and drive. *Export WAV*
-renders offline; *Use as song* hands the track straight to the reel engine.
+A math-based synthesiser. Every sample is computed, nothing is sampled:
+
+- **Voices** — FM operators (bells, e-piano, bass, pads, leads), Karplus–Strong
+  strings with fractional-delay tuning, modal resonator banks using physical
+  mode ratios (circular membrane, marimba bar, glass, metal plate), PolyBLEP
+  saw/square oscillators through TPT state-variable filters, additive pads whose
+  partials drift independently, granular clouds on the chord tones, Lorenz-driven
+  FM drones, just-intonation drones.
+- **Space** — an 8-line feedback-delay-network reverb (Hadamard matrix, damped
+  lines), a ping-pong delay, sidechain from the actual kick times, mono low end
+  with adjustable width above.
+- **Composition** — Markov harmony over scale degrees with voice leading,
+  harmonic colour from triads to 9ths and quartal stacks; a motif that develops
+  every phrase (invert, retrograde, fragment, augment, lift) and mutates so the
+  changes accumulate; elementary cellular automata rewriting hat, percussion,
+  kick and arp gates every bar; two polymetric percussion lines; logistic-map
+  chaos on velocities and gates and a Lorenz attractor on filters and textures.
+  Forms: arc, rise (chaos decays into order), twin peaks, ambient.
+
+*New piece* changes everything; *Variation* keeps harmony, sounds and form and
+rewrites the parts. Rendering runs in a background thread; changing a dial
+re-renders while the current audio keeps playing. A 4-minute track takes
+roughly 10–15 s. The same engine runs in Node:
+
+    const S = require('./js/synth.js')();
+    const {L, R, sr, meta} = S.render({seed: 7, bars: 112});
 
 Re-run the analysis on new material:
 
