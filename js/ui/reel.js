@@ -2,7 +2,7 @@
    file (canvas.captureStream + the master audio → MediaRecorder). Made for posting. */
 'use strict';
 class AwaazReel {
-  constructor(cv, host){ this.cv = cv; this.c = cv.getContext('2d'); cv.width = 1080; cv.height = 1920; this.host = host; this.on = false; this.rec = null; this.chunks = []; this.sg = document.createElement('canvas'); this.sg.width = 540; this.sg.height = 220; this.sgc = this.sg.getContext('2d'); this.col = this.sgc.createImageData(3, 220); this.rings = []; this.lastBeat = -1; }
+  constructor(cv, host){ this.cv = cv; this.c = cv.getContext('2d'); cv.width = 1080; cv.height = 1920; this.host = host; this.on = false; this.rec = null; this.chunks = []; this.sg = document.createElement('canvas'); this.sg.width = 540; this.sg.height = 220; this.sgc = this.sg.getContext('2d'); this.col = this.sgc.createImageData(3, 220); this.sgc.fillStyle = '#000'; this.sgc.fillRect(0, 0, 540, 220); this.rings = []; this.lastBeat = -1; }
   draw(F, t, field){ if (!this.on) return; const c = this.c, W = 1080, H = 1920; c.globalCompositeOperation = 'source-over'; c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
     if (field && field.width){ const s = Math.max(W / field.width, H / field.height), fw = field.width * s, fh = field.height * s; c.globalAlpha = .9; c.drawImage(field, (W - fw) / 2, (H - fh) / 2, fw, fh); c.globalAlpha = 1; }
     // polar scope: the waveform wrapped around a circle that breathes with the kick
