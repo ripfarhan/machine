@@ -26,10 +26,16 @@
     M.sections.forEach(s => { const x0 = s.start / M.bars * w, x1 = (s.start + s.bars) / M.bars * w; x.fillStyle = COL[s.name]; x.fillRect(x0, 0, x1 - x0 - 1, h); x.fillStyle = 'rgba(255,255,255,.75)'; x.font = '600 13px system-ui'; x.fillText(s.name + ' ' + s.bars, x0 + 6, 20); });
     // layer lanes
     const lanes = ['kick', 'hat', 'perc', 'bass', 'arp', 'pad']; lanes.forEach((L, i) => { for (let b = 0; b < M.bars; b++){ const on = S.sectionAt(M, b).on[L]; if (on > 0){ x.fillStyle = 'rgba(255,255,255,' + (.15 + on * .35) + ')'; x.fillRect(b / M.bars * w, 30 + i * 6, w / M.bars - 1, 4); } } });
-    if (S.playing()){ const t = S.playhead(), tot = M.bars * 16 * 60 / M.p.bpm / 4; x.fillStyle = '#41e6ff'; x.fillRect(t / tot * w - 1, 0, 2, h); } }
+    { const t = S.playhead(), tot = M.bars * 16 * 60 / M.p.bpm / 4; x.fillStyle = '#41e6ff'; x.fillRect(t / tot * w - 1, 0, 2, h); x.fillStyle = 'rgba(0,0,0,.6)'; x.fillRect(Math.min(w - 64, t / tot * w + 4), h - 18, 60, 16); x.fillStyle = '#41e6ff'; x.font = '600 12px system-ui'; x.fillText(fmt(t) + ' / ' + fmt0(tot), Math.min(w - 62, t / tot * w + 6), h - 5); } }
+  // scrub: click or drag anywhere on the arc
+  { const c = $s('stArc'); let drag = false; const at = e => { const r = c.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * S.duration(); };
+    c.style.cursor = 'ew-resize'; c.addEventListener('pointerdown', e => { if (!S.model()) regen(); c.setPointerCapture(e.pointerId); drag = true; S.seek(at(e)); drawArc(S.model()); });
+    c.addEventListener('pointermove', e => { if (drag){ S.seek(at(e)); drawArc(S.model()); } }); c.addEventListener('pointerup', () => drag = false); c.addEventListener('pointercancel', () => drag = false); }
   function regen(announce){ const M = S.generate(); $s('stInfo').textContent = S.describe(M); drawArc(M); if (S.playing()){ S.stop(); S.play(); } if (announce) toast('Generated · seed ' + P.seed); }
   $s('stPlay').onclick = () => { if (S.playing()){ S.stop(); $s('stPlay').innerHTML = '&#9654;'; } else { if (!S.model()) regen(); S.play(); $s('stPlay').innerHTML = '&#10074;&#10074;'; } };
-  setInterval(() => { const M = S.model(); if (M && S.playing()) drawArc(M); else if (M && $s('stPlay').innerHTML.includes('10074')) { $s('stPlay').innerHTML = '&#9654;'; } }, 120);
+  setInterval(() => { const M = S.model(); if (M && S.playing()) drawArc(M); else if (M && $s('stPlay').innerHTML.includes('10074')) { $s('stPlay').innerHTML = '&#9654;'; drawArc(M); } }, 120);
+  document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if (!S.model()) return;
+    if (e.key === 'Home'){ S.seek(0); drawArc(S.model()); } if (e.key === 'ArrowLeft' && e.altKey){ S.seek(S.playhead() - 4 * 60 / S.P.bpm * 4); drawArc(S.model()); } if (e.key === 'ArrowRight' && e.altKey){ S.seek(S.playhead() + 4 * 60 / S.P.bpm * 4); drawArc(S.model()); } });
 
   async function renderBlob(){ const st = $s('stStatus'); st.textContent = 'Rendering…'; const buf = await S.render(p => st.textContent = 'Rendering ' + Math.round(p * 100) + '%'); st.textContent = 'Encoding…'; const blob = S.toWav(buf); st.textContent = ''; return blob; }
   $s('stExport').onclick = async () => { try { const blob = await renderBlob(); saveBlob('studio-' + S.NOTE[P.tonic].replace('#', 's') + P.mode + '-' + P.bpm + '-seed' + P.seed + '.wav', blob); toast('WAV saved'); } catch(e){ console.error(e); toast('Render failed: ' + e.message); } };

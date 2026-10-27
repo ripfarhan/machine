@@ -195,13 +195,19 @@ const STUDIO = (() => {
 
   // ---------------------------------------------------------------- live playback
   function ensure(){ if (!AC2) AC2 = new (window.AudioContext || window.webkitAudioContext)(); if (AC2.state === 'suspended') AC2.resume(); return AC2; }
-  function play(){ if (!model) model = generate(P); stop(); const ctx = ensure(); const g = graph(ctx, model); const stepDur = 60 / model.p.bpm / 4, total = model.bars * 16;
-    let step = 0, next = ctx.currentTime + .08; const start = next;
+  let pausedAt = 0;
+  function play(fromSec){ if (!model) model = generate(P); stop(); const ctx = ensure(); const g = graph(ctx, model); const stepDur = 60 / model.p.bpm / 4, total = model.bars * 16;
+    const from = fromSec === undefined ? pausedAt : Math.max(0, fromSec); let step = Math.min(total - 1, Math.floor(from / stepDur)); let next = ctx.currentTime + .08; const start = next - step * stepDur;
+    // the pad holds across a chord, so when starting mid-bar re-trigger the current chord right away
+    if (step % 16 !== 0){ const bar = Math.floor(step / 16), sec = sectionAt(model, bar); if (sec.on.pad > 0){ const ci = Math.floor(bar / model.chordHold) % model.chordCycle.length, root = model.chordCycle[ci]; const tri = [root, root + 2, root + 4].map(d => deg2midi(d, model.scale, model.p.tonic, 1)); padChord(g, next, tri, stepDur * (16 - step % 16), model.pad.detune); } }
     const timer = setInterval(() => { while (next < ctx.currentTime + .15 && step < total){ scheduleStep(g, model, step, next); step++; next += stepDur; } if (step >= total && ctx.currentTime > next + 2) stop(); }, 25);
     live = {g, timer, start, stepDur}; return live; }
-  function stop(){ if (!live) return; clearInterval(live.timer); try { live.g.master.gain.setTargetAtTime(0, live.g.ctx.currentTime, .05); const g = live.g; setTimeout(() => { try { g.master.disconnect(); g.lfo.stop(); } catch(e){} }, 400); } catch(e){} live = null; }
+  function stop(){ if (!live) return; pausedAt = playhead(); clearInterval(live.timer); try { live.g.master.gain.setTargetAtTime(0, live.g.ctx.currentTime, .05); const g = live.g; setTimeout(() => { try { g.master.disconnect(); g.lfo.stop(); } catch(e){} }, 400); } catch(e){} live = null; }
   const playing = () => !!live;
-  const playhead = () => live ? Math.max(0, live.g.ctx.currentTime - live.start) : 0;
+  const playhead = () => live ? Math.max(0, live.g.ctx.currentTime - live.start) : pausedAt;
+  const duration = () => model ? model.bars * 16 * 60 / model.p.bpm / 4 : 0;
+  function seek(sec){ const d = duration(); sec = Math.max(0, Math.min(d - .05, sec)); if (live) play(sec); else pausedAt = sec; }
+  function rewind(){ pausedAt = 0; }
 
   // ---------------------------------------------------------------- offline render → WAV
   async function render(progress){ if (!model) model = generate(P); const sr = 44100, stepDur = 60 / model.p.bpm / 4, total = model.bars * 16, len = Math.ceil((total * stepDur + 3) * sr);
@@ -219,5 +225,5 @@ const STUDIO = (() => {
   function recipe(){ return JSON.stringify({v: 1, app: 'glitch-reel-machine-studio', ...P}); }
   function applyRecipe(o){ if (!o || o.app !== 'glitch-reel-machine-studio') throw new Error('not a studio recipe'); for (const k in DEF) if (k in o) P[k] = k === 'layers' ? Object.assign({}, DEF.layers, o.layers) : o[k]; model = generate(P); return P; }
 
-  return {P, DEF, MODES, NOTE, generate: () => (model = generate(P)), model: () => model, sectionAt, play, stop, playing, playhead, render, toWav, describe, recipe, applyRecipe};
+  return {P, DEF, MODES, NOTE, generate: () => { pausedAt = 0; return (model = generate(P)); }, model: () => model, sectionAt, play, stop, playing, playhead, duration, seek, rewind, render, toWav, describe, recipe, applyRecipe};
 })();
