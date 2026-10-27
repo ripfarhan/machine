@@ -26,7 +26,7 @@ function AWZ_DSP(A){
   // TPT state-variable filter (Simper). mode outputs lp/bp/hp in fields after tick.
   A.SVF = class { constructor(){ this.ic1 = 0; this.ic2 = 0; this.a1 = 1; this.a2 = 0; this.a3 = 0; this.k = 1.4; this.lp = 0; this.bp = 0; this.hp = 0; this.fc = -1; this.q = -1; }
     set(fc, q, sr){ if (fc === this.fc && q === this.q) return; this.fc = fc; this.q = q; const g = Math.tan(Math.PI * clamp(fc, 8, sr * .49) / sr), k = 1 / Math.max(.05, q); this.k = k; this.a1 = 1 / (1 + g * (g + k)); this.a2 = g * this.a1; this.a3 = g * this.a2; }
-    tick(v0){ const v3 = v0 - this.ic2, v1 = this.a1 * this.ic1 + this.a2 * v3, v2 = this.ic2 + this.a2 * this.ic1 + this.a3 * v3; this.ic1 = 2 * v1 - this.ic1; this.ic2 = 2 * v2 - this.ic2; this.lp = v2; this.bp = v1; this.hp = v0 - this.k * v1 - v2; return v2; }
+    tick(v0){ const v3 = v0 - this.ic2, v1 = this.a1 * this.ic1 + this.a2 * v3, v2 = this.ic2 + this.a2 * this.ic1 + this.a3 * v3; this.ic1 = 2 * v1 - this.ic1; this.ic2 = 2 * v2 - this.ic2; if (this.ic1 < 1e-25 && this.ic1 > -1e-25) this.ic1 = 0; if (this.ic2 < 1e-25 && this.ic2 > -1e-25) this.ic2 = 0; this.lp = v2; this.bp = v1; this.hp = v0 - this.k * v1 - v2; return v2; }
     reset(){ this.ic1 = this.ic2 = 0; } };
 
   // Zero-delay-feedback 4-pole transistor ladder (Zavalishin TPT), tanh on the input stage, resonance 0..1 (self-osc ≈ 1).
@@ -57,8 +57,8 @@ function AWZ_DSP(A){
   // smoothed parameter (linear-in-time one pole)
   A.Smooth = class { constructor(v, sec, rate){ this.v = v; this.t = v; this.k = A.coef(sec || .02, rate || 44100); } set(t){ this.t = t; } tick(){ this.v += (this.t - this.v) * this.k; return this.v; } snap(v){ this.v = this.t = v; } };
 
-  A.OnePole = class { constructor(){ this.z = 0; this.a = 1; } setLP(fc, sr){ this.a = 1 - Math.exp(-TAU * fc / sr); } lp(x){ this.z += (x - this.z) * this.a; return this.z; } hp(x){ this.z += (x - this.z) * this.a; return x - this.z; } };
-  A.DCBlock = class { constructor(){ this.x1 = 0; this.y1 = 0; this.R = .995; } tick(x){ const y = x - this.x1 + this.R * this.y1; this.x1 = x; this.y1 = y; return y; } };
+  A.OnePole = class { constructor(){ this.z = 0; this.a = 1; } setLP(fc, sr){ this.a = 1 - Math.exp(-TAU * fc / sr); } lp(x){ this.z += (x - this.z) * this.a; if (this.z < 1e-25 && this.z > -1e-25) this.z = 0; return this.z; } hp(x){ this.z += (x - this.z) * this.a; if (this.z < 1e-25 && this.z > -1e-25) this.z = 0; return x - this.z; } };
+  A.DCBlock = class { constructor(){ this.x1 = 0; this.y1 = 0; this.R = .995; } tick(x){ let y = x - this.x1 + this.R * this.y1; if (y < 1e-25 && y > -1e-25) y = 0; this.x1 = x; this.y1 = y; return y; } };
 
   // fractional delay line (cubic Hermite read)
   A.Delay = class { constructor(maxSamples){ let n = 1; while (n < maxSamples + 4) n <<= 1; this.buf = new Float32Array(n); this.mask = n - 1; this.w = 0; }

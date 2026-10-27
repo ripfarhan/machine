@@ -20,13 +20,13 @@ class AwaazProcessor extends AudioWorkletProcessor {
       case 'voice': e.voice(m.slot, m.cmd); break;
       case 'next': e.next(); break;
       case 'auto': e.auto = !!m.on; break;
-      case 'rec': this.rec = !!m.on; if (!m.on) this.flushRec(); break;
+      case 'rec': this.rec = !!m.on; if (!m.on){ this.flushRec(); this.port.postMessage({type: 'pcmEnd'}); } break;
       case 'offline': this.offline = true; break; } } catch (err){ this.port.postMessage({type: 'error', msg: String(err && err.stack || err)}); } }
   flushRec(){ if (!this.recN) return; const L = new Float32Array(this.recN), R = new Float32Array(this.recN); let o = 0; for (let i = 0; i < this.recL.length; i++){ L.set(this.recL[i], o); R.set(this.recR[i], o); o += this.recL[i].length; }
     this.recL = []; this.recR = []; this.recN = 0; this.port.postMessage({type: 'pcm', L, R}, [L.buffer, R.buffer]); }
   process(ins, outs){ const o = outs[0], L = o[0], R = o[1] || o[0], n = L.length, e = this.e;
-    if (!e.playing || !e.comp){ L.fill(0); R.fill(0); } else e.process(L, R, n);
-    if (this.rec){ this.recL.push(L.slice()); this.recR.push(R.slice()); this.recN += n; if (this.recN >= sampleRate * 2) this.flushRec(); }
+    if (!e.playing || !e.comp){ L.fill(0); R.fill(0); } else { try { e.process(L, R, n); } catch (err){ L.fill(0); R.fill(0); if (!this.errSent){ this.errSent = true; this.port.postMessage({type: 'error', msg: String(err && err.stack || err)}); } } }
+    if (this.rec && e.playing){ this.recL.push(L.slice()); this.recR.push(R.slice()); this.recN += n; if (this.recN >= sampleRate * 2) this.flushRec(); }
     if (!this.offline && ++this.q >= 4){ this.q = 0; const d = e.out.drain(); if (d.notes.length || d.msgs.length) this.port.postMessage({type: 'out', now: currentTime + n / sampleRate, et: e.t, sr: sampleRate, notes: d.notes, msgs: d.msgs}, [d.notes.buffer]); }
     else if (this.offline) e.out.drain();
     return true; } }
@@ -46,8 +46,8 @@ class AwaazHost {
     this.aL = this.ctx.createAnalyser(); this.aR = this.ctx.createAnalyser(); this.aL.fftSize = this.aR.fftSize = 2048; this.split.connect(this.aL, 0); this.split.connect(this.aR, 1);
     this.aM = this.ctx.createAnalyser(); this.aM.fftSize = 8192; this.aM.smoothingTimeConstant = .5; this.master.connect(this.aM);
     this.streamDest = this.ctx.createMediaStreamDestination(); this.master.connect(this.streamDest);
-    this.node.port.onmessage = ev => this.recv(ev.data); await this.ctx.resume(); }
-  recv(m){ if (m.type === 'pcm'){ if (this.recChunks) this.recChunks.push(m); return; }
+    this.node.port.onmessage = ev => this.recv(ev.data); this.node.onprocessorerror = () => { for (const h of this.handlers) h({type: 'error', msg: 'audio engine crashed'}); }; await this.ctx.resume(); }
+  recv(m){ if (m.type === 'pcm'){ if (this.recChunks) this.recChunks.push(m); return; } if (m.type === 'pcmEnd'){ if (this.recDone) this.recDone(); return; }
     if (m.type === 'error'){ console.error('[engine]', m.msg); }
     for (const h of this.handlers) h(m); }
   send(m){ if (this.node) this.node.port.postMessage(m); }
@@ -59,7 +59,7 @@ class AwaazHost {
     this.tsFilt = this.tsFilt === null ? t : Math.max(this.tsFilt, this.tsFilt + (t - this.tsFilt) * .2); return this.tsFilt + .016 + this.avOffset; }
   // ---------------------------------------------------------------- recording (lossless, from inside the worklet)
   recStart(){ this.recChunks = []; this.send({type: 'rec', on: true}); }
-  recStop(){ return new Promise(res => { this.send({type: 'rec', on: false}); setTimeout(() => { const ch = this.recChunks || []; this.recChunks = null; res(awzWav(ch, this.ctx.sampleRate)); }, 250); }); }
+  recStop(){ return new Promise(res => { const fin = () => { this.recDone = null; const ch = this.recChunks || []; this.recChunks = null; res(awzWav(ch, this.ctx.sampleRate)); }; this.recDone = fin; this.send({type: 'rec', on: false}); setTimeout(() => { if (this.recDone) fin(); }, 3000); }); }
   // ---------------------------------------------------------------- offline render of a whole piece
   async renderOffline(genome, macros, seconds, onProgress){ const sr = 48000, N = Math.ceil(seconds * sr); const oc = new OfflineAudioContext(2, N, sr);
     await oc.audioWorklet.addModule(this.url); const node = new AudioWorkletNode(oc, 'awaaz', {numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2]}); node.connect(oc.destination);

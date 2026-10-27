@@ -86,11 +86,11 @@ function AWZ_ENGINE(A){
       return A.makeGenome(r.pick(others), seed); }
     // ---------------------------------------------------------------- run
     schedule(){ const c = this.comp, ahead = c.barN; while (c.t < this.t + BLK + ahead){
-        if (c.done){ this.history.push(this.g); if (this.auto){ const g = this.onEnd ? this.onEnd(this.g) : null; this.load(g || this.pickNext()); return; } else { this.out.msg({type: 'end'}); c.done = false; c.sections.push({name: 'outro', bars: 8, E0: .04, E1: 0, tag: 'outro'}); } }
+        if (c.done){ this.history.push(this.g); if (this.auto){ const g = this.onEnd ? this.onEnd(this.g) : null; this.load(g || this.pickNext()); return; } else if (!c.endSent){ c.endSent = true; this.out.msg({type: 'end'}); } }
         const bar = c.nextBar(); this.lastE = bar.info.E; const af = this.w.aeqFrom === undefined ? .35 : this.w.aeqFrom; this.mixer.aeq.gate = clamp((bar.info.E - af) / .3, 0, 1);
         for (const e of bar.events){ const tr = this.tracks[e.slot]; if (!tr) continue; this.q.push({t: Math.round(e.t), slot: e.slot, ev: e.ev});
           const ev = e.ev; if (ev.note !== undefined) this.out.note(e.t, tr.id, ev.note, ev.vel || .7, (ev.dur || .2) * this.sr); else if (ev.level === undefined) this.out.note(e.t, tr.id, ev.kick ? -1 : ev.open ? -3 : -2, ev.vel || .7, 0); }
-        this.out.msg(Object.assign({type: 'bar'}, bar.info)); this.mapMacros(); } }
+        if (!bar.info.done){ this.out.msg(Object.assign({type: 'bar'}, bar.info)); this.mapMacros(); } } }
     process(L, R, n){ if (!this.comp){ L.fill(0, 0, n); R.fill(0, 0, n); return; } this.schedule();
       const end = this.t + n, q = this.q;
       while (q.size && q.peek().t < end){ const e = q.pop(), tr = this.tracks[e.slot]; if (!tr || tr.dying) continue; const off = Math.max(0, Math.min(n - 1, e.t - this.t));

@@ -37,7 +37,7 @@ function AWZ_COMPOSER(A){
     setMacro(k, v){ this.macro[k] = clamp(v, 0, 1); }
     // nudges are applied at the next 4-bar boundary
     doNudge(kind){ this.nudge = kind; if (kind === 'hold') this.hold = !this.hold; }
-    applyNudge(){ const n = this.nudge; if (!n || n === 'hold'){ this.nudge = null; return; } this.nudge = null; const S = this.sections, cur = this.si;
+    applyNudge(){ const n = this.nudge; if (!n || n === 'hold'){ this.nudge = null; return; } const S = this.sections, cur = this.si; if (cur >= S.length) return; this.nudge = null;
       const pk = S.find(s => s.tag === 'peak') || {name: 'peak', bars: 16, E0: .86, E1: .95, tag: 'peak'};
       const cut = () => { S[cur].bars = this.bis; };   // end the current section here
       if (n === 'build'){ cut(); S.splice(cur + 1, 0, {name: 'build', bars: 8, E0: Math.min(.6, this.lastE || .5), E1: .82, tag: 'build'}, Object.assign({}, pk, {bars: 16})); }
@@ -54,7 +54,7 @@ function AWZ_COMPOSER(A){
       // ---- section / form
       if (this.bis >= this.sec().bars && !(this.hold && this.si < this.sections.length)){ this.si++; this.bis = 0; }
       if (this.hold && this.bis >= this.sec().bars) this.bis = this.sec().bars - 8;   // HOLD: loop the last 8 bars of the section
-      if (this.si >= this.sections.length){ this.done = true; }
+      if (this.si >= this.sections.length){ this.done = true; const t0 = this.t; this.t += this.barN; this.k++; return {t0, events: [], info: Object.assign({}, this.lastInfo || {}, {bar: this.k - 1, t0, done: true, changed: [], chordStart: false, bis: -1})}; }   // past the end: silent bar, no nudges
       const S = this.sec(), sectionStart = this.bis === 0;
       if (this.bis % 4 === 0) this.applyNudge();
       const S2 = this.sec();

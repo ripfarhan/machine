@@ -45,10 +45,12 @@
   function queueNext(){ if (!S.g) return; const n = taste.next(S.g.world, 'auto'); S.queued = n; host.send({type: 'queue', genome: n.genome}); }
   // ---------------------------------------------------------------- messages from the engine
   const sr = () => (host.ctx ? host.ctx.sampleRate : 48000);
-  host.on(m => { if (m.type !== 'out') return; const N = m.notes, toCtx = s => m.now + (s - m.et) / m.sr;
-    for (let i = 0; i < N.length; i += 6){ const t = toCtx(N[i]), lane = N[i + 1], pitch = N[i + 2], vel = N[i + 3], dur = N[i + 4] / m.sr; lanes.add(lane, t, pitch, vel, dur); S.timed.push({t, k: 'n', lane, pitch, vel}); }
-    for (const x of m.msgs){ if (x.type === 'bar'){ x.ct = toCtx(x.t0); S.timed.push({t: x.ct, k: 'bar', x}); } else if (x.type === 'piece'){ x.ct = toCtx(x.t0); onPiece(x); } else if (x.type === 'meters') onMeters(x); else if (x.type === 'voice') onVoice(x); else if (x.type === 'nudge') {} }
-    S.timed.sort((a, b) => a.t - b.t); });
+  const tInsert = e => { const q = S.timed; let i = q.length; while (i > 0 && q[i - 1].t > e.t) i--; q.splice(i, 0, e); };
+  host.on(m => { if (m.type === 'error'){ toast('engine error — press NEXT to restart the music', 6000); console.error(m.msg); return; } if (m.type !== 'out') return; const N = m.notes, toCtx = s => m.now + (s - m.et) / m.sr;
+    const nowT = host.now(); if (S.timed.length && S.timed[0].t < nowT - 2){ let k = 0; while (k < S.timed.length && S.timed[k].t < nowT - 2) k++; const stale = S.timed.splice(0, k); const lastBar = stale.filter(e => e.k === 'bar').pop(); if (lastBar) onBar(lastBar.x); }   // background tab: drop stale, keep the latest bar
+    for (let i = 0; i < N.length; i += 6){ const t = toCtx(N[i]), lane = N[i + 1], pitch = N[i + 2], vel = N[i + 3], dur = N[i + 4] / m.sr; lanes.add(lane, t, pitch, vel, dur); tInsert({t, k: 'n', lane, pitch, vel}); }
+    for (const x of m.msgs){ if (x.type === 'bar'){ x.ct = toCtx(x.t0); tInsert({t: x.ct, k: 'bar', x}); } else if (x.type === 'piece'){ x.ct = toCtx(x.t0); S.timed = S.timed.filter(e => e.t < x.ct - .3); lanes.cut(x.ct); onPiece(x); } else if (x.type === 'meters') onMeters(x); else if (x.type === 'voice') onVoice(x); else if (x.type === 'nudge') {} }
+  });
   function onPiece(p){ const natural = S.expect !== p.genome.seed; if (natural && S.g){ taste.ended(S.g, S.macros); brain.add(`piece finished — the AI moves on: ${S.queued ? S.queued.why : ''}`, 'ai'); }
     S.expect = null; S.g = p.genome; S.piece = p; S.startedAt = host.ctx.currentTime; taste.started(p.genome); const w = AWZ.WORLDS[p.genome.world];
     const pal = PAL[p.genome.world] || PAL.EMERGENCE; F.hot = pal[0]; F.cyan = pal[1]; F.c1 = VZ.rgb(pal[0]); F.c2 = VZ.rgb(pal[1]); document.documentElement.style.setProperty('--hot', pal[0]); document.documentElement.style.setProperty('--cyan', pal[1]);
@@ -122,7 +124,10 @@
   // ---------------------------------------------------------------- controls
   async function start(){ $('#go').textContent = 'LOADING…'; try { await host.start(); } catch (e){ $('#go').textContent = 'AUDIO FAILED — ' + e.message; console.error(e); return; }
     $('#gate').style.display = 'none'; const g = gateWorld ? taste.genomeFor(gateWorld) : taste.next(null, 'auto').genome; S.loadReason = gateWorld ? 'you picked it' : 'first piece — the AI picked'; host.load(g); S.expect = g.seed; play(true); requestAnimationFrame(frame); }
-  function play(on){ S.playing = on; host.play(on); $('#play').textContent = on ? '❚❚ PAUSE' : '▶ PLAY'; $('#play').classList.toggle('on', on); }
+  // the engine clock stops while paused but AudioContext time runs on: shift everything still to come by the pause length
+  function play(on){ if (host.ctx){ if (!on){ S.pausedAt = host.ctx.currentTime; S.pauseT = host.now(); } else if (S.pausedAt !== undefined){ const d = host.ctx.currentTime - S.pausedAt, t = S.pauseT;
+        for (const e of S.timed) if (e.t > t){ e.t += d; if (e.x) e.x.ct += d; } lanes.shift(t, d); if (S.plan) S.plan.t0 += d; S.barT0 += d; S.pausedAt = undefined; } }
+    S.playing = on; host.play(on); $('#play').textContent = on ? '❚❚ PAUSE' : '▶ PLAY'; $('#play').classList.toggle('on', on); }
   $('#go').onclick = start; $('#play').onclick = () => play(!S.playing);
   $('#next').onclick = () => { nextPiece('auto', 'skip'); };
   $('#like').onclick = () => { if (!S.g) return; brain.add(taste.like(S.g, S.macros), 'you'); toast('♥ the AI will make more like this'); updateLearn(); $('#like').classList.add('on'); setTimeout(() => $('#like').classList.remove('on'), 600); };

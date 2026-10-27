@@ -56,6 +56,7 @@ function AWZ_INST(A){
     allOff(){ this.pend.length = 0; if (this.v.on && this.v.release) this.v.release(); } };
 
   // continuous texture voices: rain (Poisson clicks through band-passes), hiss, wind, crackle, drone (just-intonation partials)
+  const DRONE_R = [1, 1.5, 2, 3], DRONE_A = [.5, .25, .18, .07];
   A.TextureInst = class { constructor(sr, patch, seed){ this.sr = sr; this.patch = patch || {kind: 'rain'}; this.nz = new A.Noise(seed || 31); this.r = A.rng(seed || 31); this.a = new A.SVF(); this.b = new A.SVF(); this.c = new A.SVF(); this.lvl = new A.Smooth(0, .8, sr);
       this.ph = new Float64Array(6); this.lfo = this.r(); this.drop = 0; this.dropL = 0; this.dropR = 0; this.pop = 0; this.note = 45; }
     play(off, ev){ if (ev.level !== undefined) this.lvl.set(ev.level); if (ev.note !== undefined) this.note = ev.note; if (ev.kind) this.patch = Object.assign({}, this.patch, {kind: ev.kind}); }
@@ -64,7 +65,7 @@ function AWZ_INST(A){
       else if (k === 'rain'){ this.a.set(2600, .9, sr); this.b.set(7000, .7, sr); }
       else if (k === 'hiss'){ this.a.set(5000, .5, sr); }
       else if (k === 'crackle'){ this.a.set(2400, .6, sr); }
-      this.lfo += n * .05 / sr;
+      this.lfo += n * .05 / sr; const dInc = this.dInc || (this.dInc = new Float64Array(4)); if (k === 'drone'){ const f = A.mtof(this.note); for (let q = 0; q < 4; q++) dInc[q] = f * DRONE_R[q] * (1 + q * .0007) / sr; }
       for (let i = 0; i < n; i++){ const g = this.lvl.tick(); let l = 0, r = 0;
         if (k === 'rain'){ // binaural-ish rain: Poisson drops with random pan + soft wash
           if (this.r() < (p.rate || 30) / sr){ this.drop = (.3 + this.r() * .7) * (this.r() < .1 ? 2 : 1); const pan = this.r(); this.dropL = Math.cos(pan * 1.5708); this.dropR = Math.sin(pan * 1.5708); }
@@ -73,7 +74,7 @@ function AWZ_INST(A){
         else if (k === 'wind'){ const w = this.nz.white(); this.a.tick(w); this.b.tick(this.nz.white()); l = this.a.bp * .5; r = this.b.bp * .5; }
         else if (k === 'hiss'){ const w = this.nz.pink(); this.a.tick(w); l = this.a.hp * .4 + w * .05; r = l * .97; }
         else if (k === 'crackle'){ if (this.r() < 9 / sr) this.pop = (this.r() * 2 - 1) * (this.r() < .12 ? 1 : .35); else this.pop *= .3; this.a.tick(this.pop + this.nz.white() * .01); l = this.a.hp * .7; r = this.r() < .5 ? l : l * .6; }
-        else { const f = A.mtof(this.note); const parts = [[1, .5], [1.5, .25], [2, .18], [3, .07]]; for (let q = 0; q < 4; q++){ this.ph[q] += f * parts[q][0] * (1 + q * .0007) / sr; l += A.sin1(this.ph[q]) * parts[q][1]; r += A.sin1(this.ph[q] + q * .13) * parts[q][1]; } l *= .4; r *= .4; }
+        else { for (let q = 0; q < 4; q++){ this.ph[q] += dInc[q]; l += A.sin1(this.ph[q]) * DRONE_A[q]; r += A.sin1(this.ph[q] + q * .13) * DRONE_A[q]; } l *= .4; r *= .4; }
         L[i] += l * g; R[i] += r * g; }
       return true; }
     allOff(){ this.lvl.set(0); } };

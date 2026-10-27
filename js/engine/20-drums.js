@@ -10,7 +10,7 @@ function AWZ_DRUMS(A){
   A.Pool = class { constructor(make, n){ this.v = []; for (let i = 0; i < n; i++){ const x = make(i); x.age = 0; x.on = false; this.v.push(x); } this.clock = 0; }
     get(){ let best = null; for (const x of this.v) if (!x.on){ best = x; break; }
       if (!best){ // steal the quietest voice (released ones first), not just the oldest: a stolen loud voice is a click
-        let sc = Infinity; for (const x of this.v){ const e = x.aenv; const s = e ? e.v * (x.vel || 1) * (e.stage === 4 ? .25 : 1) : (x.amp !== undefined ? x.amp : x.e !== undefined ? x.e : 1) - 1e-9 * x.age; const q = s + x.age * 1e-12; if (q < sc){ sc = q; best = x; } }
+        let sc = Infinity; for (const x of this.v){ const e = x.aenv; const s = e ? e.v * (x.vel || 1) * (e.stage === 4 ? .25 : 1) : (x.amp !== undefined ? x.amp : x.e !== undefined ? x.e : x.en !== undefined ? x.en : 1) + 1e-9 * x.age; const q = s + x.age * 1e-12; if (q < sc){ sc = q; best = x; } }
         this.steals = (this.steals || 0) + 1; }
       best.age = ++this.clock; best.on = true; best.gl = 1; best.gr = 1; return best; }
     render(L, R, n){ let any = false; for (const x of this.v) if (x.on){ x.on = x.render(L, R, n); any = true; } return any; }

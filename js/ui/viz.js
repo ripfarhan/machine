@@ -69,7 +69,9 @@ VZ.Hero = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); t
 // ---------------------------------------------------------------- voice lanes: what the machine is about to play (future notes ghosted, ignite at the playhead)
 VZ.Lanes = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); this.lanes = []; this.notes = []; this.past = 4.5; this.future = 2.2; }
   setLanes(slots){ this.lanes = slots.map(s => ({slot: s.slot, kind: s.kind, lo: 127, hi: 0, flash: 0})); this.notes = slots.map(() => []); }
-  add(lane, t, pitch, vel, dur){ const L = this.lanes[lane]; if (!L) return; if (pitch >= 0){ L.lo = Math.min(L.lo, pitch); L.hi = Math.max(L.hi, pitch); } this.notes[lane].push({t, pitch, vel, dur, lit: false}); }
+  shift(t, d){ for (const a of this.notes) for (const e of a) if (e.t > t) e.t += d; }
+  cut(t){ for (const a of this.notes) for (let i = a.length - 1; i >= 0; i--) if (a[i].t > t) a.splice(i, 1); }
+  add(lane, t, pitch, vel, dur){ const arr = this.notes[lane]; if (arr && arr.length > 3000) arr.splice(0, 1000); const L = this.lanes[lane]; if (!L) return; if (pitch >= 0){ L.lo = Math.min(L.lo, pitch); L.hi = Math.max(L.hi, pitch); } this.notes[lane].push({t, pitch, vel, dur, lit: false}); }
   draw(F, t, dt){ const {w, h, d} = VZ.fit(this.cv, 2), c = this.c; c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h); const n = this.lanes.length; if (!n) return;
     const lh = h / n, px = w * .7, sc = px / this.past, x0 = t - this.past;
     c.font = '600 10px "Barlow Condensed", sans-serif'; c.textBaseline = 'middle';

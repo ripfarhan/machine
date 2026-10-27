@@ -22,7 +22,7 @@ function AWZ_MIXER(A){
       const g = this.gain.tick() * (this.mute ? 0 : 1) * this.fade, p = clamp(this.pan, -1, 1), gl = Math.cos((p + 1) * Math.PI / 4) * Math.SQRT2 * g, gr = Math.sin((p + 1) * Math.PI / 4) * Math.SQRT2 * g, w = this.width;
       let pk = 0, ss = 0;
       for (let i = 0; i < n; i++){ let l = L[i], r = R[i]; if (w !== 1){ const m = (l + r) * .5, s = (l - r) * .5 * w; l = m + s; r = m - s; } l *= gl; r *= gr; L[i] = l; R[i] = r; const a = Math.max(Math.abs(l), Math.abs(r)); if (a > pk) pk = a; ss += l * l + r * r; }
-      this.peak = Math.max(pk, this.peak * .9); this.rms = Math.sqrt(ss / (2 * n)); } };
+      this.peak = Math.max(pk, this.peak * .9); if (this.peak < 1e-20) this.peak = 0; this.rms = Math.sqrt(ss / (2 * n)); } };
 
   A.Mixer = class { constructor(sr){ this.sr = sr; this.tracks = [];
       const z = () => new Float32Array(BLK); this.bus = {drums: [z(), z()], bass: [z(), z()], music: [z(), z()]}; this.sendBuf = {plate: [z(), z()], hall: [z(), z()], delay: [z(), z()]}; this.ret = {plate: [z(), z()], hall: [z(), z()], delay: [z(), z()]};

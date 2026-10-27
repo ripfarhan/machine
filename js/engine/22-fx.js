@@ -126,7 +126,7 @@ function AWZ_FX(A){
 
   // ---------------------------------------------------------------- look-ahead limiter (moving minimum of needed gain + box smoothing), ceiling in linear; adds latency `look`
   A.Limiter = class { constructor(sr, lookSec){ this.sr = sr; this.look = Math.max(4, Math.round((lookSec || .002) * sr)); this.hold = Math.round(.003 * sr); const W = this.look + this.hold; this.W = W;
-      this.dl = new Line(W + 4); this.dr = new Line(W + 4); this.need = new Float32Array(W + 1); this.qi = new Int32Array(W + 2); this.qv = new Float32Array(W + 2); this.qh = 0; this.qt = 0; this.pos = 0;
+      this.dl = new Line(W + 4); this.dr = new Line(W + 4); this.need = new Float32Array(W + 1); this.qi = new Float64Array(W + 2); this.qv = new Float32Array(W + 2); this.qh = 0; this.qt = 0; this.pos = 0;
       this.box1 = new Float32Array(this.look); this.box2 = new Float32Array(this.look); this.b1i = 0; this.b2i = 0; this.s1 = this.look; this.s2 = this.look; this.box1.fill(1); this.box2.fill(1); this.env = 1; this.ceil = .89; this.rel = 1 - Math.exp(-1 / (.08 * sr)); this.minGain = 1; }
     set(o){ if (o.ceiling !== undefined) this.ceil = o.ceiling; if (o.release) this.rel = 1 - Math.exp(-1 / (o.release * this.sr)); }
     process(L, R, n){ const W = this.W, ceil = this.ceil; let mg = 1;
