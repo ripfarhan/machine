@@ -75,12 +75,15 @@ function AWZ_PARTS(A){
       if (kind === 'answer'){ m[m.length - 1].rung = clamp(m[m.length - 1].rung + r.pick([-2, -1, 1]), 0, 7); }
       else if (kind === 'seq'){ m.forEach(n => n.rung = clamp(n.rung + 1, 0, 8)); }
       else if (kind === 'invert'){ const r0 = m[0].rung; m.forEach(n => n.rung = clamp(r0 - (n.rung - r0), 0, 8)); }
+      else if (kind === 'retro'){ const ss = m.map(n => n.s); m.reverse(); m.forEach((n, i) => n.s = ss[i]); }   // v2: retrograde (pitches backwards, same rhythm)
+      else if (kind === 'augment'){ return m.filter(n => n.s < 8).map(n => Object.assign({}, n, {s: n.s * 2, len: n.len * 2})); }   // v2: augmentation (twice as slow)
       else if (kind === 'frag'){ return m.slice(0, Math.max(2, Math.ceil(m.length / 2))).concat(m.slice(0, Math.max(2, Math.ceil(m.length / 2))).map(n => Object.assign({}, n, {s: n.s + 8}))).filter(n => n.s < 16); }
       return m; }
     elaborate(m){ if (!this.fractal || this.depth === 0) return m; const out = []; m.forEach(n => { out.push(n); if (n.len >= 4 && this.depth > 0){ const k = Math.min(3, this.depth); for (let j = 1; j <= k && n.s + j * Math.floor(n.len / (k + 1)) < 16; j++) out.push({s: n.s + j * Math.floor(n.len / (k + 1)), rung: clamp(n.rung + (j % 2 ? 1 : -1) * j, 0, 8), len: Math.max(1, Math.floor(n.len / (k + 1))), sub: true}); } }); return out.sort((a, b) => a.s - b.s); }
     bar(c){ const ph = Math.floor(c.barInSection / 2) % 4, inPh = c.barInSection % 2; if (inPh === 1 && ph !== 2) return;   // A (bar1) · A′ (bar3) · B (bars 5–6) · rest
       if (c.barInSection % 16 === 0 && c.barInSection > 0 && this.fractal) this.depth = Math.min(3, this.depth + 1);
-      const kind = ph === 0 ? (c.sectionIdx > 2 && this.r() < .3 ? 'seq' : 'plain') : ph === 1 ? 'answer' : ph === 2 ? (c.E > .7 ? 'invert' : 'frag') : null; if (!kind) return;
+      let kind = ph === 0 ? (c.sectionIdx > 2 && this.r() < .3 ? 'seq' : 'plain') : ph === 1 ? 'answer' : ph === 2 ? (c.E > .7 ? 'invert' : 'frag') : null; if (!kind) return;
+      if (this.P.g.v2 !== false && c.sectionIdx > 1 && this.r() < .22) kind = ph === 1 ? 'retro' : ph === 2 ? 'augment' : kind;
       const ladder = []; for (let m = this.lo; m <= this.hi; m++) if (c.chordPcs.indexOf(m % 12) >= 0 || (c.key.inScale(m) && c.pent.has(m % 12))) ladder.push(m);
       const notes = this.elaborate(this.variant(kind)); const off = ph === 2 && inPh === 1 ? 0 : 0;
       notes.forEach(n => { const m = ladder[clamp(n.rung + 2, 0, ladder.length - 1)]; if (m === undefined) return; c.emit(this.slot, n.s + off, {note: m, vel: this.vel * (n.sub ? .65 : .9 + this.r() * .1), dur: c.step * Math.min(8, n.len) * .92}); }); } };
@@ -109,20 +112,21 @@ function AWZ_PARTS(A){
     bar(c){ const r = this.r, endPhrase = (c.barInSection % 8) === 7 && r() < .45, last = c.barsLeftInSection === 1 && c.nextBigger;
       let steps = this.mode === 'four' ? [0, 4, 8, 12] : this.mode === 'broken' ? this.alt : this.mode === 'sparse' ? [0, 8] : this.mode === 'halftime' ? [0, 10] : [0, 4, 8, 12];
       if (this.mode === 'four' && c.E > .8 && c.density > .6 && r() < .25) steps = steps.concat([14]);
+      if (c.halfTime) steps = this.mode === 'sparse' ? [0] : [0, 10];   // v2: half-time before the drop
       if (c.density > .78 && this.mode !== 'sparse' && r() < (c.density - .78) * 3) steps = steps.concat([r.pick([3, 7, 11, 14, 15])]);
       steps.forEach(s => { if ((endPhrase || last) && s >= 12) return; c.emit(this.slot, s, {vel: this.vel * (s === 0 ? 1 : steps.indexOf(s) > 3 ? .6 : .92) * (.95 + .1 * r()), kick: true}); }); } };
 
   // ---------------------------------------------------------------- backbeat: snare / clap / rim on 2&4 (or 3 in half-time), ghosts with density
   A.PARTS.backbeat = class { constructor(P, o){ this.slot = o.slot || 'snare'; this.mode = o.mode || 'two4'; this.r = P.rng('bb'); this.vel = o.vel || .7; }
-    bar(c){ const r = this.r, hits = this.mode === 'halftime' ? [8] : this.mode === 'broken' ? [4, 11] : [4, 12];
+    bar(c){ const r = this.r, hits = this.mode === 'halftime' || c.halfTime ? [8] : this.mode === 'broken' ? [4, 11] : [4, 12];
       hits.forEach(s => c.emit(this.slot, s, {vel: this.vel * (.92 + .1 * r())}));
       if (c.density > .5) [7, 15, 3].forEach(s => { if (r() < (c.density - .5) * .7) c.emit(this.slot, s, {vel: this.vel * .28}); }); } };
 
   // ---------------------------------------------------------------- hats: offbeat 8ths → 16ths with accents; open on the offbeat at high energy; swing applied by composer
-  A.PARTS.hats = class { constructor(P, o){ this.slot = 'hat'; this.r = P.rng('hats'); this.vel = o.vel || .55; this.acc = [1, .45, .75, .45]; this.v = A.voss(this.r, 64, 4); this.open = o.open === undefined ? .5 : o.open; }
+  A.PARTS.hats = class { constructor(P, o){ this.slot = o.slot || 'hat'; this.r = P.rng('hats'); this.vel = o.vel || .55; this.acc = [1, .45, .75, .45]; this.v = A.voss(this.r, 64, 4); this.open = o.open === undefined ? .5 : o.open; }
     bar(c){ const r = this.r; for (let s = 0; s < 16; s++){ const off8 = s % 4 === 2, on16 = s % 2 === 1;
         let play = off8 || (c.density > .5 && c.E > .45 && (s % 2 === 0 || r() < (c.density - .5) * 1.5)) || (on16 && c.density > .75 && r() < .7);
-        if (c.density < .25 && !off8) play = false;
+        if ((c.density < .25 || c.halfTime) && !off8) play = false;
         if (play && c.density > .85 && r() < (c.density - .85) * 2) c.emit(this.slot, s + .5, {vel: this.vel * .35});
         if (!play) continue; const open = off8 && c.E > .78 && r() < this.open && s !== 14;
         c.emit(this.slot, s, {vel: this.vel * this.acc[s % 4] * (.7 + .3 * this.v[(c.barIndex * 16 + s) % 64]), open}); } } };

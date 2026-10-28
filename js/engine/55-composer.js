@@ -30,6 +30,8 @@ function AWZ_COMPOSER(A){
       this.totalBars = this.sections.reduce((a, s) => a + s.bars, 0);
       this.parts = world.parts.map((spec, i) => ({spec, slot: spec.slot, obj: new A.PARTS[spec.part](this.P, Object.assign({slot: spec.slot}, spec.opts || {})), on: false, id: i, user: 0}));
       this.macro = Object.assign({energy: .5, mood: this.modeIdx / 5, space: .5, density: .5, chaos: .2, motion: .4, x: .5, y: .2}, genome.macros || {});
+      this.v2 = genome.v2 !== false; this.moves = A.Moves ? new A.Moves(this, world) : null; this.halfTimeFrom = -1; this.halfTimeTo = -1; this.movesLog = []; this.prevE = 0;
+      this.engineHas = name => !!(world.sends && world.sends[name]);
       this.k = 0; this.si = 0; this.bis = 0; this.ci = 0; this.bic = 0; this.cycle = 0; this.voicing = null; this.prevVoicing = null; this.subAt = -1; this.subChord = null;
       this.nudge = null; this.eOff = 0; this.hold = false; this.done = false; this.t = 0; this.lastInfo = null; this.changed = []; }
     rngFor(name){ return this.P.rng(name); }
@@ -53,6 +55,8 @@ function AWZ_COMPOSER(A){
       this.ci = ci; this.bic = r; this.voicing = null; this.done = false; this.forceArr = true; this.nudge = null; }
     pos(){ let acc = 0; for (let i = 0; i < Math.min(this.si, this.sections.length); i++) acc += this.sections[i].bars; return acc + this.bis; }
     chord(){ const ch = this.loop.chords[this.ci]; return this.subChord && this.subAt === this.cycle && this.ci === this.subIdx ? this.subChord : ch; }
+    // v2: modulate the whole loop (same degrees, new tonic) — used by the key-lift move into the last peak
+    keyLift(semi){ this.key.set(this.key.tonic + semi, this.key.mode); this.rebuildLoopForMode(this.key.mode); this.voicing = null; this.lifted = (this.lifted || 0) + semi; }
     rebuildLoopForMode(mode){ this.key.set(this.key.tonic, mode); this.loop.chords = this.loop.chords.map(c => { const n = A.makeChord(this.key, c.deg, c.type, {pedal: this.loop.pedal === null ? null : this.key.pc(this.loop.pedal)}); n.bars = c.bars; return n; }); this.subChord = null; }
 
     // build the next bar → {t0, events: [{t, slot, ev}], info}
@@ -99,7 +103,7 @@ function AWZ_COMPOSER(A){
         voicing: v, chord: ch, chordStart, chordBars: ch.bars, barInChord: this.bic, nextChordIn: ch.bars - this.bic, opening: E > .82 && S2.tag === 'peak',
         chordPcs: ch.pcs, chordRoot: ch.root, key: this.key, pent: new Set(this.key.pentatonic(60, 72).map(m => m % 12)), bassNote: v.bass, droneNote: v.sub + 12,
         barIndex: this.k, barInSection: this.bis, sectionIdx: this.si, section: S2, barsLeftInSection: barsLeft, nextBigger, layerIndex: clamp(pieceProg * 1.6, 0, 1),
-        E, density, chaos: M.chaos, mutation: .02 + M.chaos * .35, motion: M.motion, space: M.space, brightness: M.mood * .5 + M.x * .5, calm: E < .3, alpha, forceAll: false};
+        E, density, chaos: M.chaos, mutation: .02 + M.chaos * .35, motion: M.motion, space: M.space, brightness: M.mood * .5 + M.x * .5, calm: E < .3, alpha, forceAll: false, halfTime: this.v2 && this.k >= this.halfTimeFrom && this.k < this.halfTimeTo};
       const t0 = this.t, stepN = this.stepN, swing = this.g.swing || 0, hum = this.hum, chaos = M.chaos;
       for (const p of this.parts){ if (!p.on) continue; const slot = p.slot, drum = !!p.spec.drum, tight = p.spec.tight;
         c.emit = (sl, step, ev, raw) => { let s = step; if (!raw && swing && Math.abs(s - Math.round(s)) < .01 && (Math.round(s) & 1)) s += swing;
@@ -116,13 +120,16 @@ function AWZ_COMPOSER(A){
           else { const div = kind === 'roll' ? 8 : gr() < .5 ? 4 : 8, seg = beatN / div, src = inBeat.filter(e => e.t < b0 + seg * 1.5); for (const e of inBeat) if (e.t >= b0 + seg * 1.5 && !e.ev.kick) e.drop = true;
             for (const e of src) for (let q = 1; q < div; q++) add.push({t: e.t + q * seg, slot: e.slot, ev: Object.assign({}, e.ev, {vel: (e.ev.vel || .7) * Math.pow(kind === 'roll' ? 1.04 : .86, q), dur: e.ev.dur ? Math.min(e.ev.dur, seg / sr * .9) : e.ev.dur, kick: false})}); } }
         if (add.length){ for (const a of add) out.push(a); } for (let i = out.length - 1; i >= 0; i--) if (out[i].drop) out.splice(i, 1); out.sort((a, b) => a.t - b.t); }
+      // v2 transition moves (rotation + cooldowns live in 56-moves.js)
+      this.movesLog = []; if (this.v2 && this.moves){ this.movesLog = this.moves.bar({out, t0, S: S2, next: nextS, barsLeft, E, sectionStart: sectionStart && this.bis === 0, arrivedUp: sectionStart && S2.E0 > this.prevE + .15}); out.sort((a, b) => a.t - b.t); }
+      this.prevE = E;
       this.dbg = {E0: S2.E0, E1: S2.E1, prog, mE: M.energy, eOff: this.eOff, E, mDen: M.density, density, shift, alpha, chaos: M.chaos, mood: M.mood, pieceProg, barsLeft, si: this.si, bis: this.bis, sbars: S2.bars, section: S2.name, tag: S2.tag,
         ci: this.ci, bic: this.bic, cycle: this.cycle, loopLen, chord: ch.name, deg: ch.deg, type: ch.type, pcs: ch.pcs.slice(), sub: v.sub, bass: v.bass, notes: v.notes.slice(), swing, stepN, barN: this.barN, bpm: this.bpm, k: this.k, nEvents: out.length,
         tonic: this.key.tonic, mode: this.key.mode, sc: this.key.sc.slice(), family: this.loop.family, loop: this.loop.chords.map(c => c.name),
         parts: this.parts.map(p => ({slot: p.slot, part: p.spec.part, on: p.spec.on || 0, off: p.spec.off, eff: (p.spec.on || 0) - shift, active: p.on, core: !!p.spec.core, drum: !!p.spec.drum, user: p.user}))};
       const info = {bar: this.k, t0, pos: this.pos(), seeked, planRev: this.planRev || 0, total: this.totalBars, chordPcs: ch.pcs, scalePcs: this.key.sc.map(x => (x + this.key.tonic) % 12), barN: this.barN, section: S2.name, tag: S2.tag, si: this.si, nSections: this.sections.length, bis: this.bis, sbars: S2.bars, E, alpha, chord: ch.name, chordStart,
         nextChord: this.loop.chords[(this.ci + 1) % loopLen].name, active: this.parts.filter(p => p.on).map(p => p.slot), changed: this.changed, mode: this.key.mode, tonic: this.key.tonic,
-        progress: pieceProg, voicing: v.notes, bass: v.bass, cycle: this.cycle};
+        moves: this.movesLog, halfTime: c.halfTime, lifted: this.lifted || 0, progress: pieceProg, voicing: v.notes, bass: v.bass, cycle: this.cycle};
       this.lastInfo = info; this.changed = [];
       this.t += this.barN; this.k++; this.bis++; this.bic++;
       return {t0, events: out, info}; } };

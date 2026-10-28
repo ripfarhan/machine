@@ -4,7 +4,10 @@
   const $ = s => document.querySelector(s), $$ = s => Array.from(document.querySelectorAll(s));
   const host = new AwaazHost(), taste = new AwaazTaste(AWZ);
   const PAL = {EMERGENCE: ['#ff2e88', '#22e5ff'], PRIME: ['#b8ff3c', '#3de8ff'], REPETITION: ['#ff6a2e', '#ffd9b0'], DRIFT: ['#a48cff', '#e8f0ff'],
-    RETRO: ['#ffb347', '#ff6fae'], CRESCENDO: ['#ff4f7a', '#ffe066'], FELT: ['#f0dcc0', '#86b4ff'], INTENSE: ['#ff2e88', '#c4ff2e']};
+    RETRO: ['#ffb347', '#ff6fae'], CRESCENDO: ['#ff4f7a', '#ffe066'], FELT: ['#f0dcc0', '#86b4ff'], INTENSE: ['#ff2e88', '#c4ff2e'],
+    VOID: ['#8a7dff', '#2ee6c8'], TREEMAP: ['#7dff9b', '#ffe27a'], BERLIN: ['#ff7a3d', '#6fd2ff'], NIGHTBUS: ['#6f8cff', '#c7d0ff'], AIRPORT: ['#f5e6c8', '#9ad7ff'],
+    ARPRIDE: ['#ff3d6e', '#41f0ff'], REICH: ['#ffd23f', '#ffffff'], POLYMETER: ['#ff9f43', '#7af5d0'], TAPE: ['#ffc48a', '#9fe3b0'], BLOOM: ['#ff6b8b', '#ffb36b'],
+    ACID: ['#d4ff2e', '#ff2ee0'], BREAKS: ['#ff5ecf', '#5effc1'], COSMIC: ['#7aa5ff', '#ffde7a'], SAW: ['#c0b4ff', '#ff8fa3'], FOG: ['#9fc4c8', '#e8d9b5'], PERPETUAL: ['#ffe15e', '#5ec8ff']};
   const MOODW = {phrygian: 'dark · tense', aeolian: 'dark · melancholic', dorian: 'bittersweet', mixolydian: 'warm · open', ionian: 'bright', lydian: 'bright · floating'};
   const MACROS = [
     {key: 'energy', name: 'ENERGY', desc: 'how hard it hits', words: v => v < .2 ? 'whisper' : v < .4 ? 'low' : v < .6 ? 'medium' : v < .8 ? 'high' : 'max'},
@@ -34,7 +37,14 @@
   // ---------------------------------------------------------------- world chips
   const wEl = $('#worlds'); const auto = document.createElement('button'); auto.textContent = 'AI PICKS'; auto.title = 'let the AI choose the next world'; auto.className = 'pick'; wEl.appendChild(auto);
   auto.addEventListener('click', () => nextPiece('auto'));
-  for (const w of AWZ.WORLD_LIST){ const b = document.createElement('button'); b.textContent = AWZ.WORLDS[w].name; b.dataset.w = w; b.title = AWZ.WORLDS[w].desc + ' — after ' + AWZ.WORLDS[w].ref; b.addEventListener('click', () => loadWorld(w, 'you picked ' + AWZ.WORLDS[w].name)); wEl.appendChild(b); }
+  // 24 worlds: the current one as a chip + a WORLDS ▾ grid (v1 originals and v2 additions)
+  const curChip = document.createElement('button'); curChip.className = 'cur'; curChip.textContent = '—'; curChip.title = 'current world'; wEl.appendChild(curChip);
+  const wBtn = document.createElement('button'); wBtn.id = 'worldsBtn'; wBtn.textContent = `WORLDS (${AWZ.WORLD_LIST.length}) ▾`; wEl.appendChild(wBtn);
+  function renderWorldGrid(){ const el = $('#wgrid'); el.innerHTML = ''; const groups = [['ORIGINAL', AWZ.WORLDS_V1 || []], ['NEW', AWZ.WORLD_LIST.filter(w => !(AWZ.WORLDS_V1 || []).includes(w))]];
+    for (const [title, list] of groups){ if (!list.length) continue; const h = document.createElement('div'); h.className = 'wh'; h.textContent = title + ' · ' + list.length; el.appendChild(h); const g = document.createElement('div'); g.className = 'wg'; el.appendChild(g);
+      for (const w of list){ const W0 = AWZ.WORLDS[w], b = document.createElement('button'); b.dataset.w = w; b.className = 'wi' + (S.g && S.g.world === w ? ' cur' : ''); const pal = PAL[w] || PAL.EMERGENCE;
+        b.innerHTML = `<b style="color:${pal[0]}">${W0.name}</b><span>${W0.desc}</span><i>after ${W0.ref}</i>`; b.onclick = () => { $('#wpop').classList.remove('open'); loadWorld(w, 'you picked ' + W0.name); }; g.appendChild(b); } } }
+  wBtn.onclick = e => { e.stopPropagation(); renderWorldGrid(); $('#wpop').classList.toggle('open'); }; document.addEventListener('pointerdown', e => { const p = $('#wpop'); if (p && !p.contains(e.target) && e.target !== wBtn) p.classList.remove('open'); });
   const gw = $('#gateWorlds'); let gateWorld = null; const ga = document.createElement('button'); ga.textContent = 'AI PICKS'; ga.className = 'on'; gw.appendChild(ga); ga.onclick = () => { gateWorld = null; $$('#gateWorlds button').forEach(b => b.classList.remove('on')); ga.classList.add('on'); };
   const gsel = document.createElement('select'); // compact: choose via chips row 2
   for (const w of ['EMERGENCE', 'FELT', 'REPETITION', 'DRIFT']){ const b = document.createElement('button'); b.textContent = AWZ.WORLDS[w].name; b.onclick = () => { gateWorld = w; $$('#gateWorlds button').forEach(x => x.classList.remove('on')); b.classList.add('on'); }; gw.appendChild(b); }
@@ -72,7 +82,7 @@
     S.plan = {sections: p.sections.map(s => Object.assign({}, s)), total: p.sections.reduce((a, s) => a + s.bars, 0), t0: p.ct}; arc.setPlan(S.plan); S.pos = null;
     $('#worldName').textContent = w.name + ' · after “' + w.ref + '”'; $('#worldDesc').textContent = w.desc; F.worldName = w.name; F.bpm = p.bpm; F.keyName = p.key + ' ' + p.mode;
     $('#bpm').innerHTML = `<i>BPM</i> ${p.bpm}`; $('#keyTxt').innerHTML = `<i>KEY</i> ${p.key.replace('#', '♯')} ${p.mode}`;
-    $$('#worlds button[data-w]').forEach(b => b.classList.toggle('cur', b.dataset.w === p.genome.world));
+    curChip.textContent = w.name; curChip.style.borderColor = pal[0];
     for (const k in p.macros){ S.macros[k] = p.macros[k]; if (knobs[k]) knobs[k].set(p.macros[k]); } xy.set(p.macros.x, p.macros.y); S.moodShown = AWZ.MODE_LADDER[Math.round(p.macros.mood * 5)];
     brain.add(`NEW PIECE — ${w.name} · ${p.key} ${p.mode} · ${p.bpm} BPM · ${p.sections.length} sections, ${Math.round(acc / 60 * 10) / 10} min`, 'sec');
     brain.add(`chord loop (${p.family}): ${p.loop.map(c => c.name).join(' → ')}`); if (S.loadReason) brain.add('why: ' + S.loadReason, 'ai'); S.loadReason = null;
@@ -85,6 +95,7 @@
     if (x.changed && x.changed.length){ const inn = x.changed.filter(c => c[0] === '+').map(c => c.slice(1).toUpperCase()), out = x.changed.filter(c => c[0] === '-').map(c => c.slice(1).toUpperCase());
       brain.add([inn.length ? `${inn.join(', ')} in` : '', out.length ? `${out.join(', ')} out` : ''].filter(Boolean).join(' · ') + ` (energy ${Math.round(x.E * 100)}%)`);
       x.changed.forEach(c => flashStrip(c.slice(1))); }
+    if (x.moves && x.moves.length) brain.add('FX: ' + x.moves.join(' · '), 'ai');
     if (S.lastMode && x.mode !== S.lastMode) brain.add(`mood shift → ${x.mode.toUpperCase()} (${MOODW[x.mode]})`, 'ai'); S.lastMode = x.mode;
     if (S.piece && x.chordStart && S.piece.loop.every(c => c.name !== x.chord) && x.mode === S.piece.mode) brain.add(`borrowed colour: ${chord} for one cycle`, 'ai');
     $$('.pan').forEach(p => { p.classList.add('bar-sweep'); }); setTimeout(() => $$('.pan').forEach(p => p.classList.remove('bar-sweep')), 160); }
@@ -137,15 +148,18 @@
     if (S.reel) reel.draw(F, t, $('#field'));
     // dynamic quality: p95 frame time
     fpsAcc.push(dt); if (fpsAcc.length > 90){ const s = fpsAcc.slice().sort((a, b) => a - b), p95 = s[Math.floor(s.length * .95)]; fpsAcc = []; if (p95 > .024 && field.scale > .3) field.scale -= .1; else if (p95 < .018 && field.scale < .5) field.scale += .05; }
-    if (performance.now() - S.idleT > 20000 && S.playing && !S.reel) document.body.classList.add('idle');
+    // (idle dimming removed on request — panels stay fully visible)
     requestAnimationFrame(frame); }
   // ---------------------------------------------------------------- controls
   async function start(){ $('#go').textContent = 'LOADING…'; try { await host.start(); } catch (e){ $('#go').textContent = 'AUDIO FAILED — ' + e.message; console.error(e); return; }
-    $('#gate').style.display = 'none'; const g = gateWorld ? taste.genomeFor(gateWorld) : taste.next(null, 'auto').genome; S.loadReason = gateWorld ? 'you picked it' : 'first piece — the AI picked'; host.load(g); S.expect = g.seed; setEndMode(endMode); setMath(mathOn); play(true); requestAnimationFrame(frame); }
+    $('#gate').style.display = 'none'; const g = gateWorld ? taste.genomeFor(gateWorld) : taste.next(null, 'auto').genome; S.loadReason = gateWorld ? 'you picked it' : 'first piece — the AI picked'; host.load(g); S.expect = g.seed; setEndMode(endMode); setMath(mathOn); setFx(fxOn); play(true); requestAnimationFrame(frame); }
   // the engine clock stops while paused but AudioContext time runs on: shift everything still to come by the pause length
   function play(on){ if (host.ctx){ if (!on){ S.pausedAt = host.ctx.currentTime; S.pauseT = host.now(); } else if (S.pausedAt !== undefined){ const d = host.ctx.currentTime - S.pausedAt, t = S.pauseT;
         for (const e of S.timed) if (e.t > t){ e.t += d; if (e.x) e.x.ct += d; } lanes.shift(t, d); if (S.plan) S.plan.t0 += d; S.barT0 += d; S.pausedAt = undefined; } }
     S.playing = on; host.play(on); $('#play').textContent = on ? '❚❚ PAUSE' : '▶ PLAY'; $('#play').classList.toggle('on', on); }
+  let fxOn = true; try { fxOn = localStorage.getItem('awaaz.fxmoves') !== '0'; } catch (e){}
+  function setFx(on){ fxOn = on; $('#fxBtn').textContent = 'FX MOVES: ' + (on ? 'ON' : 'OFF'); $('#fxBtn').classList.toggle('on', on); $('#fxBtn').title = on ? 'v2: risers, impacts, tape stops, stutters, throws, key lifts at the section changes' : 'classic v1 behaviour: no transition moves'; host.send({type: 'v2', on}); try { localStorage.setItem('awaaz.fxmoves', on ? '1' : '0'); } catch (e){} }
+  $('#fxBtn').onclick = () => { setFx(!fxOn); toast(fxOn ? 'FX moves ON — transitions get risers, impacts, stutters, throws…' : 'FX moves OFF — classic v1 transitions'); };
   $('#endMode').onclick = () => setEndMode(END_MODES[(END_MODES.indexOf(endMode) + 1) % 3]);
   $('#histBtn').onclick = e => { e.stopPropagation(); renderHist(); $('#hist').classList.toggle('open'); }; document.addEventListener('pointerdown', e => { if (!$('#hist').contains(e.target) && e.target !== $('#histBtn')) $('#hist').classList.remove('open'); });
   $('#mathBtn').onclick = () => setMath(!mathOn);

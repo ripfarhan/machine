@@ -123,6 +123,17 @@ canvas{display:block;width:100%;height:100%}
 #math i{color:var(--cyan);font-style:normal;font-weight:700;opacity:.85}
 #math sup,#math sub{font-size:.75em;line-height:0}
 #math span.on{color:#fff} #math span.off{color:rgba(236,236,244,.3)}
+#wpop{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:14;width:min(980px,94vw);max-height:78vh;overflow:auto;background:rgba(10,10,15,.97);border:1px solid var(--line);display:none;padding:10px}
+#wpop.open{display:block}
+#wpop .wh{font-size:11px;letter-spacing:.18em;color:var(--dim);padding:6px 4px}
+#wpop .wg{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:5px;margin-bottom:8px}
+#wpop .wi{text-align:left;padding:8px 10px;text-transform:none;letter-spacing:.02em;border-color:rgba(255,255,255,.07);display:flex;flex-direction:column;gap:2px}
+#wpop .wi b{font-size:16px;letter-spacing:.08em}
+#wpop .wi span{font-size:12px;color:rgba(236,236,244,.75);font-weight:500}
+#wpop .wi i{font-size:10px;color:var(--dim);font-style:normal;font-family:var(--m);font-weight:400}
+#wpop .wi.cur{border-color:var(--hot)}
+#worlds button.cur{color:#fff}
+#worldsBtn{color:#fff!important;border-color:rgba(255,255,255,.25)!important}
 /* toast / export */
 #toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:15;padding:10px 16px;background:rgba(10,10,15,.95);border:1px solid var(--hot);font-size:14px;letter-spacing:.05em;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
@@ -132,8 +143,6 @@ canvas{display:block;width:100%;height:100%}
 #reelCv{height:100vh;width:calc(100vh * 9 / 16);max-width:100vw}
 #reelBar{position:fixed;top:10px;right:10px;display:flex;gap:6px;z-index:13}
 #reelBar button{height:32px;padding:0 12px;background:rgba(0,0,0,.6)}
-body.idle #app .pan:not(#hero),body.idle #top{opacity:.35;transition:opacity 1.2s}
-body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
 @media (max-width:1500px){#keyTxt{display:none}#logo{font-size:18px}#top .num i{display:none}#top button{padding:0 9px}}
 @media (max-width:1100px){#left{display:none}#main{grid-template-columns:minmax(0,1fr) 270px}}
 </style>
@@ -143,7 +152,7 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
 <div id="app">
   <div id="top">
     <div id="logo">MAUT KI <b>AWAAZ</b></div>
-    <div class="grp"><button id="play" title="Space">▶ PLAY</button><button id="next" title="N — next piece now">NEXT ⏭</button><button id="histBtn" title="every piece you heard — click one to bring it back exactly">⟲ HISTORY</button><button id="endMode">AT END: REPEAT</button></div>
+    <div class="grp"><button id="play" title="Space">▶ PLAY</button><button id="next" title="N — next piece now">NEXT ⏭</button><button id="histBtn" title="every piece you heard — click one to bring it back exactly">⟲ HISTORY</button><button id="endMode">AT END: REPEAT</button><button id="fxBtn" class="on">FX MOVES: ON</button></div>
     <div id="worlds" role="group" aria-label="worlds"></div>
     <div class="grp"><span class="num" id="clock"><i>BAR</i> 000:0</span><span class="num" id="bpm"><i>BPM</i> ---</span><span class="num" id="keyTxt"><i>KEY</i> --</span></div>
     <div class="grp"><button id="rec" title="record what you hear (WAV)">● REC</button><button id="export" title="render this whole piece to WAV">⤓ EXPORT</button><button id="reelBtn" title="R — 9:16 visual for reels">REEL</button><button id="mode" title="V — visual intensity">FULL</button></div>
@@ -180,6 +189,7 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
   <small>Visuals react to the music and include pulses. Choose CALM or STILL if you are sensitive to flashing. Headphones or proper speakers recommended — there is real sub-bass.</small>
 </div></div>
 <div id="reel"><canvas id="reelCv"></canvas><div id="reelBar"><button id="reelRec">● RECORD VIDEO</button><button id="reelExit">EXIT</button></div></div>
+<div id="wpop"><div id="wgrid"></div></div>
 <div id="hist"><div class="hh">HISTORY · click to bring a piece back</div><div id="histList"></div></div>
 <div id="toast"></div>
 <script src="js/engine/00-util.js"></script>
@@ -187,14 +197,19 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
 <script src="js/engine/20-drums.js"></script>
 <script src="js/engine/21-synth.js"></script>
 <script src="js/engine/22-fx.js"></script>
+<script src="js/engine/23-fx2.js"></script>
+<script src="js/engine/24-synth2.js"></script>
 <script src="js/engine/25-inst.js"></script>
 <script src="js/engine/30-mixer.js"></script>
 <script src="js/engine/40-theory.js"></script>
 <script src="js/engine/50-parts.js"></script>
+<script src="js/engine/51-parts2.js"></script>
 <script src="js/engine/55-composer.js"></script>
+<script src="js/engine/56-moves.js"></script>
 <script src="js/engine/58-target.js"></script>
 <script src="js/engine/59-norm.js"></script>
 <script src="js/engine/60-worlds.js"></script>
+<script src="js/engine/61-worlds2.js"></script>
 <script src="js/engine/80-engine.js"></script>
 <script src="js/ui/host.js"></script>
 <script src="js/ui/ai.js"></script>

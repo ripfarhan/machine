@@ -1,7 +1,7 @@
 /* Maut ki Awaaz — audio host: builds the AudioWorklet from the engine modules (data: URL, works from file://), runs it,
    converts engine sample times to AudioContext time, records the master (lossless WAV) and renders whole pieces offline. */
 'use strict';
-const AWZ_MODS = [AWZ_UTIL, AWZ_DSP, AWZ_DRUMS, AWZ_SYNTH, AWZ_FX, AWZ_INST, AWZ_MIXER, AWZ_THEORY, AWZ_PARTS, AWZ_COMPOSER, AWZ_TARGET, AWZ_NORM, AWZ_WORLDS, AWZ_ENGINE];
+const AWZ_MODS = [AWZ_UTIL, AWZ_DSP, AWZ_DRUMS, AWZ_SYNTH, AWZ_FX, AWZ_FX2, AWZ_SYNTH2, AWZ_INST, AWZ_MIXER, AWZ_THEORY, AWZ_PARTS, AWZ_PARTS2, AWZ_COMPOSER, AWZ_MOVES, AWZ_TARGET, AWZ_NORM, AWZ_WORLDS, AWZ_WORLDS2, AWZ_ENGINE];
 const AWZ = {}; AWZ_MODS.forEach(f => f(AWZ));   // main-thread namespace (genomes, theory, world list)
 
 function awzWorkletSource(){
@@ -22,6 +22,7 @@ class AwaazProcessor extends AudioWorkletProcessor {
       case 'seek': e.seek(m.bar); break;
       case 'auto': e.auto = !!m.on; break;
       case 'math': e.mathOn = !!m.on; break;
+      case 'v2': e.v2 = !!m.on; break;
       case 'endMode': e.endMode = m.mode; break;
       case 'rec': this.rec = !!m.on; if (!m.on){ this.flushRec(); this.port.postMessage({type: 'pcmEnd'}); } break;
       case 'offline': this.offline = true; break; } } catch (err){ this.port.postMessage({type: 'error', msg: String(err && err.stack || err)}); } }

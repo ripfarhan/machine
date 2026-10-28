@@ -87,7 +87,7 @@ function AWZ_THEORY(A){
     sus: r => ({loop: [{deg: 0, bars: 2, type: 'open'}, {deg: 0, bars: 2, type: 'sus4'}, {deg: 3, bars: 2, type: 'open'}, {deg: 0, bars: 2, type: 'sus4'}], pedal: r.chance(.3) ? 0 : null}),
     swing2: r => { const pair = r.pick([[0, 3], [0, 4], [0, 6], [0, 2]]); return {loop: [{deg: pair[0], bars: 1}, {deg: pair[1], bars: 1, type: pair[1] === 3 ? 'sev' : undefined}], pedal: null}; },
     three: r => ({loop: r.pick([[0, 5, 3], [0, 3, 6], [0, 5, 6], [0, 2, 5]]).map((d, i) => ({deg: d, bars: i === 0 ? 4 : 2})), pedal: r.chance(.5) ? 0 : null})};
-  A.FAMILIES = Object.keys(FAM);
+  A.FAMILIES = Object.keys(FAM); A.FAM = FAM;   // v2: later modules may add families
   // chord colour per degree, biased by a `colour` amount 0..1 (0 = open fifths/sus, 1 = add9/nine/quartal) — never root-position plain sevenths up front
   A.colourType = function(key, deg, colour, r){ const third = (key.pc(deg + 2) - key.pc(deg) + 12) % 12, fifth = (key.pc(deg + 4) - key.pc(deg) + 12) % 12;
     const fourth = (key.pc(deg + 3) - key.pc(deg) + 12) % 12, sixth = (key.pc(deg + 6) - key.pc(deg + 3) + 12) % 12;

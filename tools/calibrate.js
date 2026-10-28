@@ -1,7 +1,10 @@
 // Measures every patch on a reference phrase and writes js/engine/59-norm.js so that each patch sits at -20 LUFS (gated short-term mean).
 const fs = require('fs'), path = require('path'), A = require('./load.js')(); const sr = 44100, secs = 8;
 function phrase(name, inst, kind){ const ev = []; const P = name;
-  if (kind === 'va' || kind === 'modal'){ const pad = /^pad/.test(P);
+  if (kind === 'fx') return [];
+  if (kind === 'boom') kind = 'bass'; if (kind === 'fmmono') kind = /bass/.test(P) ? 'bass' : 'mono'; if (kind === 'organ' || kind === 'choir' || kind === 'fm') kind = /chop/.test(P) ? 'va' : (/strings|organ|choir/.test(P) ? 'padlike' : 'va');
+  if (kind === 'padlike') for (let t = 0; t < secs; t += 4) [57, 64, 67, 71].forEach(m => ev.push([t, {note: m, vel: .65, dur: 3.6}]));
+  if (kind === 'va' || kind === 'modal'){ const pad = /^(pad|mellotron|cello|string|wobble|supersaw)/.test(P);
     if (pad) for (let t = 0; t < secs; t += 4) [57, 64, 67, 71].forEach(m => ev.push([t, {note: m, vel: .65, dur: 3.6}]));
     else if (/^stab/.test(P)) for (let t = 0; t < secs; t += .375) [60, 64, 67].forEach(m => ev.push([t, {note: m, vel: .7, dur: .15}]));
     else if (/^(felt|piano|ep)$/.test(P)) for (let t = 0; t < secs; t += .5) ev.push([t, {note: [60, 64, 67, 72][Math.round(t * 2) % 4], vel: .6, dur: .45}]);
@@ -16,8 +19,8 @@ function phrase(name, inst, kind){ const ev = []; const P = name;
   else if (kind === 'tom') for (let t = 0; t < secs; t += .5) ev.push([t, {vel: .7, note: 50}]);
   else if (kind === 'tex') ev.push([0, {level: .5, kind: inst.patch.kind, note: 45}]);
   return ev; }
-const out = {}; const e = new A.Engine(sr);
-for (const name in A.PATCH){ const pt = A.PATCH[name]; const g = {seed: 1, patches: {}, jitter: 0}; e.g = g;
+const out = Object.assign({}, process.argv.includes('--all') ? {} : A.PATCH_NORM); const e = new A.Engine(sr);
+for (const name in A.PATCH){ const pt = A.PATCH[name]; if (out[name] !== undefined || pt.inst === 'fx') continue; const g = {seed: 1, patches: {}, jitter: 0}; e.g = g;
   const p = JSON.parse(JSON.stringify(pt.p)); const inst = e.makeInst('cal', {inst: pt.inst, p, name}, {voices: 12}); const ev = phrase(name, inst, pt.inst).sort((a, b) => a[0] - b[0]);
   const loud = new A.Loudness(sr), L = new Float32Array(128), R = new Float32Array(128); let k = 0, sum = 0, cnt = 0;
   for (let i = 0; i < secs * sr; i += 128){ L.fill(0); R.fill(0); while (k < ev.length && ev[k][0] * sr < i + 128){ inst.play(Math.max(0, Math.round(ev[k][0] * sr) - i), ev[k][1]); k++; } inst.render(L, R, 128); loud.process(L, R, 128); if (i > 3 * sr && loud.lufs > -70){ sum += Math.pow(10, loud.lufs / 10); cnt++; } }

@@ -61,6 +61,6 @@ class AwaazMath {
       <p>LUFS ${n(x.lufs, 2)} pk ${n(x.peak, 3)}</p>
       <p>g=10^(Δ/20)=${n(x.autoGain, 3)}×</p>
       <p>duck 10^(−${x.duckDepth}x/20)=${n(x.duckB, 3)}</p>
-      <p>${k('EQ')} ${x.aeqG.map(g => n((g >= 0 ? '+' : '') + g.toFixed(1))).join(' ')}</p>`;
+      <p>${k('FX')} ${x.gateOn ? n('gate●') : ''} hp ${n(x.hp, 0)} ${x.fsh ? 'shift ' + n(x.fsh, 1) + 'Hz ' : ''}${x.bus === 1 ? n('TAPE STOP') : x.bus === 2 ? n('STUTTER') : ''} ${(x.sends || []).join(' ')}</p>`;
     this.prev = cur;
     this.el.innerHTML = `<div class="mc">${T}</div><div class="mc">${E}</div><div class="mc">${H}</div><div class="mc">${Mx}</div><div class="mc vv">${V}</div><div class="mc">${W}</div><div class="mc">${X}</div><div class="mc w2">${Rr}</div>`; } }

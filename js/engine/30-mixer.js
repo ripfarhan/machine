@@ -19,6 +19,7 @@ function AWZ_MIXER(A){
       for (const e of this.eq){ const a = e.a, b = e.b, g = e.g * a.k; for (let i = 0; i < n; i++){ a.tick(L[i]); L[i] += g * a.bp; b.tick(R[i]); R[i] += g * b.bp; } }   // bells: x + (G-1)·k·bp
       if (this.drive > 0){ const d = 1 + this.drive * 3, nm = 1 / A.tanh(d); for (let i = 0; i < n; i++){ L[i] = A.tanh(L[i] * d) * nm; R[i] = A.tanh(R[i] * d) * nm; } }
       if (this.chorus) this.chorus.process(L, R, n); if (this.haas) this.haas.process(L, R, n);
+      if (this.ins) for (const fx of this.ins) fx.process(L, R, n);   // v2 per-track inserts (rotary, folder, formant, ring mod)
       const g = this.gain.tick() * (this.mute ? 0 : 1) * this.fade, p = clamp(this.pan, -1, 1), gl = Math.cos((p + 1) * Math.PI / 4) * Math.SQRT2 * g, gr = Math.sin((p + 1) * Math.PI / 4) * Math.SQRT2 * g, w = this.width;
       let pk = 0, ss = 0;
       for (let i = 0; i < n; i++){ let l = L[i], r = R[i]; if (w !== 1){ const m = (l + r) * .5, s = (l - r) * .5 * w; l = m + s; r = m - s; } l *= gl; r *= gr; L[i] = l; R[i] = r; const a = Math.max(Math.abs(l), Math.abs(r)); if (a > pk) pk = a; ss += l * l + r * r; }
@@ -36,6 +37,9 @@ function AWZ_MIXER(A){
       this.autoGain = 1; this.target = -11; this.autoOn = true; this.agK = 1 - Math.exp(-1 / (2.5 * sr / BLK)); this.master = new A.Smooth(1, .05, sr / BLK);
       this.kicks = []; this.duckDepth = {bass: 10, ret: 3, music: 0}; this.duckRel = .16; this.tiltLow = 1; this.tiltHigh = 0; this.musicLP = new A.Smooth(20000, .08, sr / BLK); this.mLPL = new A.SVF(); this.mLPR = new A.SVF();
       this.preL = 0; this.grMaster = 0; this.outPeak = 0; this.crush = 0; this.chL = 0; this.chR = 0; this.chC = 0; this.phaser = new A.Phaser(sr); this.phaserMix = 0;
+      // v2 chain (additive): extra send effects, music-bus gate + frequency shifter, master transport FX, build HP sweep, drop gap
+      this.x2 = {sends: {}, retG: {}, xl: new Float32Array(BLK), xr: new Float32Array(BLK)}; this.gate = new A.Gate(sr); this.fshift = new A.FreqShift(sr); this.fshiftOn = 0; this.busfx = new A.BusFX(sr);
+      this.hpSweep = new A.Smooth(10, .05, sr / BLK); this.hpL = new A.SVF(); this.hpR = new A.SVF(); this.gap = new A.Smooth(1, .004, sr / BLK);
       this.mBells = [[300, -4, .8], [1000, -2, .7]].map(([fc, db, q]) => ({fc, db, q, a: new A.SVF(), b: new A.SVF()})); this.setMusicEQ();
       // loudness reference = slow peak-hold of short-term loudness → quiet sections stay quiet, the arc survives normalisation
       this.lref = -20; this.lrefDecay = .04; this.maxBoost = A.dbToGain(14);
@@ -45,6 +49,7 @@ function AWZ_MIXER(A){
     setMusicEQ(arr){ if (arr) arr.forEach((v, i) => { if (this.mBells[i]) Object.assign(this.mBells[i], {fc: v[0], db: v[1], q: v[2] || this.mBells[i].q}); });
       for (const e of this.mBells){ e.a.set(e.fc, e.q, this.sr); e.b.set(e.fc, e.q, this.sr); e.g = A.dbToGain(e.db) - 1; } }
     add(t){ this.tracks.push(t); return t; }
+    addSend(name, proc, gain){ if (this.x2.sends[name]){ this.x2.sends[name] = proc; return; } const z = () => new Float32Array(BLK); this.sendBuf[name] = [z(), z()]; this.ret[name] = [z(), z()]; this.x2.sends[name] = proc; this.x2.retG[name] = new A.Smooth(gain === undefined ? 1 : gain, .2, this.sr / BLK); }
     kickAt(sampleTime){ this.kicks.push(sampleTime); if (this.kicks.length > 8) this.kicks.shift(); }
     duckGain(t, depthDb){ // deterministic ease-out duck from the most recent kick at or before t
       let k = -1e12; for (let i = this.kicks.length - 1; i >= 0; i--) if (this.kicks[i] <= t){ k = this.kicks[i]; break; }
@@ -62,20 +67,23 @@ function AWZ_MIXER(A){
       this.plate.process(S.plate[0], S.plate[1], this.ret.plate[0], this.ret.plate[1], n);
       this.hall.process(S.hall[0], S.hall[1], this.ret.hall[0], this.ret.hall[1], n);
       this.delay.process(S.delay[0], S.delay[1], this.ret.delay[0], this.ret.delay[1], n);
+      const X = this.x2, xl = X.xl, xr = X.xr; xl.fill(0, 0, n); xr.fill(0, 0, n);
+      for (const k in X.sends){ X.sends[k].process(S[k][0], S[k][1], this.ret[k][0], this.ret[k][1], n); const g = X.retG[k].tick(), rl = this.ret[k][0], rr = this.ret[k][1]; for (let i = 0; i < n; i++){ xl[i] += rl[i] * g; xr[i] += rr[i] * g; } }
       // buses
       this.drumGlue.process(B.drums[0], B.drums[1], n);
       const mlp = this.musicLP.tick(); if (mlp < 19000){ this.mLPL.set(mlp, .7, sr); this.mLPR.set(mlp, .7, sr); for (let i = 0; i < n; i++){ B.music[0][i] = this.mLPL.tick(B.music[0][i]); B.music[1][i] = this.mLPR.tick(B.music[1][i]); } }
       this.musicSat.process(B.music[0], B.music[1], n);
       for (const e of this.mBells){ if (!e.g) continue; const a = e.a, b = e.b, g = e.g * a.k, ML = B.music[0], MR = B.music[1]; for (let i = 0; i < n; i++){ a.tick(ML[i]); ML[i] += g * a.bp; b.tick(MR[i]); MR[i] += g * b.bp; } }
       if (this.phaserMix > .01) this.phaser.process(B.music[0], B.music[1], n);
+      this.gate.process(B.music[0], B.music[1], n, t0); if (this.fshiftOn > .001) this.fshift.process(B.music[0], B.music[1], n);
       if (this.crush > .01){ const hold = 1 + Math.floor(this.crush * 5), q = Math.pow(2, 15 - this.crush * 9), mix = this.crush * .6, ML = B.music[0], MR = B.music[1];   // lo-fi: sample-rate + bit reduction (Y = broken)
         for (let i = 0; i < n; i++){ if (++this.chC >= hold){ this.chC = 0; this.chL = Math.round(ML[i] * q) / q; this.chR = Math.round(MR[i] * q) / q; } ML[i] += (this.chL - ML[i]) * mix; MR[i] += (this.chR - MR[i]) * mix; } }
       const rp = this.retGain.plate.tick(), rh = this.retGain.hall.tick(), rd = this.retGain.delay.tick(), dB = this.duckDepth;
       this.lsL.set(140, .7, sr); this.lsR.set(140, .7, sr); this.hsL.set(5500, .7, sr); this.hsR.set(5500, .7, sr); this.monoLo.set(120, .7, sr);
       const lowG = this.tiltLow - 1, hiG = Math.pow(10, this.tiltHigh / 20) - 1, Q = this.aeq, acc = [0, 0, 0, 0, 0, 0], G = Q.lin || (Q.lin = new Float64Array(6));
       for (let i = 0; i < n; i++){ const t = t0 + i, gB = this.duckGain(t, dB.bass), gR = this.duckGain(t, dB.ret);
-        let l = B.drums[0][i] + B.bass[0][i] * gB + B.music[0][i] + (this.ret.plate[0][i] * rp + this.ret.hall[0][i] * rh + this.ret.delay[0][i] * rd) * gR;
-        let r = B.drums[1][i] + B.bass[1][i] * gB + B.music[1][i] + (this.ret.plate[1][i] * rp + this.ret.hall[1][i] * rh + this.ret.delay[1][i] * rd) * gR;
+        let l = B.drums[0][i] + B.bass[0][i] * gB + B.music[0][i] + (this.ret.plate[0][i] * rp + this.ret.hall[0][i] * rh + this.ret.delay[0][i] * rd + xl[i]) * gR;
+        let r = B.drums[1][i] + B.bass[1][i] * gB + B.music[1][i] + (this.ret.plate[1][i] * rp + this.ret.hall[1][i] * rh + this.ret.delay[1][i] * rd + xr[i]) * gR;
         if (Q.on){ const mono = (l + r) * .5; for (let b = 0; b < 6; b++){ const m = Q.bpm[b]; m.tick(mono); acc[b] += m.bp * m.bp; const gg = G[b]; if (gg){ const a = Q.bl[b], c = Q.br[b]; a.tick(l); c.tick(r); l += gg * a.k * a.bp; r += gg * c.k * c.bp; } } }
         this.lsL.tick(l); this.lsR.tick(r); l += this.lsL.lp * lowG; r += this.lsR.lp * lowG; this.hsL.tick(l); this.hsR.tick(r); l += this.hsL.hp * hiG; r += this.hsR.hp * hiG;
         // mono below ~120 Hz: remove the low side component
@@ -86,6 +94,8 @@ function AWZ_MIXER(A){
         if (Q.gate > 0 && tot > 1e-7){ const d = []; let mean = 0; for (let b = 0; b < 6; b++){ d[b] = 10 * Math.log10(Q.meas[b]) - Q.target[b]; mean += d[b] / 6; }
           for (let b = 0; b < 6; b++){ const want = clamp(-(d[b] - mean) * .75, -Q.max, Q.max * .7); Q.g[b] += (want - Q.g[b]) * Q.kg * Q.gate; } }
         for (let b = 0; b < 6; b++) G[b] = Math.pow(10, Q.g[b] / 20) - 1; }
+      const hpf = this.hpSweep.tick(); if (hpf > 22){ this.hpL.set(hpf, .75, sr); this.hpR.set(hpf, .75, sr); for (let i = 0; i < n; i++){ this.hpL.tick(oL[i]); oL[i] = this.hpL.hp; this.hpR.tick(oR[i]); oR[i] = this.hpR.hp; } }
+      this.busfx.process(oL, oR, n); const gp = this.gap.tick(); if (gp < .999) for (let i = 0; i < n; i++){ oL[i] *= gp; oR[i] *= gp; }
       this.grMaster = this.glue.process(oL, oR, n); this.tape.process(oL, oR, n);
       this.loud.process(oL, oR, n);
       if (this.autoOn){ const st = this.loud.filled > 5 ? this.loud.lufs : -70, dt = n / sr;

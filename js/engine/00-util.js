@@ -20,7 +20,8 @@ function AWZ_UTIL(A){
   A.euclid = (k, n, rot) => { const o = []; for (let i = 0; i < n; i++) o.push(Math.floor((i + 1) * k / n) - Math.floor(i * k / n) ? 1 : 0); const r = ((rot | 0) % n + n) % n; return o.map((_, i) => o[(i - r + n) % n]); };
   // sine table, phase in cycles
   const SN = 8192, SIN = new Float32Array(SN + 1); for (let i = 0; i <= SN; i++) SIN[i] = Math.sin(i / SN * TAU);
-  A.sin1 = ph => { ph -= Math.floor(ph); const x = ph * SN, i = x | 0; return SIN[i] + (SIN[i + 1] - SIN[i]) * (x - i); };
+  // (ph >= 1 guard: tiny negative inputs make ph − floor(ph) round to exactly 1.0)
+  A.sin1 = ph => { ph -= Math.floor(ph); if (ph >= 1) ph = 0; const x = ph * SN, i = x | 0; return SIN[i] + (SIN[i + 1] - SIN[i]) * (x - i); };
   // tanh approximation (Padé 7/6), accurate to ~1e-4 in [-3,3], clamped outside
   A.tanh = x => { if (x < -3) return -1; if (x > 3) return 1; const x2 = x * x; return x * (135135 + x2 * (17325 + x2 * (378 + x2))) / (135135 + x2 * (62370 + x2 * (3150 + x2 * 28))); };
   // one-pole smoothing coefficient for a time constant in seconds at a given rate

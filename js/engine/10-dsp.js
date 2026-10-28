@@ -50,7 +50,7 @@ function AWZ_DSP(A){
         case 1: this.v += (this.peak * 1.3 - this.v) * this.ka; if (this.v >= this.peak){ this.v = this.peak; this.stage = 2; } break;
         case 2: this.v += (this.s * this.peak - this.v) * this.kd; if (Math.abs(this.v - this.s * this.peak) < 1e-4) this.stage = 3; break;
         case 3: this.v = this.s * this.peak; break;
-        case 4: this.v += (0 - this.v) * this.kr; if (this.v < 6e-5){ this.v = 0; this.stage = 0; } break; }
+        case 4: this.v += (0 - this.v) * this.kr; if (this.v < 8e-4){ this.v = 0; this.stage = 0; } break; }
       return this.v; }
     get active(){ return this.stage !== 0; } };
 
