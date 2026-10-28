@@ -39,11 +39,11 @@ function AWZ_PARTS2(A){
       this.off = 0; this.lock = 0; this.drift = o.drift || .012; this.tB = 0; this.started = false; }
     bar(c){ const r = this.r, pcs = c.voicing.notes.concat(c.key.pentatonic(64, 80)).filter((m, i, a) => a.indexOf(m) === i).sort((a, b) => a - b).slice(0, 5); const T0 = c.barIndex * 16;
       if (!this.started){ this.tB = T0; this.nB = T0; this.lead = 0; this.nextLock = 1; this.started = true; }
-      for (let s = 0; s < 16; s++){ const i = (T0 + s) % this.cell.length, m = fit(pcs[this.cell[i] % pcs.length], 64, 84); c.emit(this.slot, s, {note: m, vel: this.vel * (s % 4 === 0 ? 1 : .8), dur: c.step * 1.5, pan: -.35}, true); }
+      for (let s = 0; s < 16; s++){ const i = (T0 + s) % this.cell.length, m = fit(pcs[this.cell[i] % pcs.length], 67, 88); c.emit(this.slot, s, {note: m, vel: this.vel * (s % 4 === 0 ? 1 : .8), dur: c.step * 1.5, pan: -.35}, true); }
       if (c.E < .25){ this.tB = T0 + 16; this.nB = T0 + 16 + Math.round(this.lead); return; }   // voice B rests, stays aligned
       // voice B: plays a hair faster (period 1 − drift) until it has gained exactly one step, then locks for 4–12 cycles, then drifts again
       while (this.tB < T0 + 16){ const per = this.lock > 0 ? 1 : 1 - this.drift * (.5 + c.motion);
-        if (this.tB >= T0){ const i = ((this.nB % this.cell.length) + this.cell.length) % this.cell.length, m = fit(pcs[this.cell[i] % pcs.length], 64, 84); c.emit(this.slot, this.tB - T0, {note: m, vel: this.vel * .85, dur: c.step * 1.4, pan: .35}, true); }
+        if (this.tB >= T0){ const i = ((this.nB % this.cell.length) + this.cell.length) % this.cell.length, m = fit(pcs[this.cell[i] % pcs.length], 67, 88); c.emit(this.slot, this.tB - T0, {note: m, vel: this.vel * .85, dur: c.step * 1.4, pan: .35}, true); }
         this.nB++; this.tB += per; this.lead += 1 - per;
         if (this.lock > 0) this.lock -= 1 / this.cell.length;
         else if (this.lead >= this.nextLock){ this.tB = Math.round(this.tB); this.lead = Math.round(this.lead); this.nextLock = this.lead + 1; this.lock = r.int(4, 12); } } } };

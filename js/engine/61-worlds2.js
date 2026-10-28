@@ -144,7 +144,7 @@ function AWZ_WORLDS2(A){
     sends: {shim: {feedback: .5, gain: .45, rt60: 9}},
     tracks: {
       loops: {patch: ['choir'], voices: 12, db: -4, hp: 150, hall: .6, delay: .4, shim: .3},
-      keys:  {patch: ['fm_rhodes', 'felt'], voices: 10, db: -6, hp: 120, hall: .5, delay: .4},
+      keys:  {patch: ['fm_rhodes', 'felt'], voices: 10, db: -6, hp: 120, hall: .5, delay: .4, eq: [[320, -3, .9]]},
       tex:   {patch: ['tex_hiss'], db: -26}},
     parts: [
       {part: 'eno', slot: 'loops', opts: {}, on: 0, core: true},
@@ -179,13 +179,15 @@ function AWZ_WORLDS2(A){
     fx: {plate: {decay: .55, damping: .45}, hall: {rt60: 4, damp: 3500}, delay: {beats: .75, feedback: .35, lp: 3000, hp: 400, pingpong: 1}, duck: {bass: 10, ret: 4}, master: {tiltHigh: .4}},
     moves: {riser: 1.3, impact: 1.2, hpbuild: 1.3, gate: 1, roll: 1, gap: 1, subdrop: .8, halftime: .6, climb: .6}, macros: {chaos: .15}};
 
-  W.REICH = {name: 'PHASE', desc: 'two players drift apart and lock again', ref: 'Steve Reich', v2: true, aeqFrom: .2,
+  W.REICH = {name: 'PHASE', desc: 'two players drift apart and lock again', ref: 'Steve Reich', v2: true, aeqFrom: 0,
     tempo: [150, 176], swing: [0, 0], modes: {ionian: 1, lydian: 1, dorian: 1.5, aeolian: 1}, families: {drone: 3}, colour: [.3, .5], spread: [.5, .8], form: ['process'],
     tracks: {
-      mar:   {patch: ['marimba', 'felt', 'fm_bongo'], voices: 16, db: -3, hp: 150, plate: .15},
-      drone: {patch: ['organ_soft'], voices: 10, db: -12, hp: 100, hall: .3}},
+      mar:   {patch: ['marimba', 'felt', 'fm_bongo'], voices: 16, db: -3, hp: 150, plate: .15, eq: [[300, -2.5, .8], [2800, 2.5, .7]]},
+      drone: {patch: ['organ_soft'], voices: 10, db: -12, hp: 100, hall: .3},
+      tex:   {patch: ['tex_hiss'], db: -30}},
     parts: [
       {part: 'reich', slot: 'mar', opts: {}, on: 0, core: true},
+      {part: 'texture', slot: 'tex', opts: {kind: 'hiss', level: .3, follow: 'constant'}, on: 0, core: true},
       {part: 'pad', slot: 'drone', opts: {mode: 'swell', vel: .4}, on: .5}],
     fx: {plate: {decay: .45, damping: .5}, hall: {rt60: 2.5, damp: 4000}, delay: {beats: .75, feedback: .2, lp: 3000, hp: 400, pingpong: 1}, duck: {bass: 0, ret: 0}, master: {tiltHigh: 0}},
     moves: Object.assign({}, quiet, {swell: .3, wash: .3, throw: 0, down: 0}), macros: {space: .3, chaos: .05, motion: .5}};
