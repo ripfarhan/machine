@@ -4,9 +4,9 @@ function phrase(name, inst, kind){ const ev = []; const P = name;
   if (kind === 'fx') return [];
   if (kind === 'boom') kind = 'bass'; if (kind === 'fmmono') kind = /bass/.test(P) ? 'bass' : 'mono'; if (kind === 'organ' || kind === 'choir' || kind === 'fm') kind = /chop/.test(P) ? 'va' : (/strings|organ|choir/.test(P) ? 'padlike' : 'va');
   if (kind === 'padlike') for (let t = 0; t < secs; t += 4) [57, 64, 67, 71].forEach(m => ev.push([t, {note: m, vel: .65, dur: 3.6}]));
-  if (kind === 'va' || kind === 'modal'){ const pad = /^(pad|mellotron|cello|string|wobble|supersaw)/.test(P);
+  if (kind === 'va' || kind === 'modal'){ const pad = /^(pad|mellotron|cello|string|wobble|supersaw)/.test(P) && !/_stab$/.test(P);
     if (pad) for (let t = 0; t < secs; t += 4) [57, 64, 67, 71].forEach(m => ev.push([t, {note: m, vel: .65, dur: 3.6}]));
-    else if (/^stab/.test(P)) for (let t = 0; t < secs; t += .375) [60, 64, 67].forEach(m => ev.push([t, {note: m, vel: .7, dur: .15}]));
+    else if (/^stab|_stab$/.test(P)) for (let t = 0; t < secs; t += .375) [60, 64, 67].forEach(m => ev.push([t, {note: m, vel: .7, dur: .15}]));
     else if (/^(felt|piano|ep)$/.test(P)) for (let t = 0; t < secs; t += .5) ev.push([t, {note: [60, 64, 67, 72][Math.round(t * 2) % 4], vel: .6, dur: .45}]);
     else for (let t = 0; t < secs; t += .25) ev.push([t, {note: [60, 67, 64, 72][Math.round(t * 4) % 4], vel: .7, dur: .2}]); }
   else if (kind === 'mono') for (let t = 0; t < secs; t += .5) ev.push([t, {note: [67, 69, 72, 69][Math.round(t * 2) % 4], vel: .7, dur: .48}]);

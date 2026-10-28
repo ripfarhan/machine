@@ -9,6 +9,8 @@ function AWZ_WORLDS2(A){
     acid_sq:    {inst: 'mono', p: {shape1: 3, pw: .5, osc2Level: 0, drift: 1, cutoff: 300, res: .82, keytrack: .3, envAmt: 3, fa: .001, fd: .2, fs: 0, fr: .1, aa: .002, ad: .3, as: .85, ar: .06, glide: .06, drive: 1.5, gain: .5}},
     reese:      {inst: 'mono', p: {shape1: 2, shape2: 2, osc2Level: .9, detune2: 22, unison: 3, spread: 26, uniPan: .3, drift: 3, cutoff: 420, res: .25, keytrack: .3, envAmt: .4, fa: .01, fd: .5, fs: .8, fr: .3, aa: .01, ad: .5, as: 1, ar: .2, lfoRate: .25, lfoCut: .45, glide: .08, legato: true, sub: .5, gain: .45}},
     supersaw:   {inst: 'va', p: {shape1: 2, shape2: 2, osc2Level: .9, detune2: 13, unison: 3, spread: 32, uniPan: .8, drift: 3, cutoff: 2600, res: .12, keytrack: .4, envAmt: .8, fa: .005, fd: .6, fs: .5, fr: .8, aa: .01, ad: 1, as: .75, ar: .9, gain: .38}},
+    // same sound, short envelope: for stabs and arps (notes end instead of piling up — supersaw is the most expensive voice)
+    supersaw_stab: {inst: 'va', p: {shape1: 2, shape2: 2, osc2Level: .9, detune2: 13, unison: 3, spread: 32, uniPan: .8, drift: 3, cutoff: 2600, res: .12, keytrack: .4, envAmt: 1.1, fa: .002, fd: .28, fs: .25, fr: .3, aa: .004, ad: .32, as: .3, ar: .3, gain: .42}},
     seq_saw:    {inst: 'va', p: {shape1: 2, shape2: 3, pw: .4, osc2Level: .6, detune2: 5, drift: 6, cutoff: 350, res: .55, keytrack: .4, envAmt: 2.2, fa: .001, fd: .12, fs: 0, fr: .06, aa: .001, ad: .12, as: 0, ar: .06, gain: .7}},
     moog_lead:  {inst: 'mono', p: {shape1: 2, shape2: 2, osc2Level: .5, detune2: 5, drift: 3, cutoff: 1200, res: .3, keytrack: .5, envAmt: 1.4, fa: .01, fd: .5, fs: .4, fr: .4, aa: .01, ad: .6, as: .8, ar: .4, vib: 18, vibDelay: .4, vibRate: 5.5, glide: .09, legato: true, gain: .5}},
     cs80_brass: {inst: 'va', p: {shape1: 3, pw: .4, pwm: .15, shape2: 3, semi2: 12, detune2: -6, osc2Level: .5, drift: 3, cutoff: 700, res: .15, keytrack: .5, envAmt: 1.6, fa: .65, fd: 4, fs: .6, fr: 1, aa: .25, ad: 1.9, as: .5, ar: .75, vib: 8, vibDelay: .6, gain: .45}},
@@ -163,8 +165,8 @@ function AWZ_WORLDS2(A){
       ride:  drumBus({patch: ['hat_ride'], db: -18, pan: -.2}),
       tom:   drumBus({patch: ['tom'], db: -14, plate: .15}),
       bass:  {patch: ['bass_rolling'], bus: 'bass', db: -4},
-      arp:   {patch: ['arp_saw', 'supersaw'], voices: 10, db: -4, hp: 200, delay: .25, hall: .2},
-      pad:   {patch: ['supersaw', 'pad_warm'], voices: 14, db: -8, hp: 200, hall: .35},
+      arp:   {patch: ['arp_saw', 'supersaw_stab'], voices: 8, db: -4, hp: 200, delay: .25, hall: .2},
+      pad:   {patch: ['supersaw_stab', 'pad_warm'], voices: 10, db: -8, hp: 200, hall: .35},
       lead:  {patch: ['moog_lead', 'lead_soft'], db: -7, hp: 250, hall: .4}},
     parts: [
       {part: 'arp', slot: 'arp', opts: {lanes: 1, density: .9, rate: 1}, on: .2, core: true},
@@ -282,7 +284,7 @@ function AWZ_WORLDS2(A){
       kick:  drumBus({patch: ['kick_909', 'kick_round'], db: -6}),
       snare: drumBus({patch: ['snare_909'], db: -9, plate: .2}),
       hat:   drumBus({patch: ['hat_tight'], db: -15, hp: 4000, pan: .1}),
-      stab:  {patch: ['supersaw', 'stab_juno'], voices: 16, db: -5, hp: 200, hall: .35, delay: .2},
+      stab:  {patch: ['supersaw_stab', 'stab_juno'], voices: 10, db: -5, hp: 200, hall: .35, delay: .2},
       pad:   {patch: ['choir'], voices: 12, db: -8, hp: 160, hall: .5},
       bass:  {patch: ['bass_sub', 'reese'], bus: 'bass', db: -5},
       vox:   {patch: ['vox_chop'], voices: 8, db: -8, hp: 300, delay: .3, hall: .4},
@@ -369,7 +371,7 @@ function AWZ_WORLDS2(A){
     tracks: {
       seq:   {patch: ['arp_saw', 'pluck_soft'], voices: 14, db: -4, hp: 200, delay: .3, rev: .2},
       plonk: drumBus({patch: ['perc_plonk', 'perc_wood'], db: -12, hp: 300, delay: .2}),
-      pad:   {patch: ['pad_warm', 'supersaw'], voices: 14, db: -7, hp: 180, hall: .35, ins: [{type: 'rotary', fast: false, mix: .45}]},
+      pad:   {patch: ['pad_warm', 'supersaw'], voices: 10, db: -7, hp: 180, hall: .35, ins: [{type: 'rotary', fast: false, mix: .45}]},
       bass:  {patch: ['bass_sub', 'bass_round'], bus: 'bass', db: -4},
       kick:  drumBus({patch: ['kick_909'], db: -5}),
       hat:   drumBus({patch: ['hat_808', 'hat_tight'], db: -15, hp: 3500}),

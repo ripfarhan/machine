@@ -49,14 +49,14 @@ function AWZ_SYNTH(A){
         const f = this.freq * this.fmul; let xl = 0, xr = 0;
         const um = this.um, uL = this.uL, uR = this.uR, pw = this.pw;
         for (let u = 0; u < U; u++){ const fu = f * um[u];
-          const a = this.o[u * 2].tick(fu, s1, pw, drift), b = o2 ? this.o[u * 2 + 1].tick(fu * semi2, s2, pw, drift) : 0, v = (a + b * o2) * gU;
+          const oa = this.o[u * 2]; oa.run(fu, s1, pw, drift); let b = 0; if (o2){ const ob = this.o[u * 2 + 1]; ob.run(fu * semi2, s2, pw, drift); b = ob.y; } const v = (oa.y + b * o2) * gU;
           xl += v * uL[u]; xr += v * uR[u]; }
         if (subL){ this.subPh += f * .5 / sr; if (this.subPh >= 1) this.subPh -= 1; const sq = (this.subPh < .5 ? 1 : -1) + A.blep(this.subPh, f * .5 / sr) - A.blep((this.subPh + .5) % 1, f * .5 / sr); xl += sq * subL * .5; xr += sq * subL * .5; }
         if (nzL){ const w = this.nz.white() * nzL; xl += w; xr += w; }
         let yl, yr;
-        if (U > 1){ if (ladder){ yl = this.fL.tick(xl); yr = this.fR.tick(xr); } else { this.sL.tick(xl); this.sR.tick(xr); yl = p.filterMode === 'bp' ? this.sL.bp : this.sL.lp; yr = p.filterMode === 'bp' ? this.sR.bp : this.sR.lp; } }
-        else { const xm = (xl + xr) * .5; if (ladder) yl = yr = this.fL.tick(xm); else { this.sL.tick(xm); yl = yr = p.filterMode === 'bp' ? this.sL.bp : p.filterMode === 'hp' ? this.sL.hp : this.sL.lp; } }
-        this.fenv.tick(); const a = this.aenv.tick() * this.vel * (p.gain || 1);
+        if (U > 1){ if (ladder){ this.fL.run(xl); yl = this.fL.y; this.fR.run(xr); yr = this.fR.y; } else { this.sL.run(xl); this.sR.run(xr); yl = p.filterMode === 'bp' ? this.sL.bp : this.sL.lp; yr = p.filterMode === 'bp' ? this.sR.bp : this.sR.lp; } }
+        else { const xm = (xl + xr) * .5; if (ladder){ this.fL.run(xm); yl = yr = this.fL.y; } else { this.sL.run(xm); yl = yr = p.filterMode === 'bp' ? this.sL.bp : p.filterMode === 'hp' ? this.sL.hp : this.sL.lp; } }
+        this.fenv.step(); this.aenv.step(); const a = this.aenv.v * this.vel * (p.gain || 1);
         L[s] += yl * a * this.gl; R[s] += yr * a * this.gr;
         if (!this.aenv.active) return false; }
       return true; } };

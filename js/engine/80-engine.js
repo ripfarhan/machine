@@ -43,7 +43,7 @@ function AWZ_ENGINE(A){
       this.comp = new A.Composer(this.sr, genome, w); this.comp.t = this.t + Math.round((first ? .15 : 1.2) * this.sr);
       // macros: world defaults on top of neutral, the mood knob shows the genome's mode
       this.macro = Object.assign({energy: .5, space: .5, density: .5, chaos: .2, motion: .4, x: .5, y: .2}, genome.macros || {}, {mood: this.comp.modeIdx / 5}); Object.assign(this.comp.macro, this.macro);
-      this.fx(); this.resetFx(); this.mapMacros(true); this.pieceStart = this.comp.t;
+      this.fx(); this.resetFx(); this.mapMacros(true); this.applyGov(); this.pieceStart = this.comp.t;
       this.out.msg({type: 'piece', genome, world: w.name, desc: w.desc, ref: w.ref, slots: this.slots.map(s => ({slot: s, patch: this.tracks[s].patchName, kind: this.tracks[s].instKind, bus: this.tracks[s].bus})),
         sections: this.comp.sections, bpm: genome.bpm, key: A.NOTE[genome.tonic], mode: genome.mode, family: genome.family, loop: this.comp.loop.chords.map(c => ({name: c.name, bars: c.bars, deg: c.deg})), t0: this.comp.t, macros: this.macro}); }
     fx(){ const f = this.w.fx, M = this.mixer, bpm = this.g.bpm; M.plate.set(f.plate || {}); M.hall.set(f.hall || {});
@@ -138,6 +138,14 @@ function AWZ_ENGINE(A){
       const M = this.mixer; if (M.busfx.mode) M.busfx.release(); M.gate.on = false; M.hpSweep.set(10); M.gap.set(1); this.ramps = []; this.throwMul = {plate: 1, hall: 1, delay: 1}; this.fbMul = 1; this.mapMacros(); if (M.fshiftOn > .001) this.fxCmd({cmd: 'climb', dur: 0});
       if (this.fxp && this.fxp.gran){ if (this.w && this.w.sends && this.w.sends.gran) this.fxp.gran.set(this.w.sends.gran); else this.fxp.gran.freeze = false; }
       if (this.comp){ this.comp.halfTimeTo = -1; const mv = this.comp.moves; if (mv){ mv.gateOn = mv.freezeOn = mv.tapeStopped = false; mv.rolling = null; mv.hpPlan = null; } } }
+    // CPU governor (live playback only; the host feeds it wall-clock ms per block — Date.now() deltas average out to the true cost).
+    // Over ~70% of the real-time budget → cap simultaneous notes per melodic instrument (3 levels); back under ~38% for 5 s → relax.
+    govern(ms, n){ const G = this.gov || (this.gov = {acc: 0, nb: 0, level: 0, calm: 0, load: 0}); G.acc += ms; G.nb += n; if (G.nb < this.sr * .5) return;
+      const load = G.acc / (G.nb / this.sr * 1000); G.acc = 0; G.nb = 0; G.load = load;
+      if (load > .7){ G.calm = 0; if (G.level < 3){ G.level++; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } }
+      else if (load < .38 && G.level > 0){ if (++G.calm >= 10){ G.calm = 0; G.level--; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } } else G.calm = 0; }
+    applyGov(){ const lv = this.gov ? this.gov.level : 0, f = [1, .7, .5, .35][lv];
+      for (const slot in this.tracks){ const tr = this.tracks[slot], inst = tr && tr.inst; if (!inst || !inst.pool || tr.bus === 'drums' || tr.instKind === 'fx') continue; inst.pool.cap = lv ? Math.max(3, Math.ceil(inst.pool.v.length * f)) : 0; } }
     seek(bar){ const c = this.comp; if (!c) return; this.q.clear(); this.resetFx(); for (const tr of this.mixer.tracks) if (tr.inst.pend) tr.inst.pend.length = 0; c.seek(bar); c.t = this.t + 64; c.done = false; c.endSent = false; this.out.msg({type: 'seek', bar, t0: c.t}); }
     pickNext(){ if (this.queued){ const g = this.queued; this.queued = null; return g; }
       const others = A.WORLD_LIST.filter(w => w !== this.g.world); const seed = (A.hash(this.g.seed, 'next', this.history.length) >>> 0); const r = A.rng(seed);

@@ -18,7 +18,7 @@ function AWZ_SYNTH2(A){
       for (let s = i0; s < n; s++){ if (this.gateLeft > 0 && --this.gateLeft === 0){ this.aenv.release(); this.ienv.release(); }
         this.freq += (this.target - this.freq) * glide; const f = this.freq;
         this.mp += f * ratio / sr; if (this.mp >= 1) this.mp -= 1; const mod = A.sin1(this.mp + this.fbk * fbA); this.fbk = mod;
-        const I = I0 * this.ienv.tick(); this.cp += f / sr; if (this.cp >= 1) this.cp -= 1; const y = this.lp.tick(A.sin1(this.cp + mod * I * .16)) * this.aenv.tick() * g;
+        this.ienv.step(); const I = I0 * this.ienv.v; this.cp += f / sr; if (this.cp >= 1) this.cp -= 1; this.lp.run(A.sin1(this.cp + mod * I * .16)); this.aenv.step(); const y = this.lp.lp * this.aenv.v * g;
         L[s] += y * this.gl; R[s] += y * this.gr; if (!this.aenv.active) return false; }
       return true; } };
 
@@ -33,7 +33,7 @@ function AWZ_SYNTH2(A){
       for (let s = i0; s < n; s++){ if (this.gateLeft > 0 && --this.gateLeft === 0) this.aenv.release(); let y = 0;
         for (let k = 0; k < 7; k++){ const fk = f * DB_R[k]; if (!db[k] || fk > sr * .45) continue; this.ph[k] += fk / sr; if (this.ph[k] >= 1) this.ph[k] -= 1; y += A.sin1(this.ph[k]) * db[k] * (k === 3 || k === 2 ? 1 + this.perc * this.pe : 1); }
         this.pe *= kp; if (this.i++ < .004 * sr) y += this.nz.white() * .25 * (1 - this.i / (.004 * sr));
-        const o = y * this.aenv.tick() * g; L[s] += o * this.gl; R[s] += o * this.gr; if (!this.aenv.active) return false; }
+        this.aenv.step(); const o = y * this.aenv.v * g; L[s] += o * this.gl; R[s] += o * this.gr; if (!this.aenv.active) return false; }
       return true; } };
 
   // ---------------------------------------------------------------- formant "choir" / vocal chop: detuned saws + breath through 3 vowel formants; chops bend into pitch
@@ -48,9 +48,9 @@ function AWZ_SYNTH2(A){
         if (this.k-- <= 0){ this.k = 32; this.t += 32 / sr; let v = this.vow + this.vdrift * this.t; v = ((v % 8) + 8) % 8; if (v > 4) v = 8 - v; const i = Math.min(3, Math.floor(v)), fr = v - i, a = VOW[i], b = VOW[i + 1];   // ping-pong a→u→a: no jump from the last vowel back to the first
           for (let q = 0; q < 3; q++) this.f[q].set(a[q] + (b[q] - a[q]) * fr, p.q || 7, sr); }
         this.bendK *= bk; const f = this.f0 * Math.pow(2, this.bend * this.bendK / 12);
-        const dr = Math.pow(2, det / 1200); let x = this.o[0].tick(f / dr, 2, .5, 4) + this.o[1].tick(f, 2, .5, 4) + this.o[2].tick(f * dr, 2, .5, 4); x = x * .33 + this.nz.white() * br;
-        let y = 0; for (let q = 0; q < 3; q++){ this.f[q].tick(x); y += this.f[q].bp * FG[q]; }
-        const o = y * this.aenv.tick() * g; L[s] += o * this.gl; R[s] += o * this.gr; if (!this.aenv.active) return false; }
+        const dr = Math.pow(2, det / 1200), O = this.o; O[0].run(f / dr, 2, .5, 4); O[1].run(f, 2, .5, 4); O[2].run(f * dr, 2, .5, 4); let x = O[0].y + O[1].y + O[2].y; x = x * .33 + this.nz.white() * br;
+        let y = 0; for (let q = 0; q < 3; q++){ this.f[q].run(x); y += this.f[q].bp * FG[q]; }
+        this.aenv.step(); const o = y * this.aenv.v * g; L[s] += o * this.gl; R[s] += o * this.gr; if (!this.aenv.active) return false; }
       return true; } };
 
   // ---------------------------------------------------------------- 808 boom: sine with a fast pitch drop into the note, long decay, drive, glide between notes
@@ -63,7 +63,7 @@ function AWZ_SYNTH2(A){
     render(L, R, n){ const p = this.p, sr = this.sr, kp = Math.exp(-1 / ((p.ptau || .035) * sr)), gk = 1 - Math.exp(-1 / ((p.glide || .07) * sr)), drv = p.drive || 1.8, dn = Math.tanh(drv), g = this.vel * (p.gain || 1); let i0 = this.off; this.off = 0;
       for (let s = i0; s < n; s++){ if (this.gateLeft > 0 && --this.gateLeft === 0) this.aenv.release(); this.freq += (this.target - this.freq) * gk; this.pe *= kp;
         this.ph += this.freq * (1 + (p.pitch || 1.2) * this.pe) / sr; if (this.ph >= 1) this.ph -= 1;
-        const y = this.lp.tick(tanh(A.sin1(this.ph) * drv) / dn) * this.aenv.tick() * g; L[s] += y * this.gl; R[s] += y * this.gr; if (!this.aenv.active) return false; }
+        this.lp.run(tanh(A.sin1(this.ph) * drv) / dn); this.aenv.step(); const y = this.lp.lp * this.aenv.v * g; L[s] += y * this.gl; R[s] += y * this.gr; if (!this.aenv.active) return false; }
       return true; } };
 
   // ---------------------------------------------------------------- transition FX voice (event-driven: ev.fx = 'riser' | 'down' | 'impact' | 'subdrop' | 'swell')

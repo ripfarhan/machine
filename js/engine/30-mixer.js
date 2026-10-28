@@ -14,9 +14,9 @@ function AWZ_MIXER(A){
       this.send = {plate: o.plate || 0, hall: o.hall || 0, delay: o.delay || 0}; this.mute = false; this.solo = false; this.peak = 0; this.rms = 0; this.active = false; this.fade = 1; this.duck = o.duck || 0; this.id = o.id || 0;
       this.eq = (o.eq || []).map(([fc, db, q]) => { const a = new A.SVF(), b = new A.SVF(); a.set(fc, q || .8, sr); b.set(fc, q || .8, sr); return {a, b, g: A.dbToGain(db) - 1}; }); }
     process(n){ const L = this.L, R = this.R; L.fill(0, 0, n); R.fill(0, 0, n); this.active = this.inst.render(L, R, n); const sr = this.sr;
-      if (this.hpF){ this.hpL.set(this.hpF, .7, sr); this.hpR.set(this.hpF, .7, sr); for (let i = 0; i < n; i++){ this.hpL.tick(L[i]); L[i] = this.hpL.hp; this.hpR.tick(R[i]); R[i] = this.hpR.hp; } }
-      if (this.lpF){ this.lpL.set(this.lpF, .7, sr); this.lpR.set(this.lpF, .7, sr); for (let i = 0; i < n; i++){ L[i] = this.lpL.tick(L[i]); R[i] = this.lpR.tick(R[i]); } }
-      for (const e of this.eq){ const a = e.a, b = e.b, g = e.g * a.k; for (let i = 0; i < n; i++){ a.tick(L[i]); L[i] += g * a.bp; b.tick(R[i]); R[i] += g * b.bp; } }   // bells: x + (G-1)·k·bp
+      if (this.hpF){ this.hpL.set(this.hpF, .7, sr); this.hpR.set(this.hpF, .7, sr); for (let i = 0; i < n; i++){ this.hpL.run(L[i]); L[i] = this.hpL.hp; this.hpR.run(R[i]); R[i] = this.hpR.hp; } }
+      if (this.lpF){ this.lpL.set(this.lpF, .7, sr); this.lpR.set(this.lpF, .7, sr); for (let i = 0; i < n; i++){ this.lpL.run(L[i]); L[i] = this.lpL.lp; this.lpR.run(R[i]); R[i] = this.lpR.lp; } }
+      for (const e of this.eq){ const a = e.a, b = e.b, g = e.g * a.k; for (let i = 0; i < n; i++){ a.run(L[i]); L[i] += g * a.bp; b.run(R[i]); R[i] += g * b.bp; } }   // bells: x + (G-1)·k·bp
       if (this.drive > 0){ const d = 1 + this.drive * 3, nm = 1 / A.tanh(d); for (let i = 0; i < n; i++){ L[i] = A.tanh(L[i] * d) * nm; R[i] = A.tanh(R[i] * d) * nm; } }
       if (this.chorus) this.chorus.process(L, R, n); if (this.haas) this.haas.process(L, R, n);
       if (this.ins) for (const fx of this.ins) fx.process(L, R, n);   // v2 per-track inserts (rotary, folder, formant, ring mod)
@@ -35,7 +35,7 @@ function AWZ_MIXER(A){
       this.tape = new A.TapeSat(sr); this.tape.set({drive: 1.1, bias: .04, lp: 17000, mix: .6});
       this.loud = new A.Loudness(sr); this.lim = new A.Limiter(sr, .002); this.lim.set({ceiling: A.dbToGain(-1.2), release: .1});
       this.autoGain = 1; this.target = -11; this.autoOn = true; this.agK = 1 - Math.exp(-1 / (2.5 * sr / BLK)); this.master = new A.Smooth(1, .05, sr / BLK);
-      this.kicks = []; this.duckDepth = {bass: 10, ret: 3, music: 0}; this.duckRel = .16; this.tiltLow = 1; this.tiltHigh = 0; this.musicLP = new A.Smooth(20000, .08, sr / BLK); this.mLPL = new A.SVF(); this.mLPR = new A.SVF();
+      this.kicks = []; this.dgv = 1; this.duckDepth = {bass: 10, ret: 3, music: 0}; this.duckRel = .16; this.tiltLow = 1; this.tiltHigh = 0; this.musicLP = new A.Smooth(20000, .08, sr / BLK); this.mLPL = new A.SVF(); this.mLPR = new A.SVF();
       this.preL = 0; this.grMaster = 0; this.outPeak = 0; this.crush = 0; this.chL = 0; this.chR = 0; this.chC = 0; this.phaser = new A.Phaser(sr); this.phaserMix = 0;
       // v2 chain (additive): extra send effects, music-bus gate + frequency shifter, master transport FX, build HP sweep, drop gap
       this.x2 = {sends: {}, retG: {}, xl: new Float32Array(BLK), xr: new Float32Array(BLK)}; this.gate = new A.Gate(sr); this.fshift = new A.FreqShift(sr); this.fshiftOn = 0; this.busfx = new A.BusFX(sr);
@@ -57,6 +57,12 @@ function AWZ_MIXER(A){
       if (dt < 0 || dt > atk + hold + rel) return 1;
       let x; if (dt < atk){ const q = dt / atk; x = q * q * (3 - 2 * q); } else if (dt < atk + hold) x = 1; else { const q = (dt - atk - hold) / rel; x = 1 - (1 - Math.pow(1 - q, 2.2)); }
       return Math.pow(10, -depthDb * x / 20); }
+    duckRun(t, depthDb){ // same as duckGain, result in this.dgv (no float return in the per-sample loop)
+      let k = -1e12; for (let i = this.kicks.length - 1; i >= 0; i--) if (this.kicks[i] <= t){ k = this.kicks[i]; break; }
+      const dt = (t - k) / this.sr, atk = .004, hold = .025, rel = this.duckRel;   // 4 ms attack: a sub-ms gain step on a sine is itself a click
+      if (dt < 0 || dt > atk + hold + rel){ this.dgv = 1; return; }
+      let x; if (dt < atk){ const q = dt / atk; x = q * q * (3 - 2 * q); } else if (dt < atk + hold) x = 1; else { const q = (dt - atk - hold) / rel; x = 1 - (1 - Math.pow(1 - q, 2.2)); }
+      this.dgv = Math.pow(10, -depthDb * x / 20); }
     process(oL, oR, n, t0){ const B = this.bus, S = this.sendBuf, sr = this.sr;
       for (const k in B){ B[k][0].fill(0, 0, n); B[k][1].fill(0, 0, n); } for (const k in S){ S[k][0].fill(0, 0, n); S[k][1].fill(0, 0, n); this.ret[k][0].fill(0, 0, n); this.ret[k][1].fill(0, 0, n); }
       const anySolo = this.tracks.some(t => t.solo);
@@ -71,9 +77,9 @@ function AWZ_MIXER(A){
       for (const k in X.sends){ X.sends[k].process(S[k][0], S[k][1], this.ret[k][0], this.ret[k][1], n); const g = X.retG[k].tick(), rl = this.ret[k][0], rr = this.ret[k][1]; for (let i = 0; i < n; i++){ xl[i] += rl[i] * g; xr[i] += rr[i] * g; } }
       // buses
       this.drumGlue.process(B.drums[0], B.drums[1], n);
-      const mlp = this.musicLP.tick(); if (mlp < 19000){ this.mLPL.set(mlp, .7, sr); this.mLPR.set(mlp, .7, sr); for (let i = 0; i < n; i++){ B.music[0][i] = this.mLPL.tick(B.music[0][i]); B.music[1][i] = this.mLPR.tick(B.music[1][i]); } }
+      const mlp = this.musicLP.tick(); if (mlp < 19000){ this.mLPL.set(mlp, .7, sr); this.mLPR.set(mlp, .7, sr); for (let i = 0; i < n; i++){ this.mLPL.run(B.music[0][i]); B.music[0][i] = this.mLPL.lp; this.mLPR.run(B.music[1][i]); B.music[1][i] = this.mLPR.lp; } }
       this.musicSat.process(B.music[0], B.music[1], n);
-      for (const e of this.mBells){ if (!e.g) continue; const a = e.a, b = e.b, g = e.g * a.k, ML = B.music[0], MR = B.music[1]; for (let i = 0; i < n; i++){ a.tick(ML[i]); ML[i] += g * a.bp; b.tick(MR[i]); MR[i] += g * b.bp; } }
+      for (const e of this.mBells){ if (!e.g) continue; const a = e.a, b = e.b, g = e.g * a.k, ML = B.music[0], MR = B.music[1]; for (let i = 0; i < n; i++){ a.run(ML[i]); ML[i] += g * a.bp; b.run(MR[i]); MR[i] += g * b.bp; } }
       if (this.phaserMix > .01) this.phaser.process(B.music[0], B.music[1], n);
       this.gate.process(B.music[0], B.music[1], n, t0); if (this.fshiftOn > .001) this.fshift.process(B.music[0], B.music[1], n);
       if (this.crush > .01){ const hold = 1 + Math.floor(this.crush * 5), q = Math.pow(2, 15 - this.crush * 9), mix = this.crush * .6, ML = B.music[0], MR = B.music[1];   // lo-fi: sample-rate + bit reduction (Y = broken)
@@ -81,20 +87,20 @@ function AWZ_MIXER(A){
       const rp = this.retGain.plate.tick(), rh = this.retGain.hall.tick(), rd = this.retGain.delay.tick(), dB = this.duckDepth;
       this.lsL.set(140, .7, sr); this.lsR.set(140, .7, sr); this.hsL.set(5500, .7, sr); this.hsR.set(5500, .7, sr); this.monoLo.set(120, .7, sr);
       const lowG = this.tiltLow - 1, hiG = Math.pow(10, this.tiltHigh / 20) - 1, Q = this.aeq, acc = [0, 0, 0, 0, 0, 0], G = Q.lin || (Q.lin = new Float64Array(6));
-      for (let i = 0; i < n; i++){ const t = t0 + i, gB = this.duckGain(t, dB.bass), gR = this.duckGain(t, dB.ret);
+      for (let i = 0; i < n; i++){ const t = t0 + i; this.duckRun(t, dB.bass); const gB = this.dgv; this.duckRun(t, dB.ret); const gR = this.dgv;
         let l = B.drums[0][i] + B.bass[0][i] * gB + B.music[0][i] + (this.ret.plate[0][i] * rp + this.ret.hall[0][i] * rh + this.ret.delay[0][i] * rd + xl[i]) * gR;
         let r = B.drums[1][i] + B.bass[1][i] * gB + B.music[1][i] + (this.ret.plate[1][i] * rp + this.ret.hall[1][i] * rh + this.ret.delay[1][i] * rd + xr[i]) * gR;
-        if (Q.on){ const mono = (l + r) * .5; for (let b = 0; b < 6; b++){ const m = Q.bpm[b]; m.tick(mono); acc[b] += m.bp * m.bp; const gg = G[b]; if (gg){ const a = Q.bl[b], c = Q.br[b]; a.tick(l); c.tick(r); l += gg * a.k * a.bp; r += gg * c.k * c.bp; } } }
-        this.lsL.tick(l); this.lsR.tick(r); l += this.lsL.lp * lowG; r += this.lsR.lp * lowG; this.hsL.tick(l); this.hsR.tick(r); l += this.hsL.hp * hiG; r += this.hsR.hp * hiG;
+        if (Q.on){ const mono = (l + r) * .5; for (let b = 0; b < 6; b++){ const m = Q.bpm[b]; m.run(mono); acc[b] += m.bp * m.bp; const gg = G[b]; if (gg){ const a = Q.bl[b], c = Q.br[b]; a.run(l); c.run(r); l += gg * a.k * a.bp; r += gg * c.k * c.bp; } } }
+        this.lsL.run(l); this.lsR.run(r); l += this.lsL.lp * lowG; r += this.lsR.lp * lowG; this.hsL.run(l); this.hsR.run(r); l += this.hsL.hp * hiG; r += this.hsR.hp * hiG;
         // mono below ~120 Hz: remove the low side component
-        const s = (l - r) * .5; this.monoLo.tick(s); l -= this.monoLo.lp; r += this.monoLo.lp;
+        const s = (l - r) * .5; this.monoLo.run(s); l -= this.monoLo.lp; r += this.monoLo.lp;
         oL[i] = l; oR[i] = r; }
       if (Q.on){ let tot = 0; for (let b = 0; b < 6; b++){ Q.meas[b] += (acc[b] / n + 1e-12 - Q.meas[b]) * Q.k; tot += Q.meas[b]; }
         // adapt only while the music is substantial (gate set by the engine from energy; quiet intros/breaks keep their colour)
         if (Q.gate > 0 && tot > 1e-7){ const d = []; let mean = 0; for (let b = 0; b < 6; b++){ d[b] = 10 * Math.log10(Q.meas[b]) - Q.target[b]; mean += d[b] / 6; }
           for (let b = 0; b < 6; b++){ const want = clamp(-(d[b] - mean) * .75, -Q.max, Q.max * .7); Q.g[b] += (want - Q.g[b]) * Q.kg * Q.gate; } }
         for (let b = 0; b < 6; b++) G[b] = Math.pow(10, Q.g[b] / 20) - 1; }
-      const hpf = this.hpSweep.tick(); if (hpf > 22){ this.hpL.set(hpf, .75, sr); this.hpR.set(hpf, .75, sr); for (let i = 0; i < n; i++){ this.hpL.tick(oL[i]); oL[i] = this.hpL.hp; this.hpR.tick(oR[i]); oR[i] = this.hpR.hp; } }
+      const hpf = this.hpSweep.tick(); if (hpf > 22){ this.hpL.set(hpf, .75, sr); this.hpR.set(hpf, .75, sr); for (let i = 0; i < n; i++){ this.hpL.run(oL[i]); oL[i] = this.hpL.hp; this.hpR.run(oR[i]); oR[i] = this.hpR.hp; } }
       this.busfx.process(oL, oR, n); const gp = this.gap.tick(), g0 = this.gapPrev === undefined ? gp : this.gapPrev; this.gapPrev = gp;
       // per-sample ramp from last block's value: a block-stepped gain is itself a click
       if (gp < .999 || g0 < .999) for (let i = 0; i < n; i++){ const gg = g0 + (gp - g0) * (i + 1) / n; oL[i] *= gg; oR[i] *= gg; }

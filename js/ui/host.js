@@ -29,7 +29,7 @@ class AwaazProcessor extends AudioWorkletProcessor {
   flushRec(){ if (!this.recN) return; const L = new Float32Array(this.recN), R = new Float32Array(this.recN); let o = 0; for (let i = 0; i < this.recL.length; i++){ L.set(this.recL[i], o); R.set(this.recR[i], o); o += this.recL[i].length; }
     this.recL = []; this.recR = []; this.recN = 0; this.port.postMessage({type: 'pcm', L, R}, [L.buffer, R.buffer]); }
   process(ins, outs){ const o = outs[0], L = o[0], R = o[1] || o[0], n = L.length, e = this.e;
-    if (!e.playing || !e.comp){ L.fill(0); R.fill(0); } else { try { e.process(L, R, n); } catch (err){ L.fill(0); R.fill(0); if (!this.errSent){ this.errSent = true; this.port.postMessage({type: 'error', msg: String(err && err.stack || err)}); } } }
+    if (!e.playing || !e.comp){ L.fill(0); R.fill(0); } else { try { const t0 = this.offline ? 0 : Date.now(); e.process(L, R, n); if (!this.offline && e.govern) e.govern(Date.now() - t0, n); } catch (err){ L.fill(0); R.fill(0); if (!this.errSent){ this.errSent = true; this.port.postMessage({type: 'error', msg: String(err && err.stack || err)}); } } }
     if (this.rec && e.playing){ this.recL.push(L.slice()); this.recR.push(R.slice()); this.recN += n; if (this.recN >= sampleRate * 2) this.flushRec(); }
     if (!this.offline && ++this.q >= 4){ this.q = 0; const d = e.out.drain(); if (d.notes.length || d.msgs.length) this.port.postMessage({type: 'out', now: currentTime + n / sampleRate, et: e.t, sr: sampleRate, notes: d.notes, msgs: d.msgs}, [d.notes.buffer]); }
     else if (this.offline) e.out.drain();
@@ -68,7 +68,9 @@ class AwaazHost {
   async renderOffline(genome, macros, seconds, onProgress){ const sr = 48000, N = Math.ceil(seconds * sr); const oc = new OfflineAudioContext(2, N, sr);
     await oc.audioWorklet.addModule(this.url); const node = new AudioWorkletNode(oc, 'awaaz', {numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2]}); node.connect(oc.destination);
     node.port.postMessage({type: 'offline'}); node.port.postMessage({type: 'auto', on: false}); node.port.postMessage({type: 'load', genome, macros}); node.port.postMessage({type: 'play', on: true});
-    const step = 5; for (let t = step; t < seconds; t += step) oc.suspend(t).then(() => { onProgress && onProgress(t / seconds); oc.resume(); });
+    // throttled: after every second of rendered audio, rest as long as that second took (≈50% duty), so a live session playing
+    // at the same time keeps its CPU and never stutters while you export
+    const step = 1; let last = performance.now(); for (let t = step; t < seconds; t += step) oc.suspend(t).then(() => { onProgress && onProgress(t / seconds); const busy = performance.now() - last; setTimeout(() => { last = performance.now(); oc.resume(); }, this.ctx && this.ctx.state === 'running' ? Math.min(250, busy) : 0); });
     await new Promise(r => setTimeout(r, 50));   // let the port messages land before rendering starts
     const buf = await oc.startRendering(); onProgress && onProgress(1);
     // trim the trailing silence, keep 1 s
