@@ -146,6 +146,8 @@ function AWZ_ENGINE(A){
     // then release tails end at −50 dB instead of −62, then the 303 runs 2x instead of 4x. Back under ~50% for 5 s → a step back up.
     govern(ms, n){ const G = this.gov || (this.gov = {acc: 0, nb: 0, level: 0, calm: 0, load: 0}); G.acc += ms; G.nb += n; if (G.nb < this.sr * .5) return;
       const load = G.acc / (G.nb / this.sr * 1000); G.acc = 0; G.nb = 0; G.load = load;
+      // drops (and the 4 bars into them) always play at full quality
+      if (this.comp && this.comp.dropZone){ G.calm = 0; if (G.level){ G.level = 0; this.applyGov(); this.out.msg({type: 'gov', level: 0, load, drop: true}); } return; }
       if (load > .78){ G.calm = 0; if (G.level < 3){ G.level++; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } }
       else if (load < .5 && G.level > 0){ if (++G.calm >= 10){ G.calm = 0; G.level--; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } } else G.calm = 0; }
     applyGov(){ const lv = this.gov ? this.gov.level : 0, Q = A.Q || (A.Q = {}), L = [[3, 8e-4, 4], [2, 8e-4, 4], [2, 3e-3, 2], [1, 6e-3, 2]][lv]; Q.uni = L[0]; Q.tail = L[1]; Q.os = L[2];

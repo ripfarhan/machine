@@ -85,6 +85,7 @@ function AWZ_COMPOSER(A){
       // ---- energy
       const prog = this.bis / Math.max(1, S2.bars); let E = lerp(S2.E0, S2.E1, prog) + (M.energy - .5) * .7 + this.eOff; E = clamp(E, 0, 1); this.lastE = E;
       const nextS = this.sections[this.si + 1], barsLeft = S2.bars - this.bis, nextBigger = !!nextS && (nextS.E0 > E + .15 || nextS.tag === 'peak');
+      this.dropZone = S2.tag === 'peak' || (!!nextS && nextS.tag === 'peak' && barsLeft <= 4);   // the CPU saver keeps full quality here
       const pieceProg = this.k / Math.max(1, this.totalBars);
       // ---- process α (rain → grid): world-defined curve, CHAOS pulls it back toward rain
       let alpha = this.w.alpha ? this.w.alpha(pieceProg, S2, prog) : 1; alpha = clamp(alpha * (1 - M.chaos * .7), 0, 1);
