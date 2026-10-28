@@ -67,28 +67,40 @@ VZ.Hero = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); t
     this.ring = this.ring.filter(r => t - r.t < F.beatSec); for (const r of this.ring){ const q = (t - r.t) / F.beatSec; c.strokeStyle = VZ.hexA(r.down ? F.hot : F.cyan, (1 - q) * .8); c.lineWidth = r.down ? 2 : 1; c.beginPath(); c.arc(hx, hy, rr + 4 + VZ.ease(q) * 26 * F.fx, 0, 6.283); c.stroke(); } } };
 
 // ---------------------------------------------------------------- voice lanes: what the machine is about to play (future notes ghosted, ignite at the playhead)
-VZ.Lanes = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); this.lanes = []; this.notes = []; this.past = 4.5; this.future = 2.2; }
-  setLanes(slots){ this.lanes = slots.map(s => ({slot: s.slot, kind: s.kind, lo: 127, hi: 0, flash: 0})); this.notes = slots.map(() => []); }
+VZ.Lanes = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); this.lanes = []; this.notes = []; this.past = 7; this.future = 2.4; }
+  setLanes(slots){ this.lanes = slots.map(s => ({slot: s.slot, kind: s.kind, lo: 60, hi: 72, flash: 0, wt: .3, y: 0, h: 0})); this.notes = slots.map(() => []); }
   shift(t, d){ for (const a of this.notes) for (const e of a) if (e.t > t) e.t += d; }
   cut(t){ for (const a of this.notes) for (let i = a.length - 1; i >= 0; i--) if (a[i].t > t) a.splice(i, 1); }
-  add(lane, t, pitch, vel, dur){ const arr = this.notes[lane]; if (arr && arr.length > 3000) arr.splice(0, 1000); const L = this.lanes[lane]; if (!L) return; if (pitch >= 0){ L.lo = Math.min(L.lo, pitch); L.hi = Math.max(L.hi, pitch); } this.notes[lane].push({t, pitch, vel, dur, lit: false}); }
+  add(lane, t, pitch, vel, dur){ const arr = this.notes[lane]; if (!arr) return; if (arr.length > 3000) arr.splice(0, 1000); arr.push({t, pitch, vel, dur, lit: false}); }
   draw(F, t, dt){ const {w, h, d} = VZ.fit(this.cv, 2), c = this.c; c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h); const n = this.lanes.length; if (!n) return;
-    const lh = h / n, px = w * .7, sc = px / this.past, x0 = t - this.past;
-    c.font = '600 10px "Barlow Condensed", sans-serif'; c.textBaseline = 'middle';
-    for (let i = 0; i < n; i++){ const L = this.lanes[i], y = i * lh, arr = this.notes[i], col = F.laneCol[i % F.laneCol.length];
-      c.fillStyle = i % 2 ? 'rgba(255,255,255,.018)' : 'rgba(255,255,255,.035)'; c.fillRect(0, y, w, lh);
-      while (arr.length && arr[0].t + arr[0].dur < x0 - .5) arr.shift();
-      const drum = L.kind !== 'va' && L.kind !== 'mono' && L.kind !== 'bass' && L.kind !== 'modal', span = Math.max(12, L.hi - L.lo + 2);
-      for (const e of arr){ const x = (e.t - x0) * sc; if (x > w) break; const fut = e.t > t; if (!fut && !e.lit){ e.lit = true; L.flash = 1; }
-        const a = fut ? .28 : Math.max(.25, 1 - (t - e.t) * .25), glow = !fut && t - e.t < .15 ? 1 - (t - e.t) / .15 : 0;
-        c.fillStyle = glow > 0 ? `rgba(255,255,255,${.6 * glow + .4})` : VZ.hexA(col, a * (.5 + .5 * Math.min(1, e.vel)));
-        if (drum){ const hh = e.pitch === -1 ? lh * .82 : e.pitch === -3 ? lh * .6 : lh * .38; c.fillRect(x - 1, y + (lh - hh) / 2, e.pitch === -1 ? 3 : 2, hh); }
-        else { const yy = y + lh - 3 - ((e.pitch - L.lo + 1) / span) * (lh - 6), ww = Math.max(2, e.dur * sc); c.fillRect(x, yy - 1.5, Math.min(ww, w - x), 3); } }
-      L.flash = Math.max(0, L.flash - dt * 6);
-      c.fillStyle = L.flash > 0 ? VZ.hexA(col, .5 + .5 * L.flash) : 'rgba(236,236,244,.42)'; c.fillText(L.slot.toUpperCase(), 6, y + lh / 2); }
-    // playhead + "future" region
-    c.fillStyle = VZ.hexA(F.cyan, .05); c.fillRect(px, 0, w - px, h); c.fillStyle = F.hot; c.fillRect(px, 0, 1.5, h);
-    } };
+    const LW = 74, top = 16, gw = w - LW, px = LW + gw * .74, sc = (px - LW) / this.past, x0 = t - this.past, x1 = t + (w - px) / sc, H = h - top - 2;
+    // active lanes grow, silent ones collapse to a thin strip (eased, so nothing jumps)
+    let sum = 0; for (let i = 0; i < n; i++){ const L = this.lanes[i], arr = this.notes[i]; while (arr.length && arr[0].t + arr[0].dur < x0 - .5) arr.shift();
+      let cnt = 0, lo = 127, hi = 0; for (const e of arr){ if (e.t > x1) break; if (e.t + e.dur >= x0){ cnt++; if (e.pitch >= 0){ if (e.pitch < lo) lo = e.pitch; if (e.pitch > hi) hi = e.pitch; } } }
+      const target = cnt ? 1 + Math.min(1.2, cnt / 40) : .22; L.wt += (target - L.wt) * Math.min(1, dt * 3); sum += L.wt;
+      if (hi >= lo){ L.lo += (lo - 1 - L.lo) * Math.min(1, dt * 2); L.hi += (hi + 1 - L.hi) * Math.min(1, dt * 2); } }
+    const minH = Math.min(12, H / n), extra = Math.max(0, H - n * minH); let ex = 0; for (const L of this.lanes) ex += Math.max(0, L.wt - .22);
+    let y = top; for (const L of this.lanes){ L.h = minH + (ex > .01 ? extra * Math.max(0, L.wt - .22) / ex : extra / n); L.y = y; y += L.h; }
+    // bar + beat grid, bar numbers on top
+    if (F.barSec > 0 && F.barT0Ctx){ const beat = F.barSec / 4; let k = Math.floor((x0 - F.barT0Ctx) / beat); for (let tb = F.barT0Ctx + k * beat; tb < x1; tb += beat, k++){ const x = LW + (tb - x0) * sc; if (x < LW) continue; const bar = ((k % 4) + 4) % 4 === 0;
+        c.fillStyle = bar ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.04)'; c.fillRect(Math.round(x), top, 1, H); if (bar){ const bn = F.barNo + Math.round((tb - F.barT0Ctx) / F.barSec); c.fillStyle = 'rgba(236,236,244,.4)'; c.font = '500 9px "Space Mono", monospace'; c.textBaseline = 'top'; c.fillText(String(bn + 1), x + 3, 3); } } }
+    c.fillStyle = VZ.hexA(F.cyan, .06); c.fillRect(px, top, w - px, H);
+    for (let i = 0; i < n; i++){ const L = this.lanes[i], arr = this.notes[i], col = F.laneCol[i % F.laneCol.length], ly = L.y, lh = L.h; if (lh < 1) continue;
+      c.fillStyle = i % 2 ? 'rgba(255,255,255,.015)' : 'rgba(255,255,255,.035)'; c.fillRect(LW, ly, gw, lh); c.fillStyle = 'rgba(255,255,255,.05)'; c.fillRect(LW, ly + lh - 1, gw, 1);
+      const drum = L.kind !== 'va' && L.kind !== 'mono' && L.kind !== 'bass' && L.kind !== 'modal' && L.kind !== 'tex', span = Math.max(6, L.hi - L.lo), nh = Math.max(2.5, Math.min(12, (lh - 6) / span * 1.6));
+      c.save(); c.beginPath(); c.rect(LW, ly, gw, lh); c.clip();
+      for (const e of arr){ if (e.t > x1) break; if (e.t + e.dur < x0) continue; const x = LW + (e.t - x0) * sc, fut = e.t > t, on = !fut && t < e.t + Math.max(e.dur, .08);
+        if (!fut && !e.lit){ e.lit = true; L.flash = 1; }
+        const glow = !fut && t - e.t < .18 ? 1 - (t - e.t) / .18 : 0, a = fut ? .32 : on ? 1 : Math.max(.22, .75 - (t - e.t) * .08), v = .45 + .55 * Math.min(1, e.vel);
+        if (drum){ const hh = (e.pitch === -1 ? .9 : e.pitch === -3 ? .7 : .45) * (lh - 4) * (.5 + .5 * v), ww = e.pitch === -1 ? 4 : 2.5; c.fillStyle = glow ? `rgba(255,255,255,${.5 + .5 * glow})` : VZ.hexA(col, a * v); c.fillRect(x - ww / 2, ly + (lh - hh) / 2, ww, hh); }
+        else if (L.kind === 'tex'){ c.fillStyle = VZ.hexA(col, .25 * a); c.fillRect(x, ly + 2, Math.max(2, e.dur * sc), lh - 4); }
+        else { const yy = ly + 3 + (1 - (e.pitch - L.lo) / span) * (lh - 6 - nh), ww = Math.max(3, Math.min(e.dur * sc, x1 * sc)); c.fillStyle = VZ.hexA(col, a * v); c.fillRect(x, yy, Math.min(ww, w - x), nh);
+          if (on){ c.fillStyle = `rgba(255,255,255,${.25 + .55 * glow})`; c.fillRect(x, yy, Math.min(ww, w - x), Math.max(1, nh * .35)); } } }
+      c.restore(); L.flash = Math.max(0, L.flash - dt * 5);
+      // label column
+      c.fillStyle = 'rgba(7,7,10,.85)'; c.fillRect(0, ly, LW - 2, lh); c.fillStyle = VZ.hexA(col, .35 + .65 * L.flash); c.fillRect(0, ly + 1, 3, Math.max(1, lh - 2));
+      if (lh >= 8){ c.font = (lh > 22 ? '700 12px' : '600 10px') + ' "Barlow Condensed", sans-serif'; c.textBaseline = 'middle'; c.fillStyle = L.flash > .05 ? '#fff' : L.wt > .5 ? 'rgba(236,236,244,.85)' : 'rgba(236,236,244,.32)'; c.fillText(L.slot.toUpperCase(), 9, ly + lh / 2); } }
+    c.fillStyle = F.hot; c.fillRect(px, top - 4, 2, H + 4); c.font = '600 9px "Barlow Condensed", sans-serif'; c.textBaseline = 'top'; c.fillStyle = VZ.hexA(F.cyan, .85); c.fillText('NEXT ▸', px + 6, 3); c.fillStyle = 'rgba(236,236,244,.5)'; c.textAlign = 'right'; c.fillText('◂ PLAYED', px - 6, 3); c.textAlign = 'left'; } };
 
 // ---------------------------------------------------------------- harmony wheel (circle of fifths; scale outlined, chord filled, sounding notes flash)
 VZ.Wheel = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); this.flash = new Float32Array(12); this.rot = 0; this.rotT = 0; this.chord = []; this.scale = []; this.label = ''; this.tonic = 0; }

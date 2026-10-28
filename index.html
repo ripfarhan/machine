@@ -41,7 +41,7 @@ canvas{display:block;width:100%;height:100%}
 #left,#right{display:grid;gap:6px;min-height:0}
 #left{grid-template-rows:minmax(0,1fr) minmax(170px,32%) auto}
 #right{grid-template-rows:auto minmax(0,1fr)}
-#center{display:grid;grid-template-rows:minmax(0,1fr) clamp(130px,24%,200px);gap:6px;min-height:0}
+#center{display:grid;grid-template-rows:minmax(0,1.25fr) minmax(190px,1fr);gap:6px;min-height:0}
 #hero{background:transparent;border-color:rgba(255,255,255,.06)}
 #heroTxt{position:absolute;left:0;top:0;z-index:3;pointer-events:none;padding:12px 40px 14px 14px;background:linear-gradient(100deg,rgba(7,7,10,.78) 0%,rgba(7,7,10,.5) 65%,rgba(7,7,10,0) 100%)}
 #secName{font-size:52px;font-weight:800;letter-spacing:-.01em;line-height:.9;transform:scaleY(1.32);transform-origin:top left;text-transform:uppercase;text-shadow:0 0 30px rgba(0,0,0,.6)}
@@ -128,7 +128,7 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
     </div>
     <div id="center">
       <div class="pan" id="hero"><canvas id="heroCv"></canvas><div id="heroTxt"><div id="secName">—</div><div id="worldName"></div><div id="worldDesc"></div><div id="chordNow"></div></div></div>
-      <div class="pan"><div class="lab" style="left:auto;right:60px">VOICES · FUTURE NOTES ▸</div><canvas id="lanes"></canvas></div>
+      <div class="pan"><canvas id="lanes"></canvas></div>
     </div>
     <div id="right">
       <div class="pan"><div class="lab">MACROS</div><div id="macros"></div><div id="macroHelp"></div></div>

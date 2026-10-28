@@ -110,7 +110,7 @@
     if (q.length > 4000) q.splice(0, q.length - 4000);
     F.kick *= Math.exp(-dt / .12); F.snare *= Math.exp(-dt / .08); F.hat *= Math.exp(-dt / .06); F.glitch *= Math.exp(-dt / .25);
     F.chaos = S.macros.chaos || .2; F.motion = S.macros.motion || .4;
-    if (S.info){ const sb = (t - S.barT0) / S.barSec; const steps = Math.floor(sb * 16); F.step = ((steps % 16) + 16) % 16; F.beat = Math.floor(sb * 4) + S.info.bar * 4; F.beatSec = S.barSec / 4;
+    if (S.info){ F.barT0Ctx = S.barT0; F.barSec = S.barSec; F.barNo = S.info.pos !== undefined ? S.info.pos : S.info.bar; const sb = (t - S.barT0) / S.barSec; const steps = Math.floor(sb * 16); F.step = ((steps % 16) + 16) % 16; F.beat = Math.floor(sb * 4) + S.info.bar * 4; F.beatSec = S.barSec / 4;
       const bar = S.info.bar + Math.floor(sb); $('#clock').innerHTML = `<i>BAR</i> ${String(Math.max(0, bar) + 1).padStart(3, '0')}:${(Math.floor(sb * 4) % 4 + 4) % 4 + 1}`; }
     F.knobLive = {energy: F.kick, mood: F.bass, space: F.loudN * .5, density: F.hat, chaos: F.hat * F.chaos * 2, motion: .3 + .3 * Math.sin(t * (1 + 3 * F.motion))}; }
   // ---------------------------------------------------------------- loop
