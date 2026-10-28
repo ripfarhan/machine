@@ -2,6 +2,7 @@
 const fs = require('fs'), path = require('path'), A = require('./load.js')(); const sr = 44100, secs = 8;
 function phrase(name, inst, kind){ const ev = []; const P = name;
   if (kind === 'fx') return [];
+  if (kind === 'acid'){ for (let t = 0; t < secs; t += .125) ev.push([t, {note: [40, 40, 52, 43][Math.round(t * 8) % 4], vel: .85, dur: .06, mod: {accOn: Math.round(t * 8) % 4 === 0 ? 1 : 0}}]); return ev; }
   if (kind === 'boom') kind = 'bass'; if (kind === 'fmmono') kind = /bass/.test(P) ? 'bass' : 'mono'; if (kind === 'organ' || kind === 'choir' || kind === 'fm') kind = /chop/.test(P) ? 'va' : (/strings|organ|choir/.test(P) ? 'padlike' : 'va');
   if (kind === 'padlike') for (let t = 0; t < secs; t += 4) [57, 64, 67, 71].forEach(m => ev.push([t, {note: m, vel: .65, dur: 3.6}]));
   if (kind === 'va' || kind === 'modal'){ const pad = /^(pad|mellotron|cello|string|wobble|supersaw)/.test(P) && !/_stab$/.test(P);

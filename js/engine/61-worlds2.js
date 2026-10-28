@@ -5,6 +5,9 @@ function AWZ_WORLDS2(A){
   const P = A.PATCH, W = A.WORLDS, drumBus = o => Object.assign({bus: 'drums'}, o);
   Object.assign(P, {
     // synth voices built from the v1 VA engine
+    // real 303 model (52-acid.js): knobs 0…1 like the panel — cut, res, env (mod), dec, acc (accent), dist (pedal), wave (0 saw … 1 square)
+    tb303:      {inst: 'acid', p: {wave: 0, cut: .3, res: .62, env: .55, dec: .3, acc: .65, dist: .3, gain: 1}},
+    tb303_sq:   {inst: 'acid', p: {wave: 1, cut: .32, res: .6, env: .5, dec: .25, acc: .65, dist: .4, gain: 1}},
     acid303:    {inst: 'mono', p: {shape1: 2, osc2Level: 0, drift: 1, cutoff: 260, res: .86, keytrack: .3, envAmt: 3.2, fa: .001, fd: .22, fs: 0, fr: .1, aa: .002, ad: .3, as: .85, ar: .06, glide: .06, drive: 1.6, gain: .55}},
     acid_sq:    {inst: 'mono', p: {shape1: 3, pw: .5, osc2Level: 0, drift: 1, cutoff: 300, res: .82, keytrack: .3, envAmt: 3, fa: .001, fd: .2, fs: 0, fr: .1, aa: .002, ad: .3, as: .85, ar: .06, glide: .06, drive: 1.5, gain: .5}},
     reese:      {inst: 'mono', p: {shape1: 2, shape2: 2, osc2Level: .9, detune2: 22, unison: 3, spread: 26, uniPan: .3, drift: 3, cutoff: 420, res: .25, keytrack: .3, envAmt: .4, fa: .01, fd: .5, fs: .8, fr: .3, aa: .01, ad: .5, as: 1, ar: .2, lfoRate: .25, lfoCut: .45, glide: .08, legato: true, sub: .5, gain: .45}},
@@ -257,26 +260,29 @@ function AWZ_WORLDS2(A){
     fx: {plate: {decay: .6, damping: .5}, hall: {rt60: 5, damp: 3000}, delay: {beats: .75, feedback: .6, lp: 2400, hp: 300, pingpong: 1, wow: .0015}, duck: {bass: 6, ret: 2}, master: {tiltHigh: 0}},
     moves: {throw: 1.6, wash: 1, swell: 1, impact: .5, riser: .5, tapestop: .3, roll: 0, gap: .3}, macros: {chaos: .12, motion: .45}};
 
-  W.ACID = {name: 'ACID', desc: 'a 303 line that never sits still', ref: 'acid house / Hardfloor', v2: true,
-    tempo: [124, 132], swing: [0, .04], modes: {phrygian: 2, aeolian: 2, dorian: 1}, families: {drone: 2, oscillate: 1.5, swing2: 1}, colour: [.15, .4], spread: [.5, .8], form: ['techno', 'club'],
+  W.ACID = {name: 'ACID', desc: 'a 303 that talks: hand-ridden filter, stacking accents, slides', ref: 'Phuture / Hardfloor / Plastikman', v2: true, aeqFrom: .3,
+    tempo: [124, 132], swing: [0, .05], modes: {phrygian: 2, aeolian: 2.2, dorian: 1.2}, families: {drone: 3, oscillate: 1}, colour: [.1, .3], spread: [.5, .8], form: ['techno', 'club', 'longform'],
     tracks: {
-      acid:  {patch: ['acid303', 'acid_sq'], db: -3, hp: 60, delay: .3, ins: [{type: 'folder', drive: 1.6, mix: .25, lp: 7000}]},
-      kick:  drumBus({patch: ['kick_909'], db: -5}),
-      clap:  drumBus({patch: ['snare_clap'], db: -12, plate: .2}),
-      hat:   drumBus({patch: ['hat_tight', 'hat_808'], db: -15, hp: 4000}),
-      bass:  {patch: ['bass_sub'], bus: 'bass', db: -7},
-      pad:   {patch: ['pad_dark'], voices: 12, db: -12, hp: 200, hall: .4},
-      click: drumBus({patch: ['perc_click'], db: -16, hp: 900})},
+      acid:  {patch: ['tb303', 'tb303', 'tb303_sq'], bus: 'bass', db: -12, hp: 35, delay: .2, plate: .04, eq: [[3100, -3, .8]]},
+      acid2: {patch: ['tb303_sq', 'tb303'], db: -10, hp: 150, delay: .36, hall: .1, pan: .2, eq: [[3100, -4, .8]]},
+      kick:  drumBus({patch: ['kick_909'], db: -4}),
+      clap:  drumBus({patch: ['snare_clap'], db: -12, plate: .22}),
+      hat:   drumBus({patch: ['hat_808', 'hat_tight'], db: -19, hp: 5000, pan: .1}),
+      ride:  drumBus({patch: ['hat_ride'], db: -22, pan: -.2}),
+      fx:    {patch: ['fx'], db: -13, hp: 40, hall: .25, plate: .08},
+      click: drumBus({patch: ['perc_click'], db: -18, hp: 900, pan: -.3}),
+      pad:   {patch: ['pad_dark'], voices: 10, db: -17, hp: 260, hall: .45}},
     parts: [
-      {part: 'acid', slot: 'acid', opts: {}, on: 0, core: true},
-      {part: 'kick', slot: 'kick', opts: {mode: 'four'}, on: .25, drum: true},
-      {part: 'hats', slot: 'hat', opts: {open: .5}, on: .35, drum: true},
-      {part: 'clicks', slot: 'click', opts: {count: 3}, on: .45, drum: true},
-      {part: 'bass', slot: 'bass', opts: {mode: 'sub', vel: .7}, on: .5},
-      {part: 'backbeat', slot: 'clap', opts: {}, on: .6, drum: true},
-      {part: 'pad', slot: 'pad', opts: {mode: 'hold', vel: .4}, on: .7}],
-    fx: {plate: {decay: .5, damping: .5}, hall: {rt60: 4, damp: 3000}, delay: {beats: .75, feedback: .45, lp: 2600, hp: 500, pingpong: 1}, duck: {bass: 8, ret: 3}, master: {tiltHigh: -1}},
-    moves: {stutter: 1.4, tapestop: .8, hpbuild: 1, gap: 1, riser: .8, impact: .8, roll: .8, climb: .6}, macros: {chaos: .3}};
+      {part: 'tb303', slot: 'acid', opts: {}, on: 0, core: true},
+      {part: 'kick', slot: 'kick', opts: {mode: 'four'}, on: .22, drum: true},
+      {part: 'hats', slot: 'hat', opts: {open: .6}, on: .32, drum: true},
+      {part: 'clicks', slot: 'click', opts: {count: 3}, on: .42, drum: true},
+      {part: 'backbeat', slot: 'clap', opts: {}, on: .52, drum: true},
+      {part: 'tb303', slot: 'acid2', opts: {layer: 1, vel: .75, pan: .2}, on: .62},
+      {part: 'hats', slot: 'ride', opts: {open: 0}, on: .72, drum: true},
+      {part: 'pad', slot: 'pad', opts: {mode: 'hold', vel: .32}, on: .84}],
+    fx: {plate: {decay: .4, damping: .5}, hall: {rt60: 1.6, damp: 3500, predelay: .015}, delay: {beats: .75, feedback: .36, lp: 4000, hp: 250, pingpong: 1}, duck: {bass: 3, ret: 3}, master: {tiltHigh: -1.2}},
+    moves: {stutter: 1, tapestop: .6, hpbuild: .7, gap: 1, riser: .6, impact: .7, roll: .8, climb: .3, throw: 1.2, gate: .2}, macros: {chaos: .25}};
 
   W.BREAKS = {name: 'BREAKS', desc: 'euphoric chords over a broken beat', ref: 'Bicep — Glue', v2: true,
     tempo: [126, 132], swing: [0, .03], modes: {aeolian: 2, dorian: 2}, families: {poploop: 1.5, three: 1.5, riff: 1, planing: 1}, colour: [.3, .55], spread: [.5, .85], form: ['techno'],
