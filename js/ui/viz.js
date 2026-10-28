@@ -156,20 +156,35 @@ VZ.Meter = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); 
       for (let s = 0; s < seg; s++){ const y = h - (s + 1) * (h / seg), on = s / seg < this.pk[ch], dbs = -48 + s / seg * 48; c.fillStyle = dbs > -3 ? (on ? F.hot : 'rgba(255,46,136,.12)') : dbs > -12 ? (on ? '#ececf4' : 'rgba(236,236,244,.1)') : (on ? F.cyan : VZ.hexA(F.cyan, .12)); c.fillRect(ch * (bw + 6), y + 1, bw, h / seg - 2); } }); } };
 
 // ---------------------------------------------------------------- arc timeline: planned sections, energy target, measured loudness, playhead
-VZ.Arc = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); this.plan = null; this.trace = []; }
+VZ.Arc = class { constructor(cv, onSeek){ this.cv = cv; this.c = cv.getContext('2d'); this.plan = null; this.trace = []; this.hover = null; this.drag = false; this.onSeek = onSeek;
+    // scrub: hover shows where you would land, click or drag + release jumps there (snapped to the 4-bar phrase)
+    const at = e => { const r = cv.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left - 8) / Math.max(1, r.width - 16))); };
+    cv.style.cursor = 'pointer'; cv.style.touchAction = 'none';
+    cv.addEventListener('pointermove', e => { this.hover = at(e); });
+    cv.addEventListener('pointerleave', () => { if (!this.drag) this.hover = null; });
+    cv.addEventListener('pointerdown', e => { this.drag = true; this.hover = at(e); cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointerup', e => { if (!this.drag) return; this.drag = false; const P = this.plan; if (P && this.onSeek) this.onSeek(Math.round(at(e) * P.total / 4) * 4); });
+    cv.addEventListener('pointercancel', () => { this.drag = false; this.hover = null; }); }
   setPlan(p){ this.plan = p; this.trace = []; }
-  draw(F, t){ const {w, h, d} = VZ.fit(this.cv, 2), c = this.c; c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h); const P = this.plan; if (!P) return;
-    const T = P.total, X = s => 8 + (s / T) * (w - 16); let acc = 0; c.font = '600 10px "Barlow Condensed", sans-serif'; c.textBaseline = 'top';
-    const now = t - P.t0, cur = P.sections.findIndex((s, i) => now >= P.starts[i] && now < P.starts[i] + s.bars * P.bar);
-    P.sections.forEach((s, i) => { const x0 = X(P.starts[i]), x1 = X(P.starts[i] + s.bars * P.bar), past = now >= P.starts[i] + s.bars * P.bar, isCur = i === cur;
+  updateSections(sections){ if (!this.plan) return; this.plan.sections = sections; this.plan.total = sections.reduce((a, s) => a + s.bars, 0); }
+  cutTrace(bar){ this.trace = this.trace.filter(p => p[0] < bar); }
+  draw(F, t, pos){ const {w, h, d} = VZ.fit(this.cv, 2), c = this.c; c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h); const P = this.plan; if (!P) return;
+    const T = P.total, X = b => 8 + (b / T) * (w - 16); c.font = '600 10px "Barlow Condensed", sans-serif'; c.textBaseline = 'top';
+    let acc = 0; const starts = P.sections.map(s => { const v = acc; acc += s.bars; return v; }); const now = pos === null ? -1 : pos;
+    const cur = P.sections.findIndex((s, i) => now >= starts[i] && now < starts[i] + s.bars);
+    P.sections.forEach((s, i) => { const x0 = X(starts[i]), x1 = X(starts[i] + s.bars), past = now >= starts[i] + s.bars, isCur = i === cur;
       c.fillStyle = isCur ? VZ.hexA(F.hot, .16) : past ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.02)'; c.fillRect(x0, 14, x1 - x0 - 2, h - 18);
       if (!past && !isCur){ c.strokeStyle = 'rgba(255,255,255,.06)'; c.lineWidth = 1; c.save(); c.beginPath(); c.rect(x0, 14, x1 - x0 - 2, h - 18); c.clip(); for (let k = -h; k < x1 - x0; k += 6){ c.beginPath(); c.moveTo(x0 + k, h); c.lineTo(x0 + k + h, 14); c.stroke(); } c.restore(); }
-      c.fillStyle = isCur ? '#fff' : 'rgba(236,236,244,.5)'; c.fillText(s.name.toUpperCase(), x0 + 4, 2);
-      // energy target
+      c.fillStyle = isCur ? '#fff' : 'rgba(236,236,244,.5)'; if (x1 - x0 > 30) c.fillText(s.name.toUpperCase(), x0 + 4, 2);
       c.strokeStyle = VZ.hexA(F.cyan, .7); c.lineWidth = 1.5; c.beginPath(); c.moveTo(x0, h - 4 - s.E0 * (h - 22)); c.lineTo(x1 - 2, h - 4 - s.E1 * (h - 22)); c.stroke(); });
-    if (now >= 0){ this.trace.push([now, F.loudN]); if (this.trace.length > 4000) this.trace.splice(0, 1000); c.strokeStyle = VZ.hexA(F.hot, .8); c.lineWidth = 1.5; c.beginPath(); this.trace.forEach((p, i) => { const x = X(p[0]), y = h - 4 - p[1] * (h - 22); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); }
-    const px = X(Math.max(0, Math.min(T, now))); c.fillStyle = '#fff'; c.fillRect(px - .5, 12, 2, h - 12);
-    if (cur >= 0 && P.sections[cur + 1]){ const left = Math.ceil((P.starts[cur] + P.sections[cur].bars * P.bar - now) / P.bar); c.fillStyle = VZ.hexA(F.cyan, .9); c.textAlign = 'right'; c.font = '500 10px "Space Mono", monospace'; c.fillText(`${P.sections[cur + 1].name.toUpperCase()} IN ${left} BAR${left === 1 ? '' : 'S'}`, w - 8, 2); c.textAlign = 'left'; } } };
+    if (now >= 0){ const last = this.trace[this.trace.length - 1]; if (!last || now - last[0] > .05 || now < last[0]) this.trace.push([now, F.loudN]); if (this.trace.length > 6000) this.trace.splice(0, 2000);
+      c.strokeStyle = VZ.hexA(F.hot, .8); c.lineWidth = 1.5; c.beginPath(); let prev = -1; for (const p of this.trace){ const x = X(p[0]), y = h - 4 - p[1] * (h - 22); if (p[0] < prev || p[0] - prev > 6) c.moveTo(x, y); else c.lineTo(x, y); prev = p[0]; } c.stroke();
+      const px = X(Math.max(0, Math.min(T, now))); c.fillStyle = '#fff'; c.fillRect(px - .5, 12, 2, h - 12); }
+    if (this.hover !== null){ const hb = Math.round(this.hover * T / 4) * 4, hx = X(hb), si = P.sections.findIndex((s, i) => hb >= starts[i] && hb < starts[i] + s.bars);
+      c.fillStyle = VZ.hexA(F.cyan, this.drag ? .95 : .6); c.fillRect(hx - 1, 12, 2, h - 12); const lab = `${this.drag ? 'JUMP TO' : 'CLICK →'} ${si >= 0 ? P.sections[si].name.toUpperCase() : ''} · BAR ${hb + 1}`;
+      c.font = '600 11px "Barlow Condensed", sans-serif'; const tw = c.measureText(lab).width + 10, lx = Math.min(w - tw - 4, Math.max(4, hx + 6)); c.fillStyle = 'rgba(7,7,10,.92)'; c.fillRect(lx, 14, tw, 16); c.fillStyle = F.cyan; c.fillText(lab, lx + 5, 16); }
+    else if (cur >= 0 && P.sections[cur + 1]){ const left = Math.max(1, Math.ceil(starts[cur] + P.sections[cur].bars - now)), lab = `${P.sections[cur + 1].name.toUpperCase()} IN ${left} BAR${left === 1 ? '' : 'S'}`;
+      c.font = '500 10px "Space Mono", monospace'; const tw = c.measureText(lab).width + 10; c.fillStyle = 'rgba(7,7,10,.9)'; c.fillRect(w - tw - 6, 0, tw + 6, 13); c.fillStyle = VZ.hexA(F.cyan, .9); c.textAlign = 'right'; c.fillText(lab, w - 8, 2); c.textAlign = 'left'; } } };
 
 // ---------------------------------------------------------------- brain log: decisions revealed at audible time with a scramble-decode
 VZ.Brain = class { constructor(el){ this.el = el; this.lines = []; this.max = 16; }

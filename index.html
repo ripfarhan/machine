@@ -59,11 +59,13 @@ canvas{display:block;width:100%;height:100%}
 #learn{grid-column:1/-1;overflow:hidden;max-height:44px;font-size:11px;color:var(--dim);line-height:1.3;min-height:28px;padding-top:2px;letter-spacing:.03em}
 #learn b{color:var(--ink);font-weight:600}
 /* macros */
-#macros{padding:22px 8px 8px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-.knob{position:relative;text-align:center}
+#macros{padding:22px 8px 22px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.knob{position:relative;text-align:center;min-width:0}
+#macroHelp{position:absolute;left:8px;right:8px;bottom:5px;font-size:11px;color:var(--cyan);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity .15s;pointer-events:none}
+#macroHelp.on{opacity:1}
 .knob canvas{height:88px;touch-action:none;cursor:ns-resize}
 .knob .kn{font-size:13px;font-weight:700;letter-spacing:.14em}
-.knob .kd{font-size:10px;color:var(--dim);letter-spacing:.05em;height:13px;white-space:nowrap;overflow:hidden}
+.knob .kd{font-size:10px;color:var(--dim);letter-spacing:.05em;height:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .knob input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
 #xyWrap{padding:22px 8px 8px;display:flex;flex-direction:column}
 #xy{flex:1;min-height:100px;touch-action:none;cursor:crosshair;border:1px solid rgba(255,255,255,.06)}
@@ -129,7 +131,7 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
       <div class="pan"><div class="lab" style="left:auto;right:60px">VOICES · FUTURE NOTES ▸</div><canvas id="lanes"></canvas></div>
     </div>
     <div id="right">
-      <div class="pan"><div class="lab">MACROS</div><div id="macros"></div></div>
+      <div class="pan"><div class="lab">MACROS</div><div id="macros"></div><div id="macroHelp"></div></div>
       <div class="pan" id="xyWrap"><div class="lab">MORPH</div><canvas id="xy"></canvas><div id="xyNote">X: warm → glass · Y: clean → broken</div></div>
     </div>
   </div>

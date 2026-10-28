@@ -44,8 +44,14 @@ function AWZ_COMPOSER(A){
       else if (n === 'peak'){ cut(); S.splice(cur + 1, 0, Object.assign({}, pk, {bars: 16})); }
       else if (n === 'break'){ cut(); S.splice(cur + 1, 0, {name: 'break', bars: 8, E0: .3, E1: .26, tag: 'break'}, {name: 'return', bars: 16, E0: .62, E1: .7, tag: ''}); }
       else if (n === 'next'){ cut(); S.splice(cur + 1, S.length, {name: 'outro', bars: 8, E0: Math.min(.5, this.lastE || .4), E1: .03, tag: 'outro'}); }
-      this.totalBars = S.reduce((a, s) => a + s.bars, 0); if (this.bis >= S[cur].bars){ this.si++; this.bis = 0; } }
+      this.planRev = (this.planRev || 0) + 1; this.totalBars = S.reduce((a, s) => a + s.bars, 0); if (this.bis >= S[cur].bars){ this.si++; this.bis = 0; } }
 
+    // jump to a bar of the plan (UI timeline scrub). Snaps to the phrase (4 bars); harmony lands on the matching chord of the loop.
+    seek(bar){ const S = this.sections, total = S.reduce((a, s) => a + s.bars, 0); bar = Math.max(0, Math.min(total - 1, Math.round(bar / 4) * 4)); let acc = 0;
+      for (let i = 0; i < S.length; i++){ if (bar < acc + S[i].bars){ this.si = i; this.bis = bar - acc; break; } acc += S[i].bars; }
+      const L = this.loop.chords, lb = L.reduce((a, c) => a + c.bars, 0); let r = bar % lb, ci = 0; while (r >= L[ci].bars){ r -= L[ci].bars; ci++; }
+      this.ci = ci; this.bic = r; this.voicing = null; this.done = false; this.forceArr = true; this.nudge = null; }
+    pos(){ let acc = 0; for (let i = 0; i < Math.min(this.si, this.sections.length); i++) acc += this.sections[i].bars; return acc + this.bis; }
     chord(){ const ch = this.loop.chords[this.ci]; return this.subChord && this.subAt === this.cycle && this.ci === this.subIdx ? this.subChord : ch; }
     rebuildLoopForMode(mode){ this.key.set(this.key.tonic, mode); this.loop.chords = this.loop.chords.map(c => { const n = A.makeChord(this.key, c.deg, c.type, {pedal: this.loop.pedal === null ? null : this.key.pc(this.loop.pedal)}); n.bars = c.bars; return n; }); this.subChord = null; }
 
@@ -55,7 +61,7 @@ function AWZ_COMPOSER(A){
       if (this.bis >= this.sec().bars && !(this.hold && this.si < this.sections.length)){ this.si++; this.bis = 0; }
       if (this.hold && this.bis >= this.sec().bars) this.bis = this.sec().bars - 8;   // HOLD: loop the last 8 bars of the section
       if (this.si >= this.sections.length){ this.done = true; const t0 = this.t; this.t += this.barN; this.k++; return {t0, events: [], info: Object.assign({}, this.lastInfo || {}, {bar: this.k - 1, t0, done: true, changed: [], chordStart: false, bis: -1})}; }   // past the end: silent bar, no nudges
-      const S = this.sec(), sectionStart = this.bis === 0;
+      const S = this.sec(), seeked = !!this.forceArr, sectionStart = this.bis === 0 || seeked; this.forceArr = false;
       if (this.bis % 4 === 0) this.applyNudge();
       const S2 = this.sec();
       // ---- harmony
@@ -110,7 +116,7 @@ function AWZ_COMPOSER(A){
           else { const div = kind === 'roll' ? 8 : gr() < .5 ? 4 : 8, seg = beatN / div, src = inBeat.filter(e => e.t < b0 + seg * 1.5); for (const e of inBeat) if (e.t >= b0 + seg * 1.5 && !e.ev.kick) e.drop = true;
             for (const e of src) for (let q = 1; q < div; q++) add.push({t: e.t + q * seg, slot: e.slot, ev: Object.assign({}, e.ev, {vel: (e.ev.vel || .7) * Math.pow(kind === 'roll' ? 1.04 : .86, q), dur: e.ev.dur ? Math.min(e.ev.dur, seg / sr * .9) : e.ev.dur, kick: false})}); } }
         if (add.length){ for (const a of add) out.push(a); } for (let i = out.length - 1; i >= 0; i--) if (out[i].drop) out.splice(i, 1); out.sort((a, b) => a.t - b.t); }
-      const info = {bar: this.k, t0, chordPcs: ch.pcs, scalePcs: this.key.sc.map(x => (x + this.key.tonic) % 12), barN: this.barN, section: S2.name, tag: S2.tag, si: this.si, nSections: this.sections.length, bis: this.bis, sbars: S2.bars, E, alpha, chord: ch.name, chordStart,
+      const info = {bar: this.k, t0, pos: this.pos(), seeked, planRev: this.planRev || 0, total: this.totalBars, chordPcs: ch.pcs, scalePcs: this.key.sc.map(x => (x + this.key.tonic) % 12), barN: this.barN, section: S2.name, tag: S2.tag, si: this.si, nSections: this.sections.length, bis: this.bis, sbars: S2.bars, E, alpha, chord: ch.name, chordStart,
         nextChord: this.loop.chords[(this.ci + 1) % loopLen].name, active: this.parts.filter(p => p.on).map(p => p.slot), changed: this.changed, mode: this.key.mode, tonic: this.key.tonic,
         progress: pieceProg, voicing: v.notes, bass: v.bass, cycle: this.cycle};
       this.lastInfo = info; this.changed = [];

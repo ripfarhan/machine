@@ -19,6 +19,7 @@ class AwaazProcessor extends AudioWorkletProcessor {
       case 'nudge': e.nudge(m.kind); break;
       case 'voice': e.voice(m.slot, m.cmd); break;
       case 'next': e.next(); break;
+      case 'seek': e.seek(m.bar); break;
       case 'auto': e.auto = !!m.on; break;
       case 'rec': this.rec = !!m.on; if (!m.on){ this.flushRec(); this.port.postMessage({type: 'pcmEnd'}); } break;
       case 'offline': this.offline = true; break; } } catch (err){ this.port.postMessage({type: 'error', msg: String(err && err.stack || err)}); } }

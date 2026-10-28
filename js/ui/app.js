@@ -13,18 +13,18 @@
     {key: 'density', name: 'DENSITY', desc: 'sparse ↔ busy', words: v => v < .3 ? 'sparse' : v < .65 ? 'groove' : 'busy'},
     {key: 'chaos', name: 'CHAOS', desc: 'locked ↔ glitch', words: v => v < .2 ? 'locked' : v < .45 ? 'alive' : v < .7 ? 'slipping' : 'glitch'},
     {key: 'motion', name: 'MOTION', desc: 'still ↔ moving', words: v => v < .25 ? 'still' : v < .55 ? 'breathing' : v < .8 ? 'moving' : 'swirling'}];
-  const KEYDESC = {energy: 'layers, drums, brightness — structure follows next bar', mood: 'mode changes at the next chord loop', space: 'reverb size, sends, delay feedback', density: 'more notes and hits per bar', chaos: 'mutations, timing jitter, ratchets, rain', motion: 'filter movement, auto-pan, phase drift'};
+  const KEYDESC = {energy: 'layers, drums, brightness', mood: 'mode changes at the next chord loop', space: 'reverb size, sends, delay feedback', density: 'more notes and hits per bar', chaos: 'mutations, timing jitter, ratchets, rain', motion: 'filter movement, auto-pan, phase drift'};
 
   // ---------------------------------------------------------------- state
   const S = {g: null, piece: null, plan: null, info: null, barT0: 0, barSec: 2, playing: false, timed: [], laneKind: [], slots: [], macros: {}, lastMode: '', lastSec: '', pieceT0: 0, loadReason: null, startedAt: 0, rec: false, exporting: false, mode: 'FULL', reel: false, idleT: 0, flashLog: [], pendingNudge: null};
   const F = {tl: new Float32Array(2048), tr: new Float32Array(2048), fd: new Float32Array(4096), spec: new Float32Array(128), sp16: new Float32Array(16), kick: 0, snare: 0, hat: 0, bass: 0, energy: .3, chaos: .2, motion: .4, glitch: 0, fx: 1, motionScale: 1, tearOK: 1, bright: 1,
     hot: '#ff2e88', cyan: '#22e5ff', c1: [1, .18, .53], c2: [.13, .9, 1], warn: '#ffd23f', laneCol: [], peakSm: .5, pkL: 0, pkR: 0, step: -1, beat: -1, beatSec: .5, chordName: '', moodWord: '', loudN: 0, knobLive: {}, secName: '', worldName: '', keyName: '', bpm: 0, calm: false};
   // ---------------------------------------------------------------- components
-  const field = new VZ.Field($('#field')), hero = new VZ.Hero($('#heroCv')), lanes = new VZ.Lanes($('#lanes')), wheel = new VZ.Wheel($('#wheel')), gonio = new VZ.Gonio($('#gonio')), meter = new VZ.Meter($('#meter')), arc = new VZ.Arc($('#arc')), brain = new VZ.Brain($('#brain'));
+  const field = new VZ.Field($('#field')), hero = new VZ.Hero($('#heroCv')), lanes = new VZ.Lanes($('#lanes')), wheel = new VZ.Wheel($('#wheel')), gonio = new VZ.Gonio($('#gonio')), meter = new VZ.Meter($('#meter')), arc = new VZ.Arc($('#arc'), bar => seekTo(bar)), brain = new VZ.Brain($('#brain'));
   const reel = new AwaazReel($('#reelCv'), host);
   const knobs = {}; const mEl = $('#macros');
   for (const d of MACROS){ const el = document.createElement('div'); el.className = 'knob'; el.innerHTML = `<canvas></canvas><input type="range" min="0" max="100" aria-label="${d.name}"><div class="kn">${d.name}</div><div class="kd">${d.desc}</div>`; mEl.appendChild(el);
-    knobs[d.key] = new VZ.Knob(el, Object.assign({v: .5}, d), (k, v) => setMacro(k, v)); el.addEventListener('pointerenter', () => el.querySelector('.kd').textContent = KEYDESC[d.key]); el.addEventListener('pointerleave', () => el.querySelector('.kd').textContent = d.desc); }
+    knobs[d.key] = new VZ.Knob(el, Object.assign({v: .5}, d), (k, v) => setMacro(k, v)); el.addEventListener('pointerenter', () => { $('#macroHelp').textContent = d.name + ': ' + KEYDESC[d.key]; $('#macroHelp').classList.add('on'); }); el.addEventListener('pointerleave', () => $('#macroHelp').classList.remove('on')); }
   const xy = new VZ.XY($('#xy'), (x, y) => { setMacro('x', x, true); setMacro('y', y, true); });
   let lastMacroMsg = {};
   function setMacro(k, v, quiet){ S.macros[k] = v; const now = performance.now(); if (!lastMacroMsg[k] || now - lastMacroMsg[k] > 4){ host.send({type: 'macro', k, v}); lastMacroMsg[k] = now; } else setTimeout(() => host.send({type: 'macro', k, v: S.macros[k]}), 6);
@@ -38,7 +38,7 @@
   for (const w of ['EMERGENCE', 'FELT', 'REPETITION', 'DRIFT']){ const b = document.createElement('button'); b.textContent = AWZ.WORLDS[w].name; b.onclick = () => { gateWorld = w; $$('#gateWorlds button').forEach(x => x.classList.remove('on')); b.classList.add('on'); }; gw.appendChild(b); }
   $$('#gate [data-m]').forEach(b => b.onclick = () => { $$('#gate [data-m]').forEach(x => x.classList.remove('on')); b.classList.add('on'); setMode(b.dataset.m); });
   // ---------------------------------------------------------------- loading pieces
-  function loadGenome(g, why, kind){ if (S.g && S.playing){ const sec = host.ctx.currentTime - S.startedAt; if (kind === 'skip') brain.add(taste.skip(S.g, sec, S.plan ? S.plan.total : 300), 'you'); else taste.listened(S.g, sec); }
+  function loadGenome(g, why, kind){ if (S.g && S.playing){ const sec = host.ctx.currentTime - S.startedAt; if (kind === 'skip') brain.add(taste.skip(S.g, sec, S.plan ? S.plan.total * S.barSec : 300), 'you'); else taste.listened(S.g, sec); }
     S.loadReason = why || ''; host.load(g); S.expect = g.seed; }
   function loadWorld(w, why){ const g = taste.genomeFor(w); loadGenome(g, why, 'pick'); }
   function nextPiece(mode, kind){ const cur = S.g ? S.g.world : null; const n = taste.next(cur, mode); loadGenome(n.genome, n.why, kind); }
@@ -57,7 +57,7 @@
     F.laneCol = p.slots.map((s, i) => mix(pal[0], pal[1], p.slots.length > 1 ? i / (p.slots.length - 1) : 0));
     lanes.setLanes(p.slots); S.slots = p.slots; buildStrips(p.slots);
     const barSec = p.genome.bpm ? 240 / p.genome.bpm : 2; S.barSec = barSec; let acc = 0; const starts = p.sections.map(s => { const v = acc; acc += s.bars * barSec; return v; });
-    S.plan = {sections: p.sections, starts, bar: barSec, total: acc, t0: p.ct}; arc.setPlan(S.plan);
+    S.plan = {sections: p.sections.map(s => Object.assign({}, s)), total: p.sections.reduce((a, s) => a + s.bars, 0), t0: p.ct}; arc.setPlan(S.plan); S.pos = null;
     $('#worldName').textContent = w.name + ' · after “' + w.ref + '”'; $('#worldDesc').textContent = w.desc; F.worldName = w.name; F.bpm = p.bpm; F.keyName = p.key + ' ' + p.mode;
     $('#bpm').innerHTML = `<i>BPM</i> ${p.bpm}`; $('#keyTxt').innerHTML = `<i>KEY</i> ${p.key.replace('#', '♯')} ${p.mode}`;
     $$('#worlds button[data-w]').forEach(b => b.classList.toggle('cur', b.dataset.w === p.genome.world));
@@ -66,9 +66,9 @@
     brain.add(`chord loop (${p.family}): ${p.loop.map(c => c.name).join(' → ')}`); if (S.loadReason) brain.add('why: ' + S.loadReason, 'ai'); S.loadReason = null;
     brain.add(`sounds: ${p.slots.map(s => s.slot + '=' + s.patch).join(', ')}`); setTimeout(queueNext, 1500); updateLearn(); }
   function mix(a, b, k){ const x = VZ.rgb(a), y = VZ.rgb(b); const c = x.map((v, i) => Math.round((v + (y[i] - v) * k) * 255)); return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); }
-  function onBar(x){ S.info = x; S.barT0 = x.ct; S.barSec = x.barN / sr(); F.energy += (x.E - F.energy) * .5;
+  function onBar(x){ S.info = x; S.barT0 = x.ct; S.barSec = x.barN / sr(); S.pos = x.pos; if (x.sections) arc.updateSections(x.sections.map(s => Object.assign({}, s))); F.energy += (x.E - F.energy) * .5;
     const chord = x.chord.replace(/#/g, '♯'); F.chordName = chord; $('#chordNow').textContent = `${chord}  ▸ next ${x.nextChord.replace(/#/g, '♯')}`; wheel.set(x); F.moodWord = MOODW[x.mode] || x.mode;
-    if (x.bis === 0){ $('#secName').textContent = x.section; F.secName = x.section; scrambleTitle(x.section); globalGlitch(); const s = S.plan && S.plan.sections[x.si];
+    if (x.bis === 0 || x.seeked){ $('#secName').textContent = x.section; F.secName = x.section; scrambleTitle(x.section); globalGlitch(); const s = S.plan && S.plan.sections[x.si]; if (x.seeked && s) brain.add(`you jumped to ${x.section.toUpperCase()} · bar ${x.pos + 1}`, 'you');
       if (s) brain.add(`→ ${x.section.toUpperCase()} · ${s.bars} bars · energy ${Math.round(s.E0 * 100)}→${Math.round(s.E1 * 100)}%${s.tag === 'break' ? ' · drums out' : s.tag === 'peak' ? ' · everything opens' : ''}`, 'sec'); }
     if (x.changed && x.changed.length){ const inn = x.changed.filter(c => c[0] === '+').map(c => c.slice(1).toUpperCase()), out = x.changed.filter(c => c[0] === '-').map(c => c.slice(1).toUpperCase());
       brain.add([inn.length ? `${inn.join(', ')} in` : '', out.length ? `${out.join(', ')} out` : ''].filter(Boolean).join(' · ') + ` (energy ${Math.round(x.E * 100)}%)`);
@@ -76,6 +76,7 @@
     if (S.lastMode && x.mode !== S.lastMode) brain.add(`mood shift → ${x.mode.toUpperCase()} (${MOODW[x.mode]})`, 'ai'); S.lastMode = x.mode;
     if (S.piece && x.chordStart && S.piece.loop.every(c => c.name !== x.chord) && x.mode === S.piece.mode) brain.add(`borrowed colour: ${chord} for one cycle`, 'ai');
     $$('.pan').forEach(p => { p.classList.add('bar-sweep'); }); setTimeout(() => $$('.pan').forEach(p => p.classList.remove('bar-sweep')), 160); }
+  function seekTo(bar){ if (!S.g) return; host.send({type: 'seek', bar}); const t = host.now(); S.timed = S.timed.filter(e => e.t <= t); lanes.cut(t); arc.cutTrace(bar); toast(`jumping to bar ${bar + 1}`); }
   function onMeters(x){ S.meters = x; F.loudN = Math.max(0, Math.min(1, (x.lufs + 36) / 28)); }
   function onVoice(x){ const st = S.strips && S.strips[x.slot]; if (!st) return; st.m.classList.toggle('on', x.mute); st.s.classList.toggle('on', x.solo); st.el.querySelector('.sp2').textContent = x.patch; st.f.textContent = x.user === 1 ? 'ON' : x.user === -1 ? 'OFF' : 'AUTO'; st.f.classList.toggle('on', x.user !== 0); }
   // ---------------------------------------------------------------- strips
@@ -115,7 +116,7 @@
   // ---------------------------------------------------------------- loop
   let last = performance.now(), fpsAcc = [];
   function frame(){ const nowp = performance.now(), dt = Math.min(.05, (nowp - last) / 1000); last = nowp; const t = host.now();
-    features(t, dt); field.draw(F, nowp / 1000); hero.draw(F, t, dt); lanes.draw(F, t, dt); wheel.draw(F, t, dt); for (const k in knobs) knobs[k].draw(F, t, dt); xy.draw(F, t, dt); gonio.draw(F); meter.draw(F, t, dt); arc.draw(F, t); drawStrips(dt); brain.tick(F);
+    features(t, dt); field.draw(F, nowp / 1000); hero.draw(F, t, dt); lanes.draw(F, t, dt); wheel.draw(F, t, dt); for (const k in knobs) knobs[k].draw(F, t, dt); xy.draw(F, t, dt); gonio.draw(F); meter.draw(F, t, dt); arc.draw(F, t, S.pos === null || S.pos === undefined || !S.info ? null : S.pos + Math.max(0, Math.min(1.5, (t - S.barT0) / S.barSec))); drawStrips(dt); brain.tick(F);
     if (S.reel) reel.draw(F, t, $('#field'));
     // dynamic quality: p95 frame time
     fpsAcc.push(dt); if (fpsAcc.length > 90){ const s = fpsAcc.slice().sort((a, b) => a - b), p95 = s[Math.floor(s.length * .95)]; fpsAcc = []; if (p95 > .024 && field.scale > .3) field.scale -= .1; else if (p95 < .018 && field.scale < .5) field.scale += .05; }
@@ -138,7 +139,7 @@
   $('#mode').onclick = () => setMode(S.mode === 'FULL' ? 'CALM' : S.mode === 'CALM' ? 'STILL' : 'FULL');
   $('#rec').onclick = async () => { if (!S.rec){ host.recStart(); S.rec = true; $('#rec').classList.add('on'); $('#rec').textContent = '■ STOP REC'; toast('recording what you hear (lossless WAV)…'); }
     else { S.rec = false; $('#rec').classList.remove('on'); $('#rec').textContent = '● REC'; const b = await host.recStop(); awzDownload(b, `maut-ki-awaaz_${S.g ? S.g.world.toLowerCase() : 'take'}_${Date.now()}.wav`); toast('saved WAV'); } };
-  $('#export').onclick = async () => { if (!S.g || S.exporting) return; S.exporting = true; const g = JSON.parse(JSON.stringify(S.g)), secs = (S.plan ? S.plan.total : 300) + 8; $('#export').textContent = '⤓ 0%';
+  $('#export').onclick = async () => { if (!S.g || S.exporting) return; S.exporting = true; const g = JSON.parse(JSON.stringify(S.g)), secs = (S.plan ? S.plan.total * S.barSec : 300) + 8; $('#export').textContent = '⤓ 0%';
     try { const b = await host.renderOffline(g, Object.assign({}, S.macros), secs, p => $('#export').textContent = '⤓ ' + Math.round(p * 100) + '%'); awzDownload(b, `maut-ki-awaaz_${g.world.toLowerCase()}_${g.seed}.wav`); toast('exported the whole piece as WAV'); }
     catch (e){ console.error(e); toast('export failed: ' + e.message, 5000); } S.exporting = false; $('#export').textContent = '⤓ EXPORT'; };
   $('#reelBtn').onclick = () => { S.reel = true; reel.on = true; $('#reel').classList.add('show'); };

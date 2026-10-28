@@ -81,6 +81,8 @@ function AWZ_ENGINE(A){
       this.out.msg({type: 'voice', slot, mute: this.tracks[slot].mute, solo: this.tracks[slot].solo, patch: this.tracks[slot].patchName, user: parts.length ? parts[0].user : 0}); }
     queue(genome){ this.queued = genome; }
     next(){ if (this.comp) this.comp.doNudge('next'); }
+    // scrub: drop what is scheduled but not yet heard and restart the bar grid right now at the chosen bar
+    seek(bar){ const c = this.comp; if (!c) return; this.q.clear(); for (const tr of this.mixer.tracks) if (tr.inst.pend) tr.inst.pend.length = 0; c.seek(bar); c.t = this.t + 64; c.done = false; c.endSent = false; this.out.msg({type: 'seek', bar, t0: c.t}); }
     pickNext(){ if (this.queued){ const g = this.queued; this.queued = null; return g; }
       const others = A.WORLD_LIST.filter(w => w !== this.g.world); const seed = (A.hash(this.g.seed, 'next', this.history.length) >>> 0); const r = A.rng(seed);
       return A.makeGenome(r.pick(others), seed); }
@@ -90,7 +92,7 @@ function AWZ_ENGINE(A){
         const bar = c.nextBar(); this.lastE = bar.info.E; const af = this.w.aeqFrom === undefined ? .35 : this.w.aeqFrom; this.mixer.aeq.gate = clamp((bar.info.E - af) / .3, 0, 1);
         for (const e of bar.events){ const tr = this.tracks[e.slot]; if (!tr) continue; this.q.push({t: Math.round(e.t), slot: e.slot, ev: e.ev});
           const ev = e.ev; if (ev.note !== undefined) this.out.note(e.t, tr.id, ev.note, ev.vel || .7, (ev.dur || .2) * this.sr); else if (ev.level === undefined) this.out.note(e.t, tr.id, ev.kick ? -1 : ev.open ? -3 : -2, ev.vel || .7, 0); }
-        if (!bar.info.done){ this.out.msg(Object.assign({type: 'bar'}, bar.info)); this.mapMacros(); } } }
+        if (!bar.info.done){ const m = Object.assign({type: 'bar'}, bar.info); if (m.planRev !== this._planRev){ this._planRev = m.planRev; m.sections = c.sections.map(s => Object.assign({}, s)); } this.out.msg(m); this.mapMacros(); } } }
     process(L, R, n){ if (!this.comp){ L.fill(0, 0, n); R.fill(0, 0, n); return; } this.schedule();
       const end = this.t + n, q = this.q;
       while (q.size && q.peek().t < end){ const e = q.pop(), tr = this.tracks[e.slot]; if (!tr || tr.dying) continue; const off = Math.max(0, Math.min(n - 1, e.t - this.t));
