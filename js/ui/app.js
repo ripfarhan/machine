@@ -21,7 +21,9 @@
     hot: '#ff2e88', cyan: '#22e5ff', c1: [1, .18, .53], c2: [.13, .9, 1], warn: '#ffd23f', laneCol: [], peakSm: .5, pkL: 0, pkR: 0, step: -1, beat: -1, beatSec: .5, chordName: '', moodWord: '', loudN: 0, knobLive: {}, secName: '', worldName: '', keyName: '', bpm: 0, calm: false};
   // ---------------------------------------------------------------- components
   const field = new VZ.Field($('#field')), hero = new VZ.Hero($('#heroCv')), lanes = new VZ.Lanes($('#lanes'), rel => { if (S.pos !== null && S.pos !== undefined) seekTo(Math.max(0, Math.floor(S.pos / 4) * 4 + rel)); }), wheel = new VZ.Wheel($('#wheel')), gonio = new VZ.Gonio($('#gonio')), meter = new VZ.Meter($('#meter')), arc = new VZ.Arc($('#arc'), bar => seekTo(bar)), brain = new VZ.Brain($('#brain'));
-  const reel = new AwaazReel($('#reelCv'), host);
+  const reel = new AwaazReel($('#reelCv'), host), mathV = new AwaazMath($('#math'));
+  let mathOn = false; try { mathOn = localStorage.getItem('awaaz.math') === '1'; } catch (e){}
+  function setMath(on){ mathOn = on; $('#math').classList.toggle('on', on); $('#mathBtn').classList.toggle('on', on); $('#mathBtn').textContent = on ? '≋ SPECTRUM' : '∑ MATH'; hero.mathOn = on; $('#hero').classList.toggle('mathmode', on); host.send({type: 'math', on}); try { localStorage.setItem('awaaz.math', on ? '1' : '0'); } catch (e){} if (on) setTimeout(() => mathV.render(true), 200); }
   const knobs = {}; const mEl = $('#macros');
   for (const d of MACROS){ const el = document.createElement('div'); el.className = 'knob'; el.innerHTML = `<canvas></canvas><input type="range" min="0" max="100" aria-label="${d.name}"><div class="kn">${d.name}</div><div class="kd">${d.desc}</div>`; mEl.appendChild(el);
     knobs[d.key] = new VZ.Knob(el, Object.assign({v: .5}, d), (k, v) => setMacro(k, v)); el.addEventListener('pointerenter', () => { $('#macroHelp').textContent = d.name + ': ' + KEYDESC[d.key]; $('#macroHelp').classList.add('on'); }); el.addEventListener('pointerleave', () => $('#macroHelp').classList.remove('on')); }
@@ -59,7 +61,7 @@
   host.on(m => { if (m.type === 'error'){ toast('engine error — press NEXT to restart the music', 6000); console.error(m.msg); return; } if (m.type !== 'out') return; const N = m.notes, toCtx = s => m.now + (s - m.et) / m.sr;
     const nowT = host.now(); if (S.timed.length && S.timed[0].t < nowT - 2){ let k = 0; while (k < S.timed.length && S.timed[k].t < nowT - 2) k++; const stale = S.timed.splice(0, k); const lastBar = stale.filter(e => e.k === 'bar').pop(); if (lastBar) onBar(lastBar.x); }   // background tab: drop stale, keep the latest bar
     for (let i = 0; i < N.length; i += 6){ const t = toCtx(N[i]), lane = N[i + 1], pitch = N[i + 2], vel = N[i + 3], dur = N[i + 4] / m.sr; lanes.add(lane, t, pitch, vel, dur); tInsert({t, k: 'n', lane, pitch, vel}); }
-    for (const x of m.msgs){ if (x.type === 'bar'){ x.ct = toCtx(x.t0); tInsert({t: x.ct, k: 'bar', x}); } else if (x.type === 'piece'){ x.ct = toCtx(x.t0); S.timed = S.timed.filter(e => e.t < x.ct - .3); lanes.cut(x.ct); onPiece(x); } else if (x.type === 'repeat'){ brain.add('piece finished — playing it again from the start (AT END: REPEAT)', 'ai'); toast('song khatam — wahi gaana phir se shuru (AT END: REPEAT)', 4000); } else if (x.type === 'end'){ brain.add('piece finished — stopped here (AT END: STOP). Press NEXT or pick from HISTORY.', 'ai'); toast('song khatam — ruk gaya (AT END: STOP)', 5000); } else if (x.type === 'meters') onMeters(x); else if (x.type === 'voice') onVoice(x); else if (x.type === 'nudge') {} }
+    for (const x of m.msgs){ if (x.type === 'bar'){ x.ct = toCtx(x.t0); tInsert({t: x.ct, k: 'bar', x}); } else if (x.type === 'piece'){ x.ct = toCtx(x.t0); S.timed = S.timed.filter(e => e.t < x.ct - .3); lanes.cut(x.ct); onPiece(x); } else if (x.type === 'repeat'){ brain.add('piece finished — playing it again from the start (AT END: REPEAT)', 'ai'); toast('song khatam — wahi gaana phir se shuru (AT END: REPEAT)', 4000); } else if (x.type === 'end'){ brain.add('piece finished — stopped here (AT END: STOP). Press NEXT or pick from HISTORY.', 'ai'); toast('song khatam — ruk gaya (AT END: STOP)', 5000); } else if (x.type === 'math') mathV.feed(x); else if (x.type === 'meters') onMeters(x); else if (x.type === 'voice') onVoice(x); else if (x.type === 'nudge') {} }
   });
   function onPiece(p){ const natural = S.expect !== p.genome.seed; if (natural && S.g){ taste.ended(S.g, S.macros); brain.add(`piece finished — the AI moves on: ${S.queued ? S.queued.why : ''}`, 'ai'); }
     S.expect = null; S.g = p.genome; histAdd(p.genome); S.piece = p; S.startedAt = host.ctx.currentTime; taste.started(p.genome); const w = AWZ.WORLDS[p.genome.world];
@@ -131,7 +133,7 @@
   // ---------------------------------------------------------------- loop
   let last = performance.now(), fpsAcc = [];
   function frame(){ const nowp = performance.now(), dt = Math.min(.05, (nowp - last) / 1000); last = nowp; const t = host.now();
-    features(t, dt); field.draw(F, nowp / 1000); hero.draw(F, t, dt); lanes.draw(F, t, dt); wheel.draw(F, t, dt); for (const k in knobs) knobs[k].draw(F, t, dt); xy.draw(F, t, dt); gonio.draw(F); meter.draw(F, t, dt); arc.draw(F, t, S.pos === null || S.pos === undefined || !S.info ? null : S.pos + Math.max(0, Math.min(1.5, (t - S.barT0) / S.barSec))); drawStrips(dt); brain.tick(F);
+    features(t, dt); field.draw(F, nowp / 1000); hero.draw(F, t, dt); lanes.draw(F, t, dt); wheel.draw(F, t, dt); for (const k in knobs) knobs[k].draw(F, t, dt); xy.draw(F, t, dt); gonio.draw(F); meter.draw(F, t, dt); arc.draw(F, t, S.pos === null || S.pos === undefined || !S.info ? null : S.pos + Math.max(0, Math.min(1.5, (t - S.barT0) / S.barSec))); drawStrips(dt); brain.tick(F); if (mathOn) mathV.render();
     if (S.reel) reel.draw(F, t, $('#field'));
     // dynamic quality: p95 frame time
     fpsAcc.push(dt); if (fpsAcc.length > 90){ const s = fpsAcc.slice().sort((a, b) => a - b), p95 = s[Math.floor(s.length * .95)]; fpsAcc = []; if (p95 > .024 && field.scale > .3) field.scale -= .1; else if (p95 < .018 && field.scale < .5) field.scale += .05; }
@@ -139,13 +141,15 @@
     requestAnimationFrame(frame); }
   // ---------------------------------------------------------------- controls
   async function start(){ $('#go').textContent = 'LOADING…'; try { await host.start(); } catch (e){ $('#go').textContent = 'AUDIO FAILED — ' + e.message; console.error(e); return; }
-    $('#gate').style.display = 'none'; const g = gateWorld ? taste.genomeFor(gateWorld) : taste.next(null, 'auto').genome; S.loadReason = gateWorld ? 'you picked it' : 'first piece — the AI picked'; host.load(g); S.expect = g.seed; setEndMode(endMode); play(true); requestAnimationFrame(frame); }
+    $('#gate').style.display = 'none'; const g = gateWorld ? taste.genomeFor(gateWorld) : taste.next(null, 'auto').genome; S.loadReason = gateWorld ? 'you picked it' : 'first piece — the AI picked'; host.load(g); S.expect = g.seed; setEndMode(endMode); setMath(mathOn); play(true); requestAnimationFrame(frame); }
   // the engine clock stops while paused but AudioContext time runs on: shift everything still to come by the pause length
   function play(on){ if (host.ctx){ if (!on){ S.pausedAt = host.ctx.currentTime; S.pauseT = host.now(); } else if (S.pausedAt !== undefined){ const d = host.ctx.currentTime - S.pausedAt, t = S.pauseT;
         for (const e of S.timed) if (e.t > t){ e.t += d; if (e.x) e.x.ct += d; } lanes.shift(t, d); if (S.plan) S.plan.t0 += d; S.barT0 += d; S.pausedAt = undefined; } }
     S.playing = on; host.play(on); $('#play').textContent = on ? '❚❚ PAUSE' : '▶ PLAY'; $('#play').classList.toggle('on', on); }
   $('#endMode').onclick = () => setEndMode(END_MODES[(END_MODES.indexOf(endMode) + 1) % 3]);
   $('#histBtn').onclick = e => { e.stopPropagation(); renderHist(); $('#hist').classList.toggle('open'); }; document.addEventListener('pointerdown', e => { if (!$('#hist').contains(e.target) && e.target !== $('#histBtn')) $('#hist').classList.remove('open'); });
+  $('#mathBtn').onclick = () => setMath(!mathOn);
+  $('#math').addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)){ $('#math').scrollLeft += e.deltaY; e.preventDefault(); } }, {passive: false});
   $('#go').onclick = start; $('#play').onclick = () => play(!S.playing);
   $('#next').onclick = () => { nextPiece('auto', 'skip'); };
   $('#like').onclick = () => { if (!S.g) return; histTouch(true); brain.add(taste.like(S.g, S.macros), 'you'); toast('♥ the AI will make more like this'); updateLearn(); $('#like').classList.add('on'); setTimeout(() => $('#like').classList.remove('on'), 600); };
@@ -166,6 +170,7 @@
   // keyboard (research/05 §4.7)
   window.addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' && e.key !== ' ') return; const k = e.key.toLowerCase(); S.idleT = performance.now(); document.body.classList.remove('idle');
     if (k === ' '){ e.preventDefault(); if ($('#gate').style.display !== 'none') start(); else play(!S.playing); }
+    else if (k === 'm') setMath(!mathOn);
     else if (k === 'n') $('#next').click(); else if (k === 'l') $('#like').click(); else if (k === 'x') $('#skip').click(); else if (k === 'v') $('#mode').click();
     else if (k === 'b') $('[data-n=build]').click(); else if (k === 'p') $('[data-n=peak]').click(); else if (k === 'k') $('[data-n=break]').click(); else if (k === 'h') $('[data-n=hold]').click();
     else if (k === 'r') S.reel ? $('#reelExit').click() : $('#reelBtn').click(); else if (k === 'escape' && S.reel) $('#reelExit').click(); });

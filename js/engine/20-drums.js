@@ -118,7 +118,7 @@ function AWZ_DRUMS(A){
   // ---------------------------------------------------------------- resonant perc: clave / woodblock / metal tick (high-Q resonators struck by an impulse)
   // p: ratios [..], q, tau, gains [..], noise
   A.ResPercVoice = class { constructor(sr){ this.sr = sr; this.r = [new A.SVF(), new A.SVF(), new A.SVF()]; this.hp = new A.SVF(); this.nz = new A.Noise(23); }
-    start(off, vel, p, r, f){ this.p = p; this.off = off; this.i = 0; this.vel = vel; const sr = this.sr, rat = p.ratios || [1, 2.57, 4.42];
+    start(off, vel, p, r, f){ this.f = f; this.p = p; this.off = off; this.i = 0; this.vel = vel; const sr = this.sr, rat = p.ratios || [1, 2.57, 4.42];
       for (let k = 0; k < 3; k++){ this.r[k].reset(); this.r[k].set(Math.min(f * (rat[k] || 0) || 1, sr * .45), p.q || 35, sr); }
       this.hp.reset(); this.hp.set(p.hp || 250, .7, sr); this.k = Math.exp(-1 / ((p.tau || .03) * sr)); this.e = 1; this.len = Math.ceil((p.tau || .03) * 8 * sr) + 32; }
     render(L, R, n){ const p = this.p, sr = this.sr, g = this.vel, gains = p.gains || [1, .45, .2]; let i0 = this.off; this.off = 0;

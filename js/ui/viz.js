@@ -49,7 +49,7 @@ VZ.Hero = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); t
     const g = this.sgc, SH = this.sg.height, SW = this.sg.width, sp = F.spec; g.drawImage(this.sg, -2, 0); const col = this.col.data;
     for (let y = 0; y < SH; y++){ const v = sp[Math.floor((1 - y / SH) * 127)], i = Math.max(0, Math.min(255, Math.pow(v, 1.5) * 255 | 0)) * 3; for (let x = 0; x < 2; x++){ const o = (y * 2 + x) * 4; col[o] = this.lut[i]; col[o + 1] = this.lut[i + 1]; col[o + 2] = this.lut[i + 2]; col[o + 3] = 255; } }
     g.putImageData(this.col, SW - 2, 0);
-    const sy = h * .58, sh = h - sy; c.globalAlpha = .82; c.imageSmoothingEnabled = true; c.drawImage(this.sg, 0, sy, w, sh); c.globalAlpha = 1;
+    const sy = h * (this.mathOn ? .46 : .58), sh = h - sy; c.globalAlpha = this.mathOn ? .16 : .82; c.imageSmoothingEnabled = true; c.drawImage(this.sg, 0, sy, w, sh); c.globalAlpha = 1;
     const gr = c.createLinearGradient(0, sy, 0, sy + 30); gr.addColorStop(0, 'rgba(7,7,10,1)'); gr.addColorStop(1, 'rgba(7,7,10,0)'); c.fillStyle = gr; c.fillRect(0, sy, w, 30);
     // log spectrum outline with peak hold, sitting on the spectrogram's top edge
     c.beginPath(); const base = sy + sh * .1; for (let i = 0; i < 128; i++){ const v = sp[i]; this.sm[i] += (v - this.sm[i]) * (v > this.sm[i] ? .6 : .18); this.peak[i] = Math.max(this.sm[i], this.peak[i] - dt * .35); const x = i / 127 * w, y = base - this.sm[i] * sy * .55; i ? c.lineTo(x, y) : c.moveTo(x, y); }

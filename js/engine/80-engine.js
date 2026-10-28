@@ -80,6 +80,25 @@ function AWZ_ENGINE(A){
         parts.forEach(p => { p.obj = new A.PARTS[p.spec.part](P2, Object.assign({slot}, p.spec.opts || {})); }); this.mapMacros(); }
       this.out.msg({type: 'voice', slot, mute: this.tracks[slot].mute, solo: this.tracks[slot].solo, patch: this.tracks[slot].patchName, user: parts.length ? parts[0].user : 0}); }
     queue(genome){ this.queued = genome; }
+    // live telemetry for the MATH view (only while it is open): every number the engine is using right now
+    mathSnap(){ const sr = this.sr, M = this.mixer, c = this.comp, voices = [];
+      const vinfo = (slot, kind, v) => { const o = {slot, kind, age: v.age || 0};
+        if (kind === 'va' || kind === 'mono'){ Object.assign(o, {note: v.note, f: v.freq * (v.fmul || 1), env: v.aenv ? v.aenv.v : 0, stage: v.aenv ? v.aenv.stage : 0, fenv: v.fenv ? v.fenv.v : 0, cut: v.cutNow || 0, base: v.p ? v.p.cutoff : 0, amt: v.p ? v.p.envAmt || 0 : 0, res: v.p ? v.p.res || 0 : 0, vel: v.vel, U: v.U || 1, lfo: v.lfoPh !== undefined ? A.sin1(v.lfoPh) : 0, lfoCut: v.p ? (v.p.lfoCut || 0) + (v.p.live ? v.p.live.lfo : 0) : 0, live: v.p && v.p.live ? v.p.live.cut : 0}); }
+        else if (kind === 'bass') Object.assign(o, {note: v.note, f: v.freq, fsub: v.freq * (v.p && v.p.subOct === -1 ? .5 : 1), env: v.aenv.v, stage: v.aenv.stage, cut: v.cutNow || 0, vel: v.vel});
+        else if (kind === 'modal') Object.assign(o, {note: v.note, f: v.f0, n: v.n, mk: v.p ? v.p.kind : '', t: v.i / sr, vel: v.vel});
+        else if (kind === 'kick'){ const p = v.p || {}; Object.assign(o, {fS: v.fS, fE: v.fE, tau: p.tau, t: v.i / sr, f: v.fE + (v.fS - v.fE) * v.e1, amp: v.amp, ampTau: p.ampTau, vel: v.vel}); }
+        else Object.assign(o, {t: v.i / sr, e: v.e !== undefined ? v.e : v.en, f: v.f || 0, vel: v.vel, open: v.open});
+        return o; };
+      for (const slot of this.slots){ const tr = this.tracks[slot]; if (!tr) continue; const inst = tr.inst, k = tr.instKind; let list = [];
+        if (inst.pool) list = inst.pool.v.filter(v => v.on).sort((a, b) => b.age - a.age).slice(0, 3); else if (inst.v && inst.v.on) list = [inst.v];
+        for (const v of list) voices.push(vinfo(slot, k, v)); }
+      const pats = []; for (const p of c.parts){ const o = p.obj, d = {slot: p.slot, part: p.spec.part, active: p.on};
+        if (o.pat) d.bits = o.pat.join(''); if (o.gate && o.gate.join && p.spec.part === 'pad') d.bits = o.gate.join('');
+        if (o.lanes) d.lanes = o.lanes.slice(0, 5).map(L => L.hits ? {p: L.p, bits: L.hits.join(''), i: ((c.k * 16) % L.p)} : {p: L.period, bits: L.gate.join(''), n: L.n, len: L.len});
+        if (o.target) d.bits = o.target.join(''); if (o.eps !== undefined) d.phase = {base: o.base, eps: o.eps}; if (o.alt) d.kick = {mode: o.mode, alt: o.alt}; pats.push(d); }
+      const g = this.g; return {type: 'math', t: this.t, sr, raw: Array.from(this.rawL || []), comp: c.dbg || null, voices, pats, seed: g.seed, world: g.world,
+        macro: Object.assign({}, this.macro), mix: {lufs: M.loud.lufs, lref: M.lref, target: M.target, autoGain: M.autoGain, gr: M.grMaster, peak: M.outPeak, aeqG: Array.from(M.aeq.g), aeqT: M.aeq.target.slice(), aeqM: Array.from(M.aeq.meas).map(x => 10 * Math.log10(x + 1e-12)), aeqF: M.aeq.f, gate: M.aeq.gate,
+          duckB: M.duckGain(this.t, M.duckDepth.bass), duckDepth: M.duckDepth.bass, lastKick: M.kicks.length ? (this.t - M.kicks[M.kicks.length - 1]) / sr : -1, tilt: M.tiltHigh, crush: M.crush, phaser: M.phaserMix, musicLP: M.musicLP.v, hallRT: this._rt, delayFB: this._fb}}; }
     next(){ if (this.comp) this.comp.doNudge('next'); }
     // scrub: drop what is scheduled but not yet heard and restart the bar grid right now at the chosen bar
     seek(bar){ const c = this.comp; if (!c) return; this.q.clear(); for (const tr of this.mixer.tracks) if (tr.inst.pend) tr.inst.pend.length = 0; c.seek(bar); c.t = this.t + 64; c.done = false; c.endSent = false; this.out.msg({type: 'seek', bar, t0: c.t}); }
@@ -110,6 +129,7 @@ function AWZ_ENGINE(A){
         if (tr.dying){ tr.fade -= dt / 2.5; if (tr.fade <= 0){ tr.fade = 0; dead = true; } } }
       if (dead) this.mixer.tracks = this.mixer.tracks.filter(t => !(t.dying && t.fade <= 0));
       this.mixer.process(L, R, n, this.t); this.t = end; this.blocks++;
+      if (this.mathOn){ const L0 = this.rawL || (this.rawL = new Float32Array(32)); for (let i = 0; i < 32; i++) L0[i] = L[i * 4]; if (this.blocks % 24 === 0) this.out.msg(this.mathSnap()); }
       if (this.blocks % 8 === 0){ const T = this.tracks; this.out.msg({type: 'meters', t: this.t, peaks: this.slots.map(s => T[s] ? T[s].peak : 0), lufs: this.mixer.loud.lufs, gr: this.mixer.grMaster, out: this.mixer.outPeak}); } } };
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = AWZ_ENGINE;

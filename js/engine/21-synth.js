@@ -41,7 +41,7 @@ function AWZ_SYNTH(A){
           const env = this.fenv.v, venv = (p.envAmt || 0) + (p.velEnv || 0) * (this.vel - .7);
           cut = clamp((p.cutoff || 1200) * this.cutJ * kt * Math.pow(2, venv * env + ((p.lfoCut || 0) + lv.lfo) * lfo + (p.cutMod || 0) + lv.cut), 25, sr * .44);
           const res = clamp((p.res || 0) + lv.res, 0, 1.05);
-          if (ladder){ this.fL.set(cut, res, sr); this.fL.drive = p.drive || 1; if (U > 1){ this.fR.set(cut * 1.01, res, sr); this.fR.drive = p.drive || 1; } }
+          this.cutNow = cut; if (ladder){ this.fL.set(cut, res, sr); this.fL.drive = p.drive || 1; if (U > 1){ this.fR.set(cut * 1.01, res, sr); this.fR.drive = p.drive || 1; } }
           else { const q = .5 + res * 6; this.sL.set(cut, q, sr); if (U > 1) this.sR.set(cut * 1.01, q, sr); }
           this.vibT += CR / sr; const vibA = (p.vib || 0) * clamp((this.vibT - (p.vibDelay || .35)) / .4, 0, 1);
           this.fmul = Math.pow(2, ((p.lfoPitch || 0) * lfo + vibA * A.sin1(this.vibT * (p.vibRate || 5.2))) / 1200);
@@ -77,7 +77,7 @@ function AWZ_SYNTH(A){
         if (this.gateLeft > 0 && --this.gateLeft === 0){ this.fenv.release(); this.aenv.release(); }
         this.freq += (this.target - this.freq) * glideK;
         if (this.k-- <= 0){ this.k = CR; const kt = Math.pow(2, (this.note - 36) / 12 * (p.keytrack === undefined ? .5 : p.keytrack));
-          const cut = clamp((p.cutoff || 220) * kt * Math.pow(2, (p.envAmt || 2) * this.fenv.v * (.7 + .6 * this.vel) + (p.cutMod || 0) + (p.live ? p.live.cut * .6 : 0)), 30, 4000); this.lad.set(cut, p.res || .25, sr); this.lad.drive = 1.2; }
+          const cut = clamp((p.cutoff || 220) * kt * Math.pow(2, (p.envAmt || 2) * this.fenv.v * (.7 + .6 * this.vel) + (p.cutMod || 0) + (p.live ? p.live.cut * .6 : 0)), 30, 4000); this.lad.set(cut, p.res || .25, sr); this.lad.drive = 1.2; this.cutNow = cut; }
         const f = this.freq, fs = f * (p.subOct === -1 ? .5 : 1);
         this.subPh += fs / sr; if (this.subPh >= 1) this.subPh -= 1;
         let sub = A.sin1(this.subPh); sub = (tanh(sub * sdrv + .1) - tanh(.1)) / sdn; sub = this.slp.tick(sub);
@@ -94,7 +94,7 @@ function AWZ_SYNTH(A){
   A.ModalVoice = class { constructor(sr, seed){ this.sr = sr; this.n = 0; this.c = new Float64Array(MAXP * 2); this.r2 = new Float64Array(MAXP * 2); this.g = new Float64Array(MAXP * 2); this.y1 = new Float64Array(MAXP * 2); this.y2 = new Float64Array(MAXP * 2); this.rr = new Float64Array(MAXP * 2);
       this.nz = new A.Noise(seed * 3 + 1); this.th = new A.SVF(); this.lp = new A.SVF(); this.r = A.rng(seed * 101 + 7); }
     // p.kind: 'felt' | 'piano' | 'ep' | 'marimba' | 'vibes' | 'kalimba' | 'glass'
-    start(off, note, vel, dur, p){ const sr = this.sr, f0 = mtof(note) * (1 + (this.r() * 2 - 1) * .0004); this.p = p; this.off = off; this.vel = vel; this.i = 0; this.gateLeft = Math.max(1, Math.round(dur * sr)); this.damped = false;
+    start(off, note, vel, dur, p){ this.note = note; const sr = this.sr, f0 = this.f0 = mtof(note) * (1 + (this.r() * 2 - 1) * .0004); this.p = p; this.off = off; this.vel = vel; this.i = 0; this.gateLeft = Math.max(1, Math.round(dur * sr)); this.damped = false;
       const kind = p.kind || 'felt'; let parts = [];
       if (kind === 'felt' || kind === 'piano'){ const B = note < 48 ? .0001 : note < 72 ? .0002 : .0005, P = note < 48 ? 12 : note < 72 ? 9 : 6, t1 = clamp(7 - (note - 36) * .11, 1.4, 8) * (p.sustain || 1), hc = (kind === 'felt' ? 700 : 1400) + (kind === 'felt' ? 1500 : 3500) * vel * (p.bright || 1);
         for (let k = 1; k <= P; k++){ const fk = k * f0 * Math.sqrt(1 + B * k * k); if (fk > sr * .45) break; const hs = 1 / Math.sqrt(1 + Math.pow(fk / hc, 4));
