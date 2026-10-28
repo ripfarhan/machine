@@ -23,7 +23,7 @@
   const field = new VZ.Field($('#field')), hero = new VZ.Hero($('#heroCv')), lanes = new VZ.Lanes($('#lanes'), rel => { if (S.pos !== null && S.pos !== undefined) seekTo(Math.max(0, Math.floor(S.pos / 4) * 4 + rel)); }), wheel = new VZ.Wheel($('#wheel')), gonio = new VZ.Gonio($('#gonio')), meter = new VZ.Meter($('#meter')), arc = new VZ.Arc($('#arc'), bar => seekTo(bar)), brain = new VZ.Brain($('#brain'));
   const reel = new AwaazReel($('#reelCv'), host), mathV = new AwaazMath($('#math'));
   let mathOn = false; try { mathOn = localStorage.getItem('awaaz.math') === '1'; } catch (e){}
-  function setMath(on){ mathOn = on; $('#math').classList.toggle('on', on); $('#mathBtn').classList.toggle('on', on); $('#mathBtn').textContent = on ? '≋ SPECTRUM' : '∑ MATH'; hero.mathOn = on; $('#hero').classList.toggle('mathmode', on); host.send({type: 'math', on}); try { localStorage.setItem('awaaz.math', on ? '1' : '0'); } catch (e){} if (on) setTimeout(() => mathV.render(true), 200); }
+  function setMath(on){ mathOn = on; $('#math').classList.toggle('on', on); $('#mathBtn').classList.toggle('on', on); $('#mathBtn').textContent = on ? '≋ SPECTRUM' : '∑ MATH'; hero.mathOn = on; $('#hero').classList.toggle('mathmode', on); host.send({type: 'math', on}); try { localStorage.setItem('awaaz.math', on ? '1' : '0'); } catch (e){}  }
   const knobs = {}; const mEl = $('#macros');
   for (const d of MACROS){ const el = document.createElement('div'); el.className = 'knob'; el.innerHTML = `<canvas></canvas><input type="range" min="0" max="100" aria-label="${d.name}"><div class="kn">${d.name}</div><div class="kd">${d.desc}</div>`; mEl.appendChild(el);
     knobs[d.key] = new VZ.Knob(el, Object.assign({v: .5}, d), (k, v) => setMacro(k, v)); el.addEventListener('pointerenter', () => { $('#macroHelp').textContent = d.name + ': ' + KEYDESC[d.key]; $('#macroHelp').classList.add('on'); }); el.addEventListener('pointerleave', () => $('#macroHelp').classList.remove('on')); }
@@ -133,7 +133,7 @@
   // ---------------------------------------------------------------- loop
   let last = performance.now(), fpsAcc = [];
   function frame(){ const nowp = performance.now(), dt = Math.min(.05, (nowp - last) / 1000); last = nowp; const t = host.now();
-    features(t, dt); field.draw(F, nowp / 1000); hero.draw(F, t, dt); lanes.draw(F, t, dt); wheel.draw(F, t, dt); for (const k in knobs) knobs[k].draw(F, t, dt); xy.draw(F, t, dt); gonio.draw(F); meter.draw(F, t, dt); arc.draw(F, t, S.pos === null || S.pos === undefined || !S.info ? null : S.pos + Math.max(0, Math.min(1.5, (t - S.barT0) / S.barSec))); drawStrips(dt); brain.tick(F); if (mathOn) mathV.render();
+    features(t, dt); field.draw(F, nowp / 1000); hero.draw(F, t, dt); lanes.draw(F, t, dt); wheel.draw(F, t, dt); for (const k in knobs) knobs[k].draw(F, t, dt); xy.draw(F, t, dt); gonio.draw(F); meter.draw(F, t, dt); arc.draw(F, t, S.pos === null || S.pos === undefined || !S.info ? null : S.pos + Math.max(0, Math.min(1.5, (t - S.barT0) / S.barSec))); drawStrips(dt); brain.tick(F); if (mathOn) mathV.render(F, S.playing);
     if (S.reel) reel.draw(F, t, $('#field'));
     // dynamic quality: p95 frame time
     fpsAcc.push(dt); if (fpsAcc.length > 90){ const s = fpsAcc.slice().sort((a, b) => a - b), p95 = s[Math.floor(s.length * .95)]; fpsAcc = []; if (p95 > .024 && field.scale > .3) field.scale -= .1; else if (p95 < .018 && field.scale < .5) field.scale += .05; }

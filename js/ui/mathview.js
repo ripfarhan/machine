@@ -1,69 +1,66 @@
-/* Maut ki Awaaz — MATH view: the live numbers inside the engine, shown as the formulas they are plugged into.
-   Toggle with the ∑ button in the hero or the M key. Fed by the engine's 'math' telemetry (~15/s, only while open). */
+/* Maut ki Awaaz — MATH view: the live numbers inside the engine, plugged into their formulas.
+   Toggle with ∑ MATH or the M key. Engine telemetry arrives ~15/s; between snapshots the clock, phases, samples and the
+   spectrum are computed every frame here, so the numbers never sit still. Digits that changed since the last frame glow. */
 'use strict';
 class AwaazMath {
-  constructor(el){ this.el = el; this.m = null; this.last = 0; this.N = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B']; this.raw = []; }
-  feed(m){ this.m = m; for (const v of m.raw) this.raw.push(v); if (this.raw.length > 64) this.raw.splice(0, this.raw.length - 64); }
-  render(force){ const now = performance.now(); if (!this.m || (!force && now - this.last < 90)) return; this.last = now; const m = this.m, c = m.comp; if (!c) return;
-    const f = (x, d) => x === undefined || x === null || !isFinite(x) ? '–' : (+x).toFixed(d === undefined ? 2 : d);
-    const n = x => `<b>${x}</b>`, k = x => `<i>${x}</i>`, hz = mi => 440 * Math.pow(2, (mi - 69) / 12), nm = mi => this.N[((mi % 12) + 12) % 12] + (Math.floor(mi / 12) - 1);
-    const big = x => Math.round(x).toLocaleString('en-US');
-    // ---- 1 · time
-    const secs = m.t / m.sr, stepN = c.stepN, step = Math.floor(m.t / stepN);
-    const T = `<h5>01 · TIME</h5>
-      <p>t = ${n(big(m.t))} samples</p>
-      <p>t ÷ sr = ${big(m.t)} ÷ ${big(m.sr)} = ${n(f(secs, 2))} s</p>
-      <p>step = 60 ÷ ${n(c.bpm)} ÷ 4 × sr = ${n(f(stepN, 1))}</p>
-      <p>bar = 16 × step = ${n(big(c.barN))}</p>
-      <p>swing = +${n(f(c.swing, 3))} step on odd 16ths</p>
-      <p>${k('numbers so far')} = 2 × t = ${n(big(m.t * 2))}</p>`;
-    // ---- 2 · energy / form
-    const lerp = c.E0 + (c.E1 - c.E0) * c.prog, ins = c.parts.map(p => `<span class="${p.active ? 'on' : 'off'}">${p.slot.toUpperCase()} ${f(p.eff)}${p.active ? '✓' : '·'}</span>`).join(' ');
-    const E = `<h5>02 · ENERGY & FORM</h5>
-      <p>E = lerp(${f(c.E0)}, ${f(c.E1)}, ${f(c.prog)}) + (${f(c.mE)} − .5)·.7</p>
-      <p>&nbsp;&nbsp;= ${f(lerp, 3)} + ${f((c.mE - .5) * .7, 3)} = ${n(f(c.E, 3))}</p>
-      <p>density = ${f(c.mDen)}·1.15 + E·.25 − .2 = ${n(f(c.density, 3))}</p>
-      <p>${c.section.toUpperCase()} bar ${n(c.bis + 1)}/${c.sbars} · α(rain→grid) = ${n(f(c.alpha))}</p>
-      <p>${k('part plays if E ≥ threshold')}</p><p class="wrap">${ins}</p>`;
-    // ---- 3 · harmony
-    const scale = c.sc.map(s => this.N[(s + c.tonic) % 12]).join(' '), pcs = c.pcs.map(p => this.N[p]).join(' ');
-    const notes = c.notes.slice(0, 4).map(mi => `${nm(mi)}=${n(f(hz(mi), 1))}`).join(' ');
-    const H = `<h5>03 · HARMONY</h5>
-      <p>key ${n(this.N[c.tonic] + ' ' + c.mode)} = {${c.sc.join(',')}}</p>
-      <p>${k(scale)}</p>
-      <p>loop[${c.ci}] of ${c.loopLen} (${c.family}, cycle ${c.cycle}): ${n(c.chord.replace(/#/g, '♯'))}</p>
-      <p>degree ${c.deg} · ${c.type} → {${pcs}}</p>
-      <p>f = 440·2^((m−69)/12)</p><p class="wrap">${notes}</p>
-      <p>sub ${nm(c.sub)} = ${n(f(hz(c.sub) / 2, 1))} Hz</p>`;
-    // ---- 4 · voices (live equations)
-    const vs = m.voices.slice().sort((a, b) => b.age - a.age); const seen = {}; const vl = [];
-    for (const v of vs){ if (seen[v.slot] >= 1) continue; seen[v.slot] = (seen[v.slot] || 0) + 1; const S = v.slot.toUpperCase();
-      if (v.kind === 'kick') vl.push(`<p>${k(S)} f(t) = fE + (fS−fE)·e<sup>−t/τ</sup> = ${f(v.fE, 0)} + ${f(v.fS - v.fE, 0)}·e<sup>−${f(v.t, 3)}/${f(v.tau, 3)}</sup> = ${n(f(v.f, 1))} Hz · amp ${n(f(v.amp))}</p>`);
-      else if (v.kind === 'va' || v.kind === 'mono') vl.push(`<p>${k(S)} ${nm(v.note)} ${n(f(v.f, 1))} Hz · cut = ${f(v.base, 0)}·2^(${f(v.amt)}·${f(v.fenv)} + ${f(v.lfoCut)}·${f(v.lfo)}) = ${n(f(v.cut, 0))} Hz · env ${n(f(v.env))}</p>`);
-      else if (v.kind === 'bass') vl.push(`<p>${k(S)} sub = sin(2π·${f(v.fsub, 1)}·t) · env ${n(f(v.env))} · harm LP ${n(f(v.cut, 0))} Hz</p>`);
-      else if (v.kind === 'modal') vl.push(`<p>${k(S)} ${v.mk}: f<sub>k</sub> = k·${f(v.f, 1)}·√(1+B·k²) × ${n(v.n)} resonators · t ${n(f(v.t, 2))} s</p>`);
-      else if (v.kind !== 'tex') vl.push(`<p>${k(S)} e = e<sub>0</sub>·k<sup>n</sup> → ${n(f(v.e, 3))} · t ${f(v.t, 3)} s${v.f ? ' · ' + f(v.f, 0) + ' Hz' : ''}</p>`);
-      if (vl.length >= 7) break; }
-    const V = `<h5>04 · VOICES NOW (${m.voices.length})</h5>${vl.join('') || '<p>' + k('silence') + '</p>'}`;
-    // ---- 5 · rhythm
-    const rl = []; const lcm = (a, b) => { const g = (x, y) => y ? g(y, x % y) : x; return a / g(a, b) * b; };
-    for (const p of m.pats){ if (!p.active) continue; const S = p.slot.toUpperCase();
-      if (p.lanes){ const L = p.lanes.filter(x => x.i !== undefined); if (L.length){ rl.push(`<p>${k(S)} ${L.map(x => `p${x.p}:${x.bits.split('').map((b, j) => j === x.i ? `<b>${b === '1' ? '●' : '○'}</b>` : (b === '1' ? '●' : '·')).join('')}`).join(' ')}</p>`); rl.push(`<p>&nbsp;&nbsp;LCM(${L.map(x => x.p).join(',')}) = ${n(big(L.reduce((a, x) => lcm(a, x.p), 1)))} steps till repeat</p>`); }
-        else rl.push(`<p>${k(S)} ${p.lanes.map(x => `len ${x.len}: ${x.bits.replace(/1/g, '●').replace(/0/g, '·')}`).join(' ')}</p>`); }
-      else if (p.bits) rl.push(`<p>${k(S)} E(${(p.bits.match(/1/g) || []).length},${p.bits.length}) ${p.bits.replace(/1/g, '●').replace(/0/g, '·')}</p>`);
-      else if (p.phase) rl.push(`<p>${k(S)} period<sub>k</sub> = ${p.phase.base}·(1 + k·${f(p.phase.eps, 4)}) steps</p>`);
-      if (rl.length >= 7) break; }
-    const R = `<h5>05 · RHYTHM</h5>${rl.join('')}`;
-    // ---- 6 · master
-    const x = m.mix, eq = x.aeqF.map((fr, i) => `${fr >= 1000 ? fr / 1000 + 'k' : fr}:${x.aeqG[i] >= 0 ? '+' : ''}${f(x.aeqG[i], 1)}`).join(' ');
-    const Mx = `<h5>06 · MASTER</h5>
-      <p>gain = 10^((${x.target} − ${f(x.lref, 1)})/20) = ${n(f(x.autoGain, 2))}×</p>
-      <p>LUFS ${n(f(x.lufs, 1))} · peak ${n(f(x.peak, 3))} · glue −${f(x.gr, 1)} dB</p>
-      <p>duck g = 10^(−${x.duckDepth}·x/20) = ${n(f(x.duckB, 3))}${x.lastKick >= 0 ? ' · kick ' + f(x.lastKick * 1000, 0) + ' ms ago' : ''}</p>
-      <p>auto-EQ dB ${eq}</p>
-      <p>hall RT60 ${n(f(x.hallRT, 1))} s · delay fb ${n(f(x.delayFB, 2))} · tilt ${f(x.tilt, 1)} dB</p>
-      <p>seed ${n(m.seed)} → this whole song</p>`;
-    // ---- 7 · raw samples
-    const raw = this.raw.slice(-9).map(v => `<p>${v >= 0 ? '+' : ''}${v.toFixed(5)}</p>`).join('');
-    const W = `<h5>07 · OUTPUT</h5>${raw}`;
-    this.el.innerHTML = `<div class="mc">${T}</div><div class="mc">${E}</div><div class="mc">${H}</div><div class="mc w2">${V}</div><div class="mc w2">${R}</div><div class="mc">${Mx}</div><div class="mc raw">${W}</div>`; } }
+  constructor(el){ this.el = el; this.m = null; this.at = 0; this.last = 0; this.prev = []; this.N = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B']; }
+  feed(m){ this.m = m; this.at = performance.now(); }
+  render(F, playing){ const now = performance.now(); if (!this.m || now - this.last < 33) return; this.last = now; const m = this.m, c = m.comp; if (!c) return;
+    let idx = 0; const prev = this.prev, cur = [];
+    const n = (x, d) => { const s = typeof x === 'string' ? x : (x === undefined || x === null || !isFinite(x) ? '–' : (+x).toFixed(d === undefined ? 2 : d)); const i = idx++; cur[i] = s; return `<b${prev[i] !== undefined && prev[i] !== s ? ' class="c"' : ''}>${s}</b>`; };
+    const k = x => `<i>${x}</i>`, hz = mi => 440 * Math.pow(2, (mi - 69) / 12), nm = mi => this.N[((mi % 12) + 12) % 12] + (Math.floor(mi / 12) - 1), big = x => Math.round(x).toLocaleString('en-US'), f = (x, d) => (+x).toFixed(d === undefined ? 2 : d);
+    const sr = m.sr, tS = m.t + (playing ? (now - this.at) / 1000 * sr : 0), sec = tS / sr, barF = (tS - (c.k * c.barN - c.barN)) / c.barN;
+    const stepInBar = Math.max(0, Math.min(15, Math.floor(((tS / c.stepN) % 16 + 16) % 16)));
+    // 01 clock
+    const prog = '▮'.repeat(stepInBar + 1) + '▯'.repeat(15 - stepInBar);
+    const T = `<h5>01 · CLOCK</h5>
+      <p class="xl">${n(big(tS))}</p>
+      <p>÷${big(sr)} = ${n(sec, 3)} s</p>
+      <p>${n(String(stepInBar + 1).padStart(2, '0'))} ${k(prog)}</p>
+      <p>Σ ${n(big(tS * 2))} nums</p>`;
+    // 02 energy
+    const lerp = c.E0 + (c.E1 - c.E0) * c.prog;
+    const E = `<h5>02 · ENERGY</h5>
+      <p>${n(c.E0)}→${n(c.E1)} @${n(c.prog)} = ${n(lerp, 3)}</p>
+      <p>+(${n(c.mE)}−.5)·.7 = ${n(c.E, 3)}</p>
+      <p>D=${n(c.mDen)}·1.15+E/4−.2=${n(c.density, 3)}</p>
+      <p>${k(c.section.toUpperCase())} ${n(c.bis + 1, 0)}/${c.sbars} ${'█'.repeat(Math.round(c.E * 8))}${'░'.repeat(8 - Math.round(c.E * 8))}</p>`;
+    // 03 harmony: live oscillator phases of the chord tones  φ = frac(f·t)
+    const ph = c.notes.slice(0, 3).map(mi => { const fr = hz(mi), p = (fr * sec) % 1; return `<p>${nm(mi)} ${n(fr, 1)} φ${n(p, 3)}</p>`; }).join('');
+    const H = `<h5>03 · ${this.N[c.tonic]} ${c.mode.toUpperCase()}</h5>
+      <p>${n(c.chord.replace(/#/g, '♯'))} ${k('f=440·2^((m−69)/12)')}</p>${ph}`;
+    // 04 voices (spans both rows)
+    const vs = m.voices.slice().sort((a, b) => b.age - a.age), seen = {}, vl = [];
+    for (const v of vs){ if (seen[v.slot]) continue; seen[v.slot] = 1; const S = k(v.slot.toUpperCase());
+      if (v.kind === 'kick') vl.push(`<p>${S} ${n(v.fE, 0)}+${n(v.fS - v.fE, 0)}e<sup>−t/τ</sup>=${n(v.f, 1)}Hz a${n(v.amp, 3)}</p>`);
+      else if (v.kind === 'va' || v.kind === 'mono') vl.push(`<p>${S} ${n(v.f, 1)}Hz cut ${n(v.cut, 0)} lfo ${n(v.lfo, 2)} e ${n(v.env, 3)}</p>`);
+      else if (v.kind === 'bass') vl.push(`<p>${S} sin(2π·${n(v.fsub, 1)}t)·${n(v.env, 3)}</p>`);
+      else if (v.kind === 'modal') vl.push(`<p>${S} k·${n(v.f, 1)}√(1+Bk²) ×${v.n} t${n(v.t, 2)}</p>`);
+      else if (v.kind !== 'tex') vl.push(`<p>${S} e₀k<sup>n</sup>=${n(v.e, 4)} t${n(v.t, 3)}</p>`);
+      if (vl.length >= 12) break; }
+    const V = `<h5>04 · VOICES NOW · ${n(m.voices.length, 0)}</h5>${vl.join('') || '<p>' + k('silence') + '</p>'}`;
+    // 05 to the speaker: the actual samples of this frame (analyser)
+    const L = F.tl, R = F.tr; let ss = 0, slr = 0, sl = 0, sr2 = 0; for (let i = 0; i < L.length; i += 4){ ss += L[i] * L[i]; slr += L[i] * R[i]; sl += L[i] * L[i]; sr2 += R[i] * R[i]; }
+    const rms = 20 * Math.log10(Math.sqrt(ss / (L.length / 4)) + 1e-9), rho = slr / Math.sqrt(sl * sr2 + 1e-12); const raw = []; for (let i = 0; i < 4; i++){ const v = L[i * 197]; raw.push(`<span>${n((v >= 0 ? '+' : '') + v.toFixed(5))}</span>`); }
+    const W = `<h5>05 · TO SPEAKER</h5><div class="rawg">${raw.join('')}</div><p>RMS ${n(rms, 1)} ρ ${n(rho, 2)}</p>`;
+    // 06 FFT peaks (this frame)
+    const fd = F.fd, binHz = sr / (fd.length * 2), pk = []; for (let i = 3; i < fd.length - 1 && i * binHz < 12000; i++) if (fd[i] > fd[i - 1] && fd[i] >= fd[i + 1] && fd[i] > -70) pk.push([fd[i], i]); pk.sort((a, b) => b[0] - a[0]);
+    const peaks = pk.slice(0, 3).sort((a, b) => a[1] - b[1]).map(([db, i]) => `<p>${n(i * binHz, 0)} Hz ${n(db, 1)} dB</p>`).join('');
+    const X = `<h5>06 · FFT Σx·e<sup>−2πift</sup></h5>${peaks || '<p>' + k('…') + '</p>'}`;
+    // 07 rhythm: the live step walks through each pattern
+    const rl = [], gs = Math.floor(tS / c.stepN); const lcm = (a, b) => { const g = (x, y) => y ? g(y, x % y) : x; return a / g(a, b) * b; };
+    for (const p of m.pats){ if (!p.active) continue; const S = k(p.slot.toUpperCase()); const draw = (bits, i) => bits.split('').map((b, j) => j === i ? `<b class="c">${b === '1' ? '●' : '○'}</b>` : (b === '1' ? '●' : '·')).join('');
+      if (p.lanes){ const Ls = p.lanes.filter(x => x.i !== undefined); if (Ls.length) rl.push(`<p>${S} ${Ls.slice(0, 3).map(x => draw(x.bits, gs % x.p)).join(' ')} ${k('LCM')} ${n(big(Ls.reduce((a, x) => lcm(a, x.p), 1)), 0)}</p>`); else rl.push(`<p>${S} ${draw(p.lanes[0].bits, gs % p.lanes[0].bits.length)}</p>`); }
+      else if (p.bits) rl.push(`<p>${S} E(${(p.bits.match(/1/g) || []).length},${p.bits.length}) ${draw(p.bits, gs % p.bits.length)}</p>`);
+      else if (p.phase) rl.push(`<p>${S} T<sub>k</sub>=${p.phase.base}·(1+k·${n(p.phase.eps, 4)})</p>`);
+      if (rl.length >= 4) break; }
+    const Rr = `<h5>07 · RHYTHM</h5>${rl.join('') || '<p>' + k('no pattern') + '</p>'}`;
+    // 08 master
+    const x = m.mix;
+    const Mx = `<h5>08 · MASTER</h5>
+      <p>LUFS ${n(x.lufs, 2)} pk ${n(x.peak, 3)}</p>
+      <p>g=10^(Δ/20)=${n(x.autoGain, 3)}×</p>
+      <p>duck 10^(−${x.duckDepth}x/20)=${n(x.duckB, 3)}</p>
+      <p>${k('EQ')} ${x.aeqG.map(g => n((g >= 0 ? '+' : '') + g.toFixed(1))).join(' ')}</p>`;
+    this.prev = cur;
+    this.el.innerHTML = `<div class="mc">${T}</div><div class="mc">${E}</div><div class="mc">${H}</div><div class="mc">${Mx}</div><div class="mc vv">${V}</div><div class="mc">${W}</div><div class="mc">${X}</div><div class="mc w2">${Rr}</div>`; } }
