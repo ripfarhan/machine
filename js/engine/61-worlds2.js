@@ -305,6 +305,35 @@ function AWZ_WORLDS2(A){
     fx: {plate: {decay: .55, damping: .45}, hall: {rt60: 5, damp: 3500}, delay: {beats: .75, feedback: .4, lp: 3000, hp: 400, pingpong: 1}, duck: {bass: 9, ret: 3}, master: {tiltHigh: -1.5}},
     moves: {riser: 1.2, impact: 1.2, roll: 1, gap: 1, hpbuild: 1, swell: 1, stutter: .8}, macros: {chaos: .2}};
 
+  // sibling of BREAKS: the same euphoria, a different engine — a singing delayed arp is the hook, voices are chopped and pitched up,
+  // the drums shuffle (2-step) through the first half and break open into a full breakbeat at the peak
+  W.ATLAS = {name: 'ATLAS', desc: 'a singing arp and chopped voices over a shuffle that breaks open at the peak', ref: 'Bicep — Atlas / Overmono', v2: true,
+    tempo: [128, 134], swing: [.02, .06], modes: {aeolian: 2, dorian: 2.2, ionian: .6}, families: {poploop: 1.6, three: 1.4, cinematic: 1, planing: 1, riff: .8}, colour: [.35, .6], spread: [.55, .85], form: ['techno', 'swell'],
+    sends: {shim: {feedback: .45, gain: .32, rt60: 6}},
+    tracks: {
+      kick:  drumBus({patch: ['kick_909', 'kick_round'], db: -6}),
+      snare: drumBus({patch: ['snare_clap', 'snare_909'], db: -10, plate: .25}),
+      perc:  drumBus({patch: ['perc_click', 'perc_plonk'], db: -17, pan: -.25, delay: .2}),
+      hat:   drumBus({patch: ['hat_tight', 'hat_808'], db: -16, hp: 4200, pan: .15}),
+      shaker:drumBus({patch: ['shaker'], db: -20, pan: -.2}),
+      lead:  {patch: ['arp_saw', 'seq_saw', 'arp_pulse'], voices: 10, db: -6, hp: 220, lp: 6500, delay: .45, hall: .25, shim: .18, eq: [[2800, -2, .8]]},
+      pad:   {patch: ['pad_warm', 'mellotron'], voices: 12, db: -9, hp: 180, hall: .5},
+      bass:  {patch: ['bass_sub', 'fm_bass'], bus: 'bass', db: -5},
+      vox:   {patch: ['vox_chop'], voices: 8, db: -6, hp: 320, lp: 7500, delay: .38, hall: .45, shim: .15},
+      stab:  {patch: ['stab_juno', 'supersaw_stab'], voices: 10, db: -8, hp: 220, hall: .35, delay: .15}},
+    parts: [
+      {part: 'pad', slot: 'pad', opts: {mode: 'swell', vel: .5}, on: 0, core: true},
+      {part: 'arp', slot: 'lead', opts: {lanes: 2, density: .85, rate: 1}, on: .18, core: true},
+      {part: 'bass', slot: 'bass', opts: {mode: 'sub'}, on: .3},
+      {part: 'twostep', slot: 'kick', opts: {}, on: .3, off: .7, drum: true},
+      {part: 'shaker', slot: 'shaker', opts: {}, on: .38, drum: true},
+      {part: 'chops', slot: 'vox', opts: {up: 12, vel: .7}, on: .42},
+      {part: 'clicks', slot: 'perc', opts: {count: 3}, on: .5, drum: true},
+      {part: 'stab', slot: 'stab', opts: {hits: 8}, on: .6},
+      {part: 'breaks', slot: 'kick', opts: {}, on: .7, drum: true}],
+    fx: {plate: {decay: .55, damping: .45}, hall: {rt60: 4.5, damp: 3600}, delay: {beats: .75, feedback: .45, lp: 3500, hp: 400, pingpong: 1}, duck: {bass: 8, ret: 3}, master: {tiltHigh: -2}},
+    moves: {riser: 1.2, impact: 1, roll: .8, gap: 1.2, hpbuild: 1, swell: 1.2, stutter: 1, throw: 1, halftime: .6}, macros: {chaos: .2, space: .6}};
+
   W.COSMIC = {name: 'COSMIC', desc: 'singing brass, phased strings, wind', ref: 'Jarre / Vangelis', v2: true,
     tempo: [88, 100], swing: [0, .03], modes: {dorian: 2, lydian: 2, aeolian: 1}, families: {cinematic: 2, three: 1.5, tetra: 1}, colour: [.35, .6], spread: [.55, .85], form: ['swell'],
     tracks: {
