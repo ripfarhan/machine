@@ -11,7 +11,7 @@ const $ = s => document.querySelector(s);
    ========================================================= */
 // [id, group, label, min, max, defaultBase, defaultSrc, defaultDepth, hint]
 const P = {}; PARAMS.forEach(p => P[p[0]] = {base: p[5], src: p[6], depth: p[7]});
-function applyPreset(key){
+function applyPreset(key){ if (state.exporting) return;
   PARAMS.forEach(p => P[p[0]] = {base: p[5], src: p[6], depth: p[7]});
   const d = (PRESETS[key] && PRESETS[key].dials) || {};
   for (const k in d){ const v = d[k]; P[k].base = v[0]; if (v.length > 1){ P[k].src = v[1]; P[k].depth = v[2]; } }
@@ -29,7 +29,7 @@ function randomizeDials(){
    ========================================================= */
 const state = {
   media: [], preset: 'overdrive', seed: 1312, react: 1, intensity: 1, clarity: .6, exSize: 1080, exQ: 16, exporting: false, fontSet: 'auto', lengthSel: 30, fps: 60, clipFrames: 24,
-  src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0, preDrop: false, preCalm: .7, dropAt: null, failed: [], libGen: 0, wordMode: 'random', cues: [], lyOff: 0, lyHow: 'word', lyHold: 4, tapIdx: 0,
+  wordsOn: false, aspect: 'portrait', src: 'beat', bpm: 100, beatSeed: 7, buffer: null, songBuffer: null, songName: '', songStart: 0, songAn: null, beatAn: null, bpmMul: 1, rIn: null, rOut: null, lenCustom: 20, dropGate: false, gateT: 0, preDrop: false, preCalm: .7, dropAt: null, failed: [], libGen: 0, wordMode: 'random', cues: [], lyOff: 0, lyHow: 'word', lyHold: 4, tapIdx: 0,
   dur: 30, A: null, grid: null, off: 0, score: null, flkPattern: 'burst'
 };
 function sig(name, t){
@@ -59,7 +59,10 @@ const hype = t => sig('hype', t), punch = t => sig('punch', t);
    4. MEDIA: images, GIFs (decoded to frames), video clips (sampled to frames)
    ========================================================= */
 const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-function resizeAll(w, h){ if (w === W && h === H) return; W = w; H = h; SC = W / 720; [glc, cBase, cOver, cText, cPat].forEach(c => { c.width = W; c.height = H; });
+// output format: portrait 9:16 (default), square 1:1, landscape 16:9. `short` is the short side (540 / 720 / 1080).
+const ASPECTS = {portrait: [9, 16], square: [1, 1], landscape: [16, 9]};
+function dimsFor(short){ const [a, b] = ASPECTS[state.aspect] || ASPECTS.portrait; return a <= b ? [short, Math.round(short * b / a / 2) * 2] : [Math.round(short * a / b / 2) * 2, short]; }
+function resizeAll(w, h){ if (w === W && h === H) return; W = w; H = h; SC = Math.min(W, H) / 720; [glc, cBase, cOver, cText, cPat].forEach(c => { c.width = W; c.height = H; });
   [texBase, texOver, texText, texPat, fboTex[0], fboTex[1]].forEach(t => { gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null); });
   for (let i = 0; i < 2; i++){ gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[i]); gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT); } gl.bindFramebuffer(gl.FRAMEBUFFER, null); patKey = -1; }
 function lumOf(src){ const c = mk(12, 20), x = c.getContext('2d'); try { x.drawImage(src, 0, 0, 12, 20); const d = x.getImageData(0, 0, 12, 20).data; let s = 0;
@@ -251,11 +254,12 @@ function buildScore(){
     const cl = val('clones', start); const tot = Object.values(lay).reduce((x, y) => x + y, 0); lay.stack = tot * cl * .7;
     const layout = pickW(r, lay), mm = media[m];
     const c = {start, end: start, P: Pz, m, layout, I, isFlash,
-      lookA: LOOK[pick(r, Pz.looks)], palA: pick(r, Pz.pals), lookB: LOOK[pick(r, Pz.looks)], palB: pick(r, Pz.pals), look2: LOOK[pick(r, Pz.looks)], pal2: pick(r, Pz.pals),
+      lookA: LOOK[pick(r, Pz.looks)], palA: pick(r, Pz.pals), lookB: LOOK[pick(r, Pz.looksB || Pz.looks)], palB: pick(r, Pz.palsB || Pz.pals), look2: LOOK[pick(r, Pz.looks)], pal2: pick(r, Pz.pals),
       z0: rr(r, 1, 1.08), z1: rr(r, 1.05, 1.35), px0: rr(r, -.6, .6), py0: rr(r, -.6, .6), px1: rr(r, -.6, .6), py1: rr(r, -.6, .6), flip: r() < .25,
       blockSize: pick(r, [16, 24, 32, 48, 64]), hue0: r() * 6.28, cyc0: r(), reps: r() < .35 ? 2 : 1, seed: r() * 1000, kseg: pick(r, [4, 6, 8, 10]),
-      clipStart: (r() * 1000) | 0, clipDir: r() < .25 ? -1 : 1, clipRate: rr(r, .6, 1.6), deco: []};
-    if (layout === 'pip'){
+      m2: other(m), clipStart: (r() * 1000) | 0, clipDir: r() < .25 ? -1 : 1, clipRate: rr(r, .6, 1.6), deco: []};
+    if (layout === 'pip' && Pz.pipRect){ const q = Pz.pipRect, lw = W >= H; const R0 = lw ? [.2, .22, .6, .56] : q; c.rects = [{x: (R0[0] + rr(r, -.02, .02)) * W, y: (R0[1] + rr(r, -.03, .03)) * H, w: R0[2] * W, h: R0[3] * H, m: other(m), z0: rr(r, 1, 1.1), z1: rr(r, 1.05, 1.25), px: rr(r, -.4, .4), py: rr(r, -.4, .4), shadow: null}]; }
+    else if (layout === 'pip'){
       const T = [[[.06,.07,.62,.3],[.32,.6,.62,.3]], [[.12,.2,.76,.5]], [[.05,.06,.52,.27],[.43,.37,.52,.27],[.08,.67,.52,.27]], [[.08,.52,.84,.38]], [[.1,.1,.8,.36],[.1,.54,.8,.36]]];
       c.rects = pick(r, T).map(q => ({x: (q[0] + rr(r, -.03, .03)) * W, y: (q[1] + rr(r, -.03, .03)) * H, w: q[2] * W, h: q[3] * H, m: other(m), z0: rr(r, 1, 1.2), z1: rr(r, 1.1, 1.45), px: rr(r, -.7, .7), py: rr(r, -.7, .7),
         shadow: Pz.name === 'Bazaar VHS' && r() < .7 ? {dx: rr(r, 10, 26), dy: rr(r, 10, 26), color: pick(r, ['#ff2ea6', '#7a00ff', '#00e5ff', '#ff3d00'])} : null}));
@@ -307,10 +311,10 @@ function buildScore(){
   const trig = {}; for (const id of ['invertFlk', 'whiteFlash', 'blackBlink', 'strobe']){ const s = P[id].src; if (!trig[s]) trig[s] = triggers(s, .5, .07); }
   if (!trig.kick) trig.kick = triggers('kick', .5, .07);
   // words
-  const texts = [], words = parseWords(); let wi = 0;
+  const texts = [], words = state.wordsOn ? parseWords() : []; let wi = 0;   // words off: no text events in any style
   const mkEv = (t0, t1, word, word2) => { const c = cutAt(cuts, t0), Pz = c.P, style = word2 ? 'stack' : pick(r, Pz.textStyles.filter(x => x !== 'stack').length ? Pz.textStyles.filter(x => x !== 'stack') : Pz.textStyles); const fset = FONT_SETS[state.fontSet] || Pz.fonts || ['narrow', 'anton'];
     return {start: t0, end: Math.min(dur, t1), style, word, word2: word2 || null, color: pick(r, BRIGHTS), color2: pick(r, BRIGHTS), mode: pick(r, Pz.textModes), stretch: rr(r, .8, 1.25), y: rr(r, .25, .75), x: rr(r, .15, .85), rot: rr(r, -.12, .12), side: r() < .5 ? .14 : .86, lower: r() < .5, seed: r() * 1e4, font: pick(r, fset)}; };
-  if (state.wordMode === 'lyrics'){
+  if (state.wordsOn && state.wordMode === 'lyrics'){
     // timed lyrics: each line owns the window from its cue to the next cue (capped by max hold); shown whole, or one word per beat across the window
     const cues = state.cues.filter(q => q.t !== null && q.text.trim()).map(q => ({t: q.t + state.lyOff, text: q.text.trim()})).sort((a, b) => a.t - b.t);
     for (let i = 0; i < cues.length; i++){ const t0 = cues[i].t; if (t0 >= dur || t0 < -.5) continue; const next = i + 1 < cues.length ? cues[i + 1].t : dur; const t1 = Math.min(next, t0 + state.lyHold, dur); if (t1 - t0 < .05) continue;
@@ -322,15 +326,37 @@ function buildScore(){
       const every = Math.max(1, Math.floor(grid.length / ws.length));
       ws.forEach((w, k) => { const gi = Math.min(grid.length - 1, k * every); const a = Math.max(0, grid[gi]), b = k + 1 < ws.length ? Math.max(a + .08, grid[Math.min(grid.length - 1, (k + 1) * every)]) : t1; texts.push(mkEv(a, Math.min(b, t1), w)); }); }
     texts.sort((a, b) => a.start - b.start);
-  } else if (words.length){ for (let k = 1; k < beats.length; k++){ const bt = beats[k]; if (bt > dur - .25) break; const rate = val('wordRate', bt);
-    const sub = rate > .8 && hype(bt) > .6 ? 2 : 1; // two words per beat when hot
-    for (let s = 0; s < sub; s++){ const t0 = bt + s * per / 2; if (r() > rate * (.35 + hype(t0) * .8)) continue; const c = cutAt(cuts, t0), Pz = c.P, style = pick(r, Pz.textStyles);
-      const fset = FONT_SETS[state.fontSet] || Pz.fonts || ['narrow', 'anton'];
-      const ev = {start: t0, end: Math.min(dur, t0 + per / sub * (r() < .4 ? .5 : 1)), style, word: words[wi % words.length], word2: null, color: pick(r, BRIGHTS), color2: pick(r, BRIGHTS), mode: pick(r, Pz.textModes),
-        stretch: rr(r, .8, 1.25), y: rr(r, .25, .75), x: rr(r, .15, .85), rot: rr(r, -.12, .12), side: r() < .5 ? .14 : .86, lower: r() < .5, seed: r() * 1e4, font: pick(r, fset)};
-      if (style === 'stack'){ ev.word2 = words[(wi + 1) % words.length]; wi += 2; } else wi++; texts.push(ev); } } }
-  state.score = {cuts, texts, trig}; patKey = -1; drawStrip();
+  } else if (words.length){
+    // random-words mode, made deliberate: each line of the words box is a phrase; a phrase starts on a bar line and plays its words in order
+    // on a steady grid (rate picks bar / half-bar / beat), with ONE style, font, colour and position for the whole phrase, then rests a bar
+    const lines = lyricLines().map(l => l.split(/\s+/).filter(Boolean)).filter(l => l.length); let li = 0, k = 4;
+    const ANCH = [{style: 'tall', y: .5}, {style: 'small', x: .5, y: .78}, {style: 'small', x: .5, y: .22}, {style: 'vertical'}, {style: 'tall', y: .62}];
+    while (k < beats.length && lines.length){ const bt = beats[k]; if (bt > dur - .5) break; const rate = val('wordRate', bt);
+      if (rate < .05 || hype(bt) < .12){ k += 4; continue; }
+      const step = rate < .3 ? 4 : rate < .6 ? 2 : 1, line = lines[li++ % lines.length], c0 = cutAt(cuts, bt), Pz = c0.P;
+      const allowed = Pz.textStyles && Pz.textStyles.length ? Pz.textStyles : ['tall'], an = ANCH.filter(a => allowed.includes(a.style)), A0 = an.length ? pick(r, an) : {style: allowed[0], x: .5, y: .5};
+      const fset = FONT_SETS[state.fontSet] || Pz.fonts || ['narrow', 'anton'], font = pick(r, fset), color = r() < .55 ? '#ffffff' : pick(r, BRIGHTS), mode = pick(r, Pz.textModes), seed = r() * 1e4, side = r() < .5 ? .14 : .86;
+      let kk = k; for (let wi2 = 0; wi2 < line.length && kk < beats.length; wi2++, kk += step){ const t0 = beats[kk]; if (t0 > dur - .25) break; const t1 = kk + step < beats.length ? beats[kk + step] : t0 + per * step;
+        texts.push({start: t0, end: Math.min(dur, t0 + (t1 - t0) * .92), style: A0.style, word: line[wi2], word2: null, color, color2: color, mode, stretch: 1, y: A0.y === undefined ? .5 : A0.y, x: A0.x === undefined ? .5 : A0.x, rot: 0, side, lower: false, seed, font}); }
+      k = Math.ceil((kk + 4) / 4) * 4; } }
+  state.score = {cuts, texts, trig}; state.score.strip = buildIceStrip(dur, trig.kick || []); patKey = -1; drawStrip();
 }
+// ice strip timeline (from the blue reference reel): one state per 30 fps frame. Measured there: half the states last a single frame,
+// a few hold 10–30 frames; about a third are black; a glowing inset, solid panels, a stripe frame and the bare band fill the rest.
+// Energy tilts it (hype → more panels and insets, quiet → more black) and every kick lands on a lit frame.
+const ICE_PANEL = ['#46e3ff', '#0a16f2', '#cdf3ff', '#f2f8ff', '#1e8bff'];
+function buildIceStrip(dur, kicks){ const r = mulberry32(state.seed * 4111 + 7), n = Math.ceil(dur * 30) + 2, out = new Array(n); const rect = (x0, y0, w, h) => [x0, y0, Math.min(1, x0 + w), Math.min(1, y0 + h)];
+  const mkState = (mode, t) => { const w = rr(r, .52, .78), h = rr(r, .6, .82), x0 = rr(r, .04, Math.max(.05, .96 - w)), y0 = (1 - h) / 2 + rr(r, -.05, .05), R = rect(x0, y0, w, h);
+    const ex = rr(r, .02, .07), ey = rr(r, .08, .14), O = [Math.max(0, R[0] - ex), Math.max(0, R[1] - ey), Math.min(1, R[2] + ex), Math.min(1, R[3] + ey)];
+    const zr = r(), Z = zr < .55 ? [Math.min(.99, R[2] + rr(r, 0, .02)), 0, Math.min(1, R[2] + rr(r, .06, .22)), 1] : zr < .75 ? [0, 0, Math.max(.01, R[0] - rr(r, 0, .02)), 1] : [0, 0, 0, 0];
+    const P1 = pick(r, ICE_PANEL), P2 = r() < .4 ? '#000000' : pick(r, ICE_PANEL), inv = r() < .45 ? 1 : 0;
+    return {mode, R, O, Z, X: rr(r, .3, .62), quad: r() < .35 ? 1 : 0, P1, P2, inv, tint: r() < .6 ? 0 : r() < .62 ? 1 : 2, row: r(), lit: inv ? .95 : .45, line: r() < .35 ? 1 : 0}; };
+  let f = 0; while (f < n){ const t = f / 30, hy = hype(t), pu = punch(t), u = r();
+    const L = u < .48 ? 1 : u < .62 ? 2 : u < .7 ? 3 : u < .87 ? 4 + ((r() * 6) | 0) : 10 + ((r() * 20) | 0);
+    let mode; if (L >= 8) mode = r() < .72 ? 0 : 4; else mode = +pickW(r, {0: .24 + hy * .1, 1: .07 + pu * .1, 2: .12, 3: Math.max(.16, .4 - hy * .16), 4: .06, 5: .06 + pu * .04, 6: .02});
+    const st = mkState(mode, t); for (let k = 0; k < L && f + k < n; k++) out[f + k] = st; f += L; }
+  for (const kt of kicks){ const fi = Math.round(kt * 30); if (fi < 0 || fi >= n || r() > .5) continue; const st = mkState(r() < .5 ? 1 : 5, kt); st.P1 = pick(r, ['#f2f8ff', '#46e3ff', '#cdf3ff']); out[fi] = st; }
+  return out; }
 function cutAt(cuts, t){ let lo = 0, hi = cuts.length - 1; while (lo < hi){ const m = (lo + hi + 1) >> 1; if (cuts[m].start <= t) lo = m; else hi = m - 1; } return cuts[lo]; }
 function textAt(t){ const T = state.score.texts; let lo = 0, hi = T.length - 1, ans = null; while (lo <= hi){ const m = (lo + hi) >> 1; if (T[m].start <= t){ ans = T[m]; lo = m + 1; } else hi = m - 1; } return ans && t < ans.end ? ans : null; }
 function lastTrig(list, t){ let lo = 0, hi = list.length - 1, ans = -1; while (lo <= hi){ const m = (lo + hi) >> 1; if (list[m] <= t){ ans = m; lo = m + 1; } else hi = m - 1; } return ans; }
@@ -385,7 +411,7 @@ function drawText(ev, t, pulse){
 }
 const decoColor = r => { const k = r(); return k < .4 ? '#ffffff' : k < .65 ? '#000000' : pick(r, BRIGHTS); };
 // camera HUD: dashed edge ticks at mid-height and a square reticle on the split line
-function drawHud(rx, ry){ const ctx = xText, u = W / 360, lw = Math.max(2, u * 1.2); ctx.save(); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = lw;
+function drawHud(rx, ry){ const ctx = xText, u = Math.min(W, H) / 360, lw = Math.max(2, u * 1.2); ctx.save(); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = lw;
   for (const ex of [.06, .94]){ const x = ex * W - u * 1.6; for (let k = 0; k < 4; k++) ctx.fillRect(x, H * .5 - u * 14 + k * u * 7.5, u * 3.2, u * 5); }
   const s = u * 15, cx = rx * W, cy = (1 - ry) * H; ctx.strokeRect(cx - s / 2, cy - s / 2, s, s); ctx.beginPath(); ctx.moveTo(cx - s / 2, cy); ctx.lineTo(cx - s / 2 + s * .32, cy); ctx.stroke(); ctx.restore(); }
 // type wall: two of your words tiled as a wallpaper — big word in one column, the smaller one stacked beside it — one row lit per pulse
@@ -432,10 +458,19 @@ function renderAt(t){
   const zoom = v('zoomPunch') * I, punchZ = 1 + .06 * zoom * pulse;
   xBase.fillStyle = '#000'; xBase.fillRect(0, 0, W, H);
   const fi = clipFrame(c, M(c.m), tq);
+  const mech = (id, k) => { const a = v(id); return a > 0 && hash1(c.seed * 7.31 + k * 13.7) < a; };
+  const mStrip = mech('iceStrip', 7) && S.strip, mSplit = !mStrip && mech('splitTint', 1), mQuad = !mStrip && !mSplit && mech('quadGrid', 2), mInset = !mStrip && !mQuad && mech('inset', 3), mErode = !mStrip && !mQuad && !mSplit && mech('erode', 4), mPin = !mStrip && !mQuad && !mSplit && !mErode && mech('pinwheel', 9), mFlick = mech('palFlick', 8), mHud = mech('hud', 5), mWall = state.wordsOn && mech('typeWall', 6);
+  const pulseLen = Math.max(.08, (state.grid ? state.grid.per : .5) * lerp(2, .33, v('tintRate'))), pk = Math.floor(t / pulseLen);
+  const palsS = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['mint', 'olive', 'thermo', 'slate'], palS = palsS[Math.floor(hash1(pk * 3.7 + c.seed) * palsS.length) % palsS.length];
+  const splitX = .5 + (hash1(c.seed * 3.3) - .5) * .16, splitDir = c.P && c.P.twin ? (W >= H ? 0 : 1) : hash1(c.seed * 5.1) < .65 ? 1 : 0, splitSide = hash1(c.seed * 9.2) < .5 ? 1 : 0;
+  // twin split (landscape reference reel): two different clips side by side; the tinted half is drawn in the base pass below
+  const twinOn = mSplit && c.P && c.P.twin && media.length > 1, twinA = splitDir ? (splitSide ? [0, splitX * H, W, H - splitX * H] : [0, 0, W, splitX * H]) : (splitSide ? [splitX * W, 0, W - splitX * W, H] : [0, 0, splitX * W, H]);
+  const twinB = splitDir ? (splitSide ? [0, 0, W, splitX * H] : [0, splitX * H, W, H - splitX * H]) : (splitSide ? [0, 0, splitX * W, H] : [splitX * W, 0, W - splitX * W, H]);
   if (c.layout === 'tile'){ const cw = W / c.cols, chh = cw * 16 / 9 * .55; let row = 0; for (let y = -((tq * 30) % chh); y < H; y += chh, row++) for (let i = -1; i < c.cols + 1; i++) drawCover(xBase, M(c.m), fi, i * cw + (row % 2) * cw / 2, y, cw, chh, 1, 0, 0, (i + row) % 2 === 1); }
   else if (c.layout === 'bands'){ for (const b of c.bands){ xBase.save(); xBase.beginPath(); xBase.rect(0, b.y0, W, b.y1 - b.y0); xBase.clip(); drawCover(xBase, M(b.m), fi, b.dx * k, 0, W, H, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k), lerp(c.py0, c.py1, k), c.flip); xBase.restore(); } }
   else if (c.layout === 'stack'){ const n = c.strips.length; c.strips.forEach((st, i) => { const x = c.stripDir === 'h' ? 0 : i * W / n, y = c.stripDir === 'h' ? i * H / n : 0, w = c.stripDir === 'h' ? W : W / n, h = c.stripDir === 'h' ? H / n : H;
       drawCover(xBase, M(c.m), fi + st.fo, x, y, w, h, st.z * punchZ, lerp(c.px0, c.px1, k) * .5, st.py, st.flip !== c.flip); }); }
+  else if (twinOn){ drawCover(xBase, M(c.m), fi, ...twinA, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k) * .5, lerp(c.py0, c.py1, k) * .5, c.flip); drawCover(xBase, M(c.m2), fi + 7, ...twinB, lerp(c.z0, c.z1, k), 0, 0, false); }
   else drawCover(xBase, M(c.m), fi, 0, 0, W, H, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k), lerp(c.py0, c.py1, k), c.flip);
   if (c.layers && c.layers.length){ const mv = v('overlapMove'); for (const L of c.layers){ let a = L.alpha * clarityOv * fxMul * (L.sig === 'const' ? 1 : .35 + .75 * sig(L.sig, t)); if (L.gate && mv > .3 && hash1(Math.floor(t * 20) + L.fo + c.id) < mv * .5) a = 0; if (a <= .02) continue;
       xBase.save(); xBase.globalCompositeOperation = L.mode; xBase.globalAlpha = clamp(a, 0, 1); if (L.filter !== 'none' && 'filter' in xBase) xBase.filter = L.filter;
@@ -445,14 +480,9 @@ function renderAt(t){
   if (c.layout === 'pip'){ c.rects.forEach(card); overOn = 1; } else if (c.layout === 'tile'){ card(c.card); overOn = 1; }
   else if (c.layout === 'shards'){ overOn = 1; for (const p of c.polys){ xOver.save(); xOver.translate(p.cx, p.cy); xOver.rotate(p.spin * k); xOver.translate(-p.cx, -p.cy); xOver.beginPath(); p.pts.forEach((q, i) => i ? xOver.lineTo(q[0], q[1]) : xOver.moveTo(q[0], q[1])); xOver.closePath(); xOver.clip(); drawCover(xOver, M(p.m), fi + 3, 0, 0, W, H, p.z, 0, 0, false); xOver.restore(); } }
   // frame mechanisms: each dial is the chance this cut uses it; inside a cut, treatments flip on a fixed visual pulse (not the beat)
-  const mech = (id, k) => { const a = v(id); return a > 0 && hash1(c.seed * 7.31 + k * 13.7) < a; };
-  const mSplit = mech('splitTint', 1), mQuad = !mSplit && mech('quadGrid', 2), mInset = !mQuad && mech('inset', 3), mErode = !mQuad && !mSplit && mech('erode', 4), mHud = mech('hud', 5), mWall = mech('typeWall', 6);
-  const pulseLen = Math.max(.08, (state.grid ? state.grid.per : .5) * lerp(2, .33, v('tintRate'))), pk = Math.floor(t / pulseLen);
-  const palsS = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['mint', 'olive', 'thermo', 'slate'], palS = palsS[Math.floor(hash1(pk * 3.7 + c.seed) * palsS.length) % palsS.length];
-  const splitX = .5 + (hash1(c.seed * 3.3) - .5) * .16, splitDir = hash1(c.seed * 5.1) < .65 ? 1 : 0, splitSide = hash1(c.seed * 9.2) < .5 ? 1 : 0;
   xText.clearRect(0, 0, W, H); if (mWall) drawWall(pk, palS); drawDeco(c, t, pulse); const ev = textAt(t); if (ev) drawText(ev, t, pu);
   if (mHud) drawHud(mSplit ? (splitDir ? .5 : splitX) : .5, mSplit && splitDir ? 1 - splitX : .5);
-  const pat = v('pattern'); if (pat > .02 && patKey !== c.id){ drawPattern(c); patKey = c.id; }
+  const pat = !state.wordsOn && c.patKind !== 'motif' ? 0 : v('pattern'); if (pat > .02 && patKey !== c.id){ drawPattern(c); patKey = c.id; }
   // flicker
   const inv = flicker('invertFlk', t, FLK_PATTERNS[state.flkPattern] || FLK_PATTERNS.burst);
   let flash = 0; { const L = S.trig[P.whiteFlash.src] || [], i = lastTrig(L, t); if (i >= 0){ const a = v('whiteFlash') * I; if (hash1(i * 5.1 + state.seed) < a) flash = Math.exp(-(t - L[i]) * 30) * Math.min(.92, a); } }
@@ -469,7 +499,7 @@ function renderAt(t){
   f1('uSplit', v('rgbSplit') * I * fxMul); f1('uTear', clamp(v('tear') * I * fxMul, 0, 1)); f1('uPix', v('pixelate') * fxMul > .03 ? 4 + v('pixelate') * 40 : 0); f1('uBlur', v('punchBlur') * I * pulse * fxMul); f1('uDisp', v('displace') * fxMul); f1('uLeak', v('lightLeak') * fxMul); f1('uBlendAmt', c.blendAmt || 1); f1('uTone', v('tone') * fxMul); i1('uBlendMode', blendMode); f1('uTextAlpha', (mHud || mWall) && !ev ? 1 : v('wordOpacity'));
   f1('uScan', v('scanlines')); f1('uGrain', v('grain')); f1('uFeed', clamp(v('feedback') * fxMul, 0, 1)); f1('uRings', v('rings') * fxMul); f1('uGlow', v('glow') * fxMul); f1('uWarp', v('warp') * fxMul);
   f1('uThresh', M(c.m).lum || .5); f1('uPattern', pat * fxMul); f1('uPatInv', (M(c.m).lum || .5) > .55 ? 1 : (M(c.m).lum || .5) < .4 ? 0 : (c.seed % 1 < .5 ? 1 : 0)); f1('uTextSplit', ev ? v('wordGlitch') * 1.5 : .3);
-  f1('uMirror', v('mirror')); f1('uSeed', c.seed); f1('uDim', c.layout === 'pip' ? .5 : 0); f1('uOverOn', overOn); f1('uTextOn', textOn);
+  f1('uMirror', v('mirror')); f1('uSeed', c.seed); f1('uDim', c.layout === 'pip' && !(c.P && c.P.noDim) ? .5 : 0); f1('uOverOn', overOn); f1('uTextOn', textOn);
   f1('uSat', v('saturate')); f1('uCon', v('contrast')); f1('uPoster', v('posterize') * fxMul); f1('uLookMix', v('lookMix') * fxMul); f1('uSlice', v('sliceShift') * I * fxMul); f1('uSort', v('pixelSort') * fxMul); f1('uRoll', v('badTV') * fxMul);
   f1('uMelt', v('melt') * fxMul); f1('uZoom', zoom * pulse); f1('uShake', v('shake') * I * (.3 + pu)); f1('uKaleido', v('kaleido') * fxMul); f1('uSpin', v('spin') * fxMul); f1('uEdges', v('edges') * fxMul); f1('uPolar', v('polar') * fxMul); f1('uGhost', v('ghost') * fxMul); f1('uBands', v('bands') * I * fxMul * fGate);
   { const L = S.trig.kick || [], ki = lastTrig(L, tq); f1('uShock', v('shockwave') * I * fxMul); f1('uShockT', ki >= 0 ? tq - L[ki] : 9); f1('uShockN', ki); }
@@ -481,8 +511,18 @@ function renderAt(t){
   f1('uInsetOn', mInset ? 1 : 0); if (U.uInsetR){ const iw = .45 + hash1(c.seed * 4.1) * .35, ih = .12 + hash1(c.seed * 6.7) * .2, ix = hash1(c.seed * 8.3) * (1 - iw), iy = .1 + hash1(c.seed * 2.2) * (.8 - ih); gl.uniform4f(U.uInsetR, ix, iy, ix + iw, iy + ih); }
   f1('uInsetT', [0, 2, 1, 4, 2, 5][Math.floor(hash1(pk * 1.3 + c.seed * .7) * 6)]);
   f1('uErodeOn', mErode ? 1 : 0); if (U.uErodeM) gl.uniform2f(U.uErodeM, .06 + hash1(c.seed * 3.9) * .08, .1 + hash1(c.seed * 7.7) * .1); f1('uErodeB', hash1(c.seed * 5.5));
+  f1('uStripOn', mStrip ? 1 : 0); if (mStrip){ const st = S.strip[clamp(Math.floor(t * 30), 0, S.strip.length - 1)] || S.strip[0];
+    f1('uStripMode', st.mode); f1('uStripH', W >= H ? .82 : Math.min(1, W / H * 9 / 16)); f1('uStripX', st.X); f1('uStripQuad', st.quad); f1('uStripRow', st.row); f1('uStripInv', st.inv); f1('uStripTint', st.tint);
+    f1('uStripGlow', v('iceGlow') * (st.inv ? 1 : .6)); f1('uStripLit', st.lit); f1('uStripLine', st.line); if (U.uStripR) gl.uniform4f(U.uStripR, ...st.R); if (U.uStripO) gl.uniform4f(U.uStripO, ...st.O); if (U.uStripZ) gl.uniform4f(U.uStripZ, ...st.Z);
+    if (U.uStripC) gl.uniform3fv(U.uStripC, PAL[(c.P && c.P.icePal) || 'glacier'].flatMap(hexRgb)); if (U.uStripP1) gl.uniform3f(U.uStripP1, ...hexRgb(st.P1)); if (U.uStripP2) gl.uniform3f(U.uStripP2, ...hexRgb(st.P2)); }
   i1('uLookA', c.lookA); i1('uLookB', c.lookB); i1('uLook2', c.look2); i1('uTextMode', ev ? ev.mode : 0);
-  gl.uniform3fv(U.uPalA, PAL[c.palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));
+  // palette flicker (landscape reference reel, opening): the shot holds while its gradient map swaps every frame or two
+  let palA = c.palA; if (mFlick){ const pls = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['acid', 'ember', 'olive'], stepF = Math.round(lerp(4, 1, v('flickRate'))), fk = Math.floor(t * 30 / stepF);
+    palA = pls[Math.floor(hash1(fk * 1.37 + c.seed * .11) * pls.length) % pls.length]; i1('uLookA', LOOK[c.P && c.P.looks && c.P.looks[0] === 'gmap' ? 'gmap' : 'duo']); }
+  f1('uPinOn', mPin ? 1 : 0); if (mPin){ f1('uPinN', [6, 8, 8, 10][Math.floor(hash1(c.seed * 1.9) * 4)]); f1('uPinR', .26 + hash1(c.seed * 2.7) * .14); f1('uPinRot', t * (hash1(c.seed * 3.1) < .5 ? -.35 : .35) + c.seed); f1('uPinFold', hash1(c.seed * 4.3)); f1('uPinChunk', hash1(Math.floor(t * 4) + c.seed)); if (U.uPinM) gl.uniform2f(U.uPinM, .05 + hash1(c.seed * 5.9) * .05, .08 + hash1(c.seed * 6.3) * .06); }
+  { const pf = v('panelFlash'), f30 = Math.floor(t * 30), blk = Math.floor(f30 / 2), on = pf > 0 && hash1(blk * 3.3 + state.seed) < pf * .22; f1('uPanelOn', on ? 1 : 0);
+    if (on && U.uPanelR){ const kind = Math.floor(hash1(blk * 5.7) * 4), R = kind === 0 ? [0, 0, .5, 1] : kind === 1 ? [.5, 0, 1, 1] : kind === 2 ? [0, .5, 1, 1] : [.1, .3, .9, .7]; gl.uniform4f(U.uPanelR, ...R); gl.uniform3f(U.uPanelC, ...hexRgb(hash1(blk * 7.1) < .7 ? '#8d8d8d' : '#b9b9b9')); } }
+  gl.uniform3fv(U.uPalA, PAL[palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[cur]); gl.viewport(0, 0, W, H); gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.useProgram(progCopy); bindOnly(fboTex[cur], 0); gl.uniform1i(gl.getUniformLocation(progCopy, 't'), 0); gl.uniform1f(gl.getUniformLocation(progCopy, 'fInvert'), inv * fGate); gl.uniform1f(gl.getUniformLocation(progCopy, 'fFlash'), Math.max(flash, strobe) * fGate); gl.uniform1f(gl.getUniformLocation(progCopy, 'fBlack'), black * fGate); gl.drawArrays(gl.TRIANGLES, 0, 3); cur = 1 - cur;
   // meters
@@ -568,9 +608,9 @@ async function encodeAudio(t0 = 0, len = state.dur){
 async function exportVideo(){
   if (state.exporting || recording) return;
   if (!window.VideoEncoder || !window.VideoFrame){ toast('No frame encoder in this browser; recording live instead'); return startRecording(); }
-  ensureAC(); pause(); const [ra, rb] = region(); const fps = state.fps, exW = state.exSize === 1080 ? 1080 : 720, exH = exW * 16 / 9, n = Math.round((rb - ra) * fps);
+  ensureAC(); pause(); const [ra, rb] = region(); const fps = state.fps, [exW, exH] = dimsFor(state.exSize === 1080 ? 1080 : 720), n = Math.round((rb - ra) * fps);
   const cfg = await pickVideoCodec(exW, exH, fps, state.exQ * 1e6); if (!cfg){ toast('H.264 encoding not available here; recording live instead'); return startRecording(); }
-  state.exporting = true; $('#export').disabled = true; const badge = $('#badge'); badge.hidden = false; badge.classList.add('rec'); badge.textContent = 'Preparing…';
+  state.exporting = true; lockUI(true); $('#export').disabled = true; const badge = $('#badge'); badge.hidden = false; badge.classList.add('rec'); badge.textContent = 'Preparing…';
   const prevW = W, prevH = H, prevOffset = offset; let blob = null; $('#exNote').textContent = 'Rendering ' + exW + '×' + exH + ' at ' + fps + ' fps. The preview shows each frame as it is encoded.';
   try {
     const audioP = encodeAudio(ra, rb - ra);
@@ -605,7 +645,7 @@ async function exportVideo(){
     badge.textContent = 'Writing file…'; blob = mp4Mux({w: exW, h: exH, fps, avcC, samples}, audio);
   } catch(e){ console.error(e); toast('Export failed: ' + (e.message || e)); }
   resizeAll(prevW, prevH); buildScore(); offset = prevOffset; frame();
-  badge.hidden = true; badge.classList.remove('rec'); $('#export').disabled = false; state.exporting = false;
+  badge.hidden = true; badge.classList.remove('rec'); $('#export').disabled = false; state.exporting = false; lockUI(false);
   if (blob){ const name = 'reel-' + state.preset + '-' + state.seed + '-' + exW + 'p' + (rb - ra < state.dur - .05 ? '-' + ra.toFixed(1) + '-' + rb.toFixed(1) + 's' : '') + '.mp4'; showResult(blob, name, 'mp4'); await saveBlob(name, blob); }
 }
 /* =========================================================
@@ -673,7 +713,7 @@ const IDB = {
   async all(store){ const rows = []; await this.tx(store, 'readonly', os => { const c = os.openCursor(); c.onsuccess = () => { const cur = c.result; if (cur){ rows.push({key: cur.key, val: cur.value}); cur.continue(); } }; }); return rows; },
 };
 async function loadOne(f){ if (/gif/i.test(f.type) || /\.gif$/i.test(f.name)) return addGIF(f); if (f.type.startsWith('video') || /\.(mp4|mov|webm)$/i.test(f.name)) return addVideo(f); return addImage(await createImageBitmap(f), f.name); }
-async function addFiles(files){
+async function addFiles(files){ if (state.exporting){ toast('Export in progress — drop files after it finishes'); return; }
   const list = [...files].filter(f => /^(image|video)\//.test(f.type) || /\.(gif|mp4|mov|webm|png|jpe?g|webp)$/i.test(f.name)); if (!list.length) return;
   if (state.media.some(m => m.sample)) state.media = state.media.filter(m => !m.sample);
   toast('Reading ' + list.length + ' file' + (list.length > 1 ? 's' : '') + '…');
@@ -688,7 +728,9 @@ async function addFiles(files){
     renderThumbs(); }
   rebuild();
 }
-function rebuild(){ buildScore(); if (!playing) frame(); }
+function rebuild(){ if (state.exporting) return; buildScore(); if (!playing) frame(); }
+// while an export renders, every control is locked: the file is made from the settings at the moment Export was pressed
+function lockUI(on){ ['#visualRack', '#audioRack', '#exportSettings'].forEach(sel => { const el = $(sel); if (!el) return; if (on){ el.setAttribute('inert', ''); el.classList.add('locked'); } else { el.removeAttribute('inert'); el.classList.remove('locked'); } }); }
 async function rebuildAll(){ const was = playing; pause(); await rebuildAudio(); offset = Math.min(offset, state.dur - .01); buildScore(); if (was) play(); else frame(); }
 
 $('#mediaIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
@@ -715,14 +757,20 @@ $('#length').onchange = e => { const v = +e.target.value; $('#lenCustom').hidden
 $('#lenCustom').onchange = e => { state.lenCustom = clamp(+e.target.value || 20, 3, 600); e.target.value = state.lenCustom; state.lengthSel = state.lenCustom; setRegion(null, null); rebuildAll(); };
 $('#fps').onchange = e => { state.fps = +e.target.value; rebuild(); };
 $('#exSize').onchange = e => { state.exSize = +e.target.value; };
-$('#pvSize').onchange = e => { if (state.exporting) return; const w = +e.target.value; resizeAll(w, w * 16 / 9); state.pvSize = w; rebuild(); }; $('#exQ').onchange = e => { state.exQ = +e.target.value; };
+$('#pvSize').onchange = e => { if (state.exporting) return; state.pvSize = +e.target.value; const [w, h] = dimsFor(state.pvSize); resizeAll(w, h); rebuild(); };
+function setAspect(a){ if (state.exporting || !ASPECTS[a]) return; state.aspect = a; const [x, y] = ASPECTS[a], ar = x / y; const [w, h] = dimsFor(state.pvSize || 720); resizeAll(w, h);
+  document.documentElement.style.setProperty('--ar', ar); document.documentElement.style.setProperty('--arc', x + ' / ' + y); document.documentElement.style.setProperty('--sw', a === 'portrait' ? '440px' : a === 'square' ? '600px' : '100%');
+  const sel = $('#aspect'); if (sel) sel.value = a; const lab = (sh) => { const [ww, hh] = dimsFor(sh); return ww + ' × ' + hh; };
+  [['#pvSize', [540, 720]], ['#exSize', [720, 1080]]].forEach(([id, vals]) => { const el = $(id); if (el) [...el.options].forEach((o, i) => { o.textContent = lab(vals[i]) + (id === '#pvSize' && i === 0 ? ' (fast)' : ''); }); });
+  if (state.score) rebuild(); }
+$('#aspect').onchange = e => { setAspect(e.target.value); autosave(); }; $('#exQ').onchange = e => { state.exQ = +e.target.value; };
 let lyrT; $('#lyrics').oninput = () => { clearTimeout(lyrT); lyrT = setTimeout(rebuild, 350); };
 $('#bpm').oninput = e => { $('#bpmOut').textContent = e.target.value; }; $('#bpm').onchange = e => { state.bpm = +e.target.value; rebuildAll(); };
 $('#newBeat').onclick = () => { state.beatSeed = 1 + Math.floor(Math.random() * 9999); rebuildAll(); };
 const setSrc = s => { state.src = s; $('#srcBeat').setAttribute('aria-pressed', String(s === 'beat')); $('#srcSong').setAttribute('aria-pressed', String(s === 'song')); $('#beatBox').hidden = s !== 'beat'; $('#songBox').hidden = s !== 'song'; $('#soundName').textContent = s === 'beat' ? 'Built-in beat' : (state.songName || 'No song yet'); };
 $('#srcBeat').onclick = () => { setSrc('beat'); rebuildAll(); }; $('#srcSong').onclick = () => { setSrc('song'); if (state.songBuffer) rebuildAll(); };
 $('#songIn').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; IDB.put('song', 'current', {name: f.name, type: f.type, blob: f}); await loadSongFile(f); };
-async function loadSongFile(f){
+async function loadSongFile(f){ if (state.exporting){ toast('Export in progress — drop files after it finishes'); return; }
   try { ensureAC(); toast('Decoding…'); const buf = await AC.decodeAudioData(await f.arrayBuffer()); state.songBuffer = buf; state.songName = f.name.replace(/\.[^.]+$/, ''); state.songStart = 0; state.bpmMul = 1;
     const badge = $('#badge'); badge.hidden = false; badge.textContent = 'Analyzing 0%'; state.songAn = await analyzeBuffer(buf, p => badge.textContent = 'Analyzing ' + Math.round(p * 100) + '%'); badge.hidden = true;
     $('#songStart').max = Math.max(0, Math.floor(buf.duration - 3)); $('#songStart').value = 0; $('#startNum').value = '0.0'; $('#startOut').textContent = '0:00'; renderDropBtns(); $('#startWrap').hidden = false; $('#tempoFix').hidden = false; $('#toDrop').hidden = !state.songAn.dropTimes.length;
@@ -759,6 +807,9 @@ function syncCues(){ // keep timings for lines that still exist (matched by text
   state.cues = lines.map((text, i) => { let m = old.findIndex((q, j) => !used.has(j) && q.text === text); if (m < 0 && old[i] && !used.has(i) && old[i].text !== text && old.filter(q => q.text === old[i].text).length === 1) m = -1; if (m >= 0){ used.add(m); return {text, t: old[m].t}; } return {text, t: null}; });
   state.tapIdx = Math.min(state.tapIdx, state.cues.length); renderCues(); }
 function setWordMode(m){ state.wordMode = m; $('#wmRandom').setAttribute('aria-pressed', m === 'random'); $('#wmLyrics').setAttribute('aria-pressed', m === 'lyrics'); $('#lyricBox').hidden = m !== 'lyrics'; if (m === 'lyrics') syncCues(); rebuild(); }
+// master switch: off = no words anywhere (word hits, timed lyrics, type wall, word pattern fills), in every style
+function setWordsOn(on){ state.wordsOn = !!on; const b = $('#wordsOn'); if (b){ b.setAttribute('aria-pressed', state.wordsOn); b.textContent = state.wordsOn ? 'Words: ON' : 'Words: OFF'; } const box = $('#wordsBody'); if (box) box.classList.toggle('off', !state.wordsOn); }
+$('#wordsOn').onclick = () => { setWordsOn(!state.wordsOn); rebuild(); autosave(); };
 $('#wmRandom').onclick = () => setWordMode('random'); $('#wmLyrics').onclick = () => setWordMode('lyrics');
 $('#lyrics').addEventListener('input', () => { if (state.wordMode === 'lyrics') syncCues(); });
 function renderCues(){ const box = $('#lyCues'); if (!box) return; box.innerHTML = '';
@@ -785,12 +836,12 @@ $('#dropAt').onchange = e => { state.dropAt = e.target.value === '' ? null : cla
 $('#dropNow').onclick = () => { state.dropAt = +now().toFixed(2); $('#dropAt').value = state.dropAt; rebuild(); };
 $('#rIn').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(v, state.rOut === null && v !== null ? state.dur : state.rOut); };
 $('#rOut').onchange = e => { const v = e.target.value === '' ? null : clamp(+e.target.value, 0, state.dur); setRegion(state.rIn === null && v !== null ? 0 : state.rIn, v); };
-document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; const k = e.key.toLowerCase(); if (k === 'i') $('#setIn').click(); else if (k === 'o') $('#setOut').click(); else if (k === 'x') $('#clearRegion').click(); });
-document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if (e.code === 'Space'){ e.preventDefault(); $('#play').click(); } if (e.key === 'r' || e.key === 'R') $('#reroll').click(); if (e.key === 'l' || e.key === 'L') tapLyric(); });
+document.addEventListener('keydown', e => { if (state.exporting || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; const k = e.key.toLowerCase(); if (k === 'i') $('#setIn').click(); else if (k === 'o') $('#setOut').click(); else if (k === 'x') $('#clearRegion').click(); });
+document.addEventListener('keydown', e => { if (state.exporting || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if (e.code === 'Space'){ e.preventDefault(); $('#play').click(); } if (e.key === 'r' || e.key === 'R') $('#reroll').click(); if (e.key === 'l' || e.key === 'L') tapLyric(); });
 
 
 /* ---- recipes: the whole setup as a small JSON ---- */
-function recipe(){ return {v: 2, app: 'maut-ki-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate, preDrop: state.preDrop, preCalm: state.preCalm, dropAt: state.dropAt, wordMode: state.wordMode, cues: state.cues, lyOff: state.lyOff, lyHow: state.lyHow, lyHold: state.lyHold,
+function recipe(){ return {v: 2, app: 'maut-ki-machine', preset: state.preset, seed: state.seed, react: state.react, intensity: state.intensity, clarity: state.clarity, flkPattern: state.flkPattern, fontSet: state.fontSet, dropGate: state.dropGate, preDrop: state.preDrop, preCalm: state.preCalm, dropAt: state.dropAt, aspect: state.aspect, wordsOn: state.wordsOn, wordMode: state.wordMode, cues: state.cues, lyOff: state.lyOff, lyHow: state.lyHow, lyHold: state.lyHold,
   lengthSel: state.lengthSel, fps: state.fps, bpm: state.bpm, beatSeed: state.beatSeed, words: $('#lyrics').value, dials: JSON.parse(JSON.stringify(P))}; }
 function applyRecipe(R){
   if (!R || !R.dials) throw new Error('not a recipe');
@@ -800,6 +851,7 @@ function applyRecipe(R){
   state.dropGate = !!R.dropGate; const dg = $('#dropGate'); if (dg) dg.checked = state.dropGate;
   if (Array.isArray(R.cues)) state.cues = R.cues.map(q => ({text: String(q.text || ''), t: q.t === null || q.t === undefined ? null : +q.t})); state.lyOff = +R.lyOff || 0; state.lyHow = R.lyHow === 'line' ? 'line' : 'word'; state.lyHold = R.lyHold ? clamp(+R.lyHold, 1, 10) : 4;
   { const o = $('#lyOff'); if (o){ o.value = state.lyOff; o.oninput({target: o}); } const hw = $('#lyHow'); if (hw) hw.value = state.lyHow; const hd = $('#lyHold'); if (hd){ hd.value = state.lyHold; hd.oninput({target: hd}); } }
+  setWordsOn(R.wordsOn === true); if (ASPECTS[R.aspect] && R.aspect !== state.aspect) setAspect(R.aspect);
   if (R.wordMode === 'lyrics' || R.wordMode === 'random') setWordMode(R.wordMode); else renderCues();
   state.preDrop = !!R.preDrop; state.preCalm = R.preCalm === undefined ? .7 : clamp(+R.preCalm || 0, 0, 1); state.dropAt = (R.dropAt === undefined || R.dropAt === null) ? null : Math.max(0, +R.dropAt || 0);
   { const a = $('#preDrop'); if (a) a.checked = state.preDrop; const c = $('#preCalm'); if (c){ c.value = state.preCalm; $('#preCalmOut').textContent = state.preCalm.toFixed(2); } const d = $('#dropAt'); if (d) d.value = state.dropAt === null ? '' : state.dropAt; }
@@ -845,7 +897,7 @@ async function boot(){
   else { $('#badge').hidden = true; await rebuildAudio(); buildScore(); } offset = +(state.dur * .62).toFixed(2); frame(); requestAnimationFrame(loop);
   document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { patKey = -1; if (!playing) frame(); });
 }
-window.__reel = { state, P, renderAt, __val: val, exportVideo, mp4Mux, resizeAll, buildScore, rebuildAudio, applyPreset, analyzeBuffer, decodeGIF, addFiles, set(o){ Object.assign(state, o); },
+window.__reel = { state, P, renderAt, setAspect, dimsFor, __val: val, exportVideo, mp4Mux, resizeAll, buildScore, rebuildAudio, applyPreset, analyzeBuffer, decodeGIF, addFiles, set(o){ Object.assign(state, o); },
   wav(){ const b = state.buffer, sr = b.sampleRate, s0 = Math.floor(state.off * sr), n = Math.floor(state.dur * sr), ch = 2; const buf = new ArrayBuffer(44 + n * ch * 2), v = new DataView(buf), ws = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
     ws(0, 'RIFF'); v.setUint32(4, 36 + n * ch * 2, true); ws(8, 'WAVE'); ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true); v.setUint32(24, sr, true); v.setUint32(28, sr * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); ws(36, 'data'); v.setUint32(40, n * ch * 2, true);
     const L = b.getChannelData(0), R = b.numberOfChannels > 1 ? b.getChannelData(1) : L; let o = 44; for (let i = 0; i < n; i++){ for (const C of [L, R]){ v.setInt16(o, clamp(C[s0 + i] || 0, -1, 1) * 32767, true); o += 2; } }

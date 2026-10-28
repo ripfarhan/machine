@@ -45,13 +45,14 @@
         <span class="note" id="regionInfo"></span>
       </div>
     <div class="result" id="result" hidden></div>
-    <div class="sec">
+    <div class="sec" id="exportSettings">
       <h2>Output</h2>
       <div class="two">
         <label class="f"><span>Length</span>
           <select id="length"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="0">Whole song</option><option value="-1">Custom…</option></select>
           <input class="num" id="lenCustom" type="number" min="3" max="600" step="0.5" value="20" hidden aria-label="Custom length in seconds"></label>
         <label class="f"><span>Frame rate</span><select id="fps"><option value="30">30 fps</option><option value="60" selected>60 fps</option></select></label>
+        <label class="f"><span>Format</span><select id="aspect"><option value="portrait" selected>Portrait 9:16 (reels)</option><option value="square">Square 1:1</option><option value="landscape">Landscape 16:9</option></select></label>
         <label class="f"><span>Preview size</span><select id="pvSize"><option value="540">540 × 960 (fast)</option><option value="720" selected>720 × 1280</option></select></label>
         <label class="f"><span>Export size</span><select id="exSize"><option value="720">720 × 1280</option><option value="1080" selected>1080 × 1920</option></select></label>
         <label class="f"><span>Export quality</span><select id="exQ"><option value="8">Good (8 Mbps)</option><option value="16" selected>High (16 Mbps)</option><option value="28">Max (28 Mbps)</option></select></label>
@@ -89,7 +90,8 @@
     </div>
     <div id="groups"></div>
     <div class="sec">
-      <h2>Words</h2>
+      <h2>Words <button class="btn sm" id="wordsOn" aria-pressed="false" style="margin-left:auto">Words: OFF</button></h2>
+      <div id="wordsBody">
       <textarea id="lyrics" spellcheck="false" aria-label="Words">raat ka SHOR
 रंग बिखरे
 CHAOS in my head
@@ -98,7 +100,7 @@ sheher jal raha
 DOOBE RAHO</textarea>
       <label class="f"><span>Font set</span>
         <select id="fontSet"><option value="auto" selected>Auto (style decides)</option><option value="narrow">Arial Narrow, stretched</option><option value="display">Display: Anton, Bebas, Six Caps, Archivo Black</option><option value="sans">Sans: Inter, Space Grotesk, Oswald</option><option value="serif">Serif: Playfair, Bodoni, Cormorant, Garamond</option><option value="desi">Devanagari: Khand, Teko, Noto</option><option value="mono">Mono</option></select></label>
-      <p class="note">One word per hit, in order. Hindi, Hinglish and English all work; Devanagari words switch to a face that has the script. Rate, size, stretch and glitch are in the Words dials.</p>
+      <p class="note">Off by default: nothing with words appears in any style until you switch Words on. On: each line is a phrase — it starts on a bar, plays its words in order on a steady grid (Word rate: bar / half-bar / beat) in one look, then rests. Hindi, Hinglish and English all work; Devanagari words switch to a face that has the script. Rate, size, stretch and glitch are in the Words dials.</p>
       <div class="row" role="radiogroup" aria-label="Words mode">
         <button class="btn sm" id="wmRandom" aria-pressed="true">Random words</button>
         <button class="btn sm" id="wmLyrics" aria-pressed="false">Timed lyrics</button>
@@ -119,6 +121,7 @@ DOOBE RAHO</textarea>
         </div>
         <p class="note">Sync: play the reel and press <b>L</b> when each line is sung — it stamps the next line at the playhead. Or type a time, nudge with ◀ ▶, or hit ● to set a line to the playhead. Times are reel seconds.</p>
         <div id="lyCues" class="cues"></div>
+      </div>
       </div>
     </div>
     <div class="sec">

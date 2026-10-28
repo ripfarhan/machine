@@ -10,10 +10,13 @@ const PAL = {
   bolly:['#2d0036','#ff2e63','#ffb800','#08f7fe'], news:['#1a1611','#5a4b32','#b8a888','#f4ecdc'], noir:['#000000','#101e3a','#ff2bd6','#9cfcff'],
   ink:['#000000','#1a1a1a','#f2f2f2','#ffffff'], jungle:['#021a0a','#0e6b2f','#8cff3a','#f5ffd6'], rose:['#1a000d','#8a0043','#ff5aa0','#ffe4ee'],
   thermo:['#0a1466','#12b3b0','#f6e45a','#e8231b'], mint:['#0f2b20','#4c9a74','#a9e8c6','#f0fff7'], olive:['#151a03','#5b6a12','#b8c63c','#f4f8cc'], ochre:['#241003','#8b470d','#e2973a','#fff0c6'],
+  glacier:['#000000','#0a14d8','#3fd8ff','#eefbff'], abyss:['#000000','#020a5c','#1d5cff','#a8ecff'], frost:['#02040a','#2a4a7a','#9fd6ff','#ffffff'],
+  mapA:['#1a0430','#3d6b1f','#f2c230','#fff4c9'], redmono:['#140000','#7a0000','#ff3a1a','#ffc2a8'], olivine:['#121408','#545a1c','#c9b23a','#ffef9e'], violet:['#0b0420','#5a1a8c','#4cff6a','#fff35c'],
+  pinbox:['#05001f','#1a1aff','#d4248f','#f1d98a'], jellygreen:['#03140a','#1f7a3a','#7dff8a','#e9ffe9'],
   jelly:['#12031a','#5e1665','#e04fd0','#ffd8fb'], neon:['#02031f','#1a2dff','#59e4ff','#ffffff'], slate:['#0e0f12','#4a4f57','#a9adb3','#f2f3f5'], heatmap:['#1c0526','#41701f','#e83a17','#ffe14d']
 };
-const LOOK = {punch:0, hue:1, grad:2, solar:3, invert:4, sil:5, duo:6, poster:7, vhs:8, mash:9};
-const LOOK_COLOR = ['#e8d6c0','#ff4fd8','#3cf2ff','#fff35c','#7a5cff','#ffffff','#ff1a1a','#5dff6a','#c9a477','#ff7a00'];
+const LOOK = {punch:0, hue:1, grad:2, solar:3, invert:4, sil:5, duo:6, poster:7, vhs:8, mash:9, gmap:10};
+const LOOK_COLOR = ['#e8d6c0','#ff4fd8','#3cf2ff','#fff35c','#7a5cff','#ffffff','#ff1a1a','#5dff6a','#c9a477','#ff7a00','#f2c230'];
 const BRIGHTS = ['#3cf2ff','#ff2ea6','#fff35c','#5dff6a','#ff1a1a','#2b3bff','#ffffff','#ff7a00','#b6ff00'];
 const FLK_PATTERNS = {'on-off-on': [1,0,1], 'burst': [1,0,1,0,1], 'ramp': [1,0,1,1,0,1,1,1,0], 'hold': [1,1,1,1], 'pair': [1,0,0,1]};
 // [id, group, label, min, max, defaultBase, defaultSrc, defaultDepth, hint]
@@ -87,6 +90,12 @@ const PARAMS = [
   ['erode','Frame','Eroded frame',0,1,0,'const',0,'chance the footage is boxed on black with block-eaten edges'],
   ['hud','Frame','Camera HUD',0,1,0,'const',0,'chance of edge ticks and a reticle over the frame'],
   ['typeWall','Frame','Type wall',0,1,0,'const',0,'chance your words tile the frame as a wallpaper, one row lit'],
+  ['iceStrip','Frame','Ice strip',0,1,0,'const',0,'chance a cut becomes the letterboxed ice band: glowing inset, stretched-pixel bars, solid flash panels, lots of black'],
+  ['iceGlow','Frame','Strip glow',0,1,.6,'loud',.3,'halo bleeding off the lit inset and panels'],
+  ['pinwheel','Frame','Pinwheel box',0,1,0,'const',0,'chance the shot sits in a black box with a spinning pinwheel of itself, a mirrored diagonal fold and big displaced chunks at the edges'],
+  ['palFlick','Frame','Palette flicker',0,1,0,'const',0,'chance a cut holds the shot while its gradient map swaps every frame'],
+  ['flickRate','Frame','Flicker speed',0,1,.7,'hype',.3,'palette flicker: every 4 frames (low) to every frame (high)'],
+  ['panelFlash','Frame','Panel flash',0,1,0,'snare',0,'solid grey panels slam over half the frame for two frames'],
   ['tintRate','Frame','Treatment pulse',0,1,.75,'const',0,'how fast split, grid and inset treatments flip (fixed visual grid)'],
   ['wordRate','Words','Word rate',0,1,.6,'hype',.5,'how often a word fires'],
   ['wordSize','Words','Word size',0,1,.7,'punch',.3,''],
@@ -98,6 +107,12 @@ const PARAMS = [
 const GROUP_ORDER = ['Cutting','Layers','Frame','Flicker','Color','Glitch','Motion','Texture','Words'];
 // A style = looks + palettes + layouts + type + decorations + fonts + dial overrides. Dials not listed keep PARAMS defaults.
 // deco weights: splat, spiral, scatter, mandala, frame, column, giant, trail. patMotif: chance the silhouette fill uses motifs rather than words.
+// clean base for the reference-reel styles: one clip, one strong treatment, a crisp layout — every stacking/smearing effect at zero
+const CLEAN = {collage:[0], overlap:[0,'const',0], overlapMove:[0,'const',0], clones:[0,'const',0], displace:[0,'const',0], lightLeak:[0,'const',0], motifs:[0,'const',0], invertFlk:[.1,'snare',.3], whiteFlash:[.08,'kick',.35], blackBlink:[.1,'hat',.3], strobe:[0,'const',0],
+  hueShift:[0,'const',0], saturate:[1.05], contrast:[1.08], lookSwap:[0,'const',0], rgbSplit:[0,'const',0], tear:[0,'const',0], sliceShift:[0,'const',0], pixelSort:[0,'const',0], melt:[0,'const',0], ghost:[0,'const',0],
+  zoomPunch:[.12,'kick',.4], punchBlur:[0,'const',0], shake:[0,'const',0], feedback:[0,'const',0], warp:[0,'const',0], edges:[0,'const',0], glow:[0,'const',0], scanlines:[0], grain:[.1], rings:[0,'const',0],
+  stutter:[.15,'kick',.4], cleanHits:[0], wordRate:[.5,'hype',.3], pattern:[0,'const',0], bands:[0,'const',0], tone:[0,'const',0], posterize:[0,'const',0], badTV:[0,'const',0], kaleido:[0,'const',0], spin:[0,'const',0], mirror:[0,'const',0], polar:[0,'const',0]};
+const clean = o => Object.assign({}, CLEAN, o);
 const PRESETS = {
   acid: {name:'Acid Portrait', sw:'acid', looks:['grad','grad','solar','hue','invert'], pals:['acid','ultra','toxic','candy','lime'], layouts:{full:7,pip:1,shards:1},
     textStyles:['tall','small'], textModes:[2,0], deco:{splat:.3, spiral:.25, mandala:.3, trail:.2}, flk:'on-off-on', fonts:['narrow','sixcaps','anton'], patMotif:.7,
@@ -250,6 +265,20 @@ const PRESETS = {
     dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], erode:[1], tintRate:[.55], posterize:[.3,'drop',.3], saturate:[1.6,'loud',.2], contrast:[1.35,'punch',.2], lookMix:[.75], corrupt:[.15,'snare',.4], grain:[.3], cutRate:[.45,'hype',.4], invertFlk:[.2,'snare',.5], rgbSplit:[.25,'punch',.5], cleanHits:[.2]}},
   typewall: {name:'Type Wall', sw:'jelly', looks:['duo','hue'], pals:['jelly','rose','noir'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['mono'], patMotif:0,
     dials:{wordRate:[0,'const',0], pattern:[0,'const',0], motifs:[0,'const',0], typeWall:[1], inset:[.45], tintRate:[.7], lookMix:[.8], saturate:[1.4,'loud',.2], contrast:[1.2], grain:[.35], halftone:[.12], cutRate:[.4,'hype',.4], invertFlk:[.15,'snare',.4], glow:[.2,'loud',.3], cleanHits:[.2]}},
+  // ---- from the landscape reference reel (Video-2271), rebuilt clean: one clip, one strong treatment, a crisp layout ----
+  palflicker: {name:'Palette Flicker', fx:true, sw:'mapA', looks:['gmap'], pals:['mapA','redmono','olivine','violet'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({palFlick:[1], flickRate:[.75,'hype',.25], lookMix:[.95], cutRate:[.22,'hype',.3], clipHold:[.75], flashCuts:[.35,'punch',.4], overlap:[.2,'const',0], overlapMove:[.1,'punch',.2], saturate:[1.15], contrast:[1.15,'punch',.1], grain:[.12], zoomPunch:[.08,'kick',.3]})},
+  twinsplit: {name:'Twin Split', fx:true, twin:true, sw:'ochre', looks:['duo'], pals:['ochre','slate','mint','olive','sepia'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({splitTint:[1], hud:[.9], tintRate:[.8], lookMix:[0], cutRate:[.3,'hype',.3], clipHold:[.65], halftone:[.07], grain:[.16], contrast:[1.12]})},
+  pinbox: {name:'Pinwheel Box', fx:true, sw:'pinbox', looks:['grad','duo'], pals:['pinbox','ultra','riot'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'pair', fonts:['narrow'], patMotif:0,
+    dials: clean({pinwheel:[1], lookMix:[.88], saturate:[1.45,'loud',.2], contrast:[1.25,'punch',.15], dither:[0,'drop',.35], staticveil:[0,'build',.35], cutRate:[.35,'hype',.35], clipHold:[.6], grain:[.2], invertFlk:[.08,'snare',.3]})},
+  jellyinset: {name:'Jelly Inset', fx:true, noDim:true, pipRect:[.09,.33,.82,.3], sw:'jelly', looks:['duo'], looksB:['punch'], pals:['jelly','jellygreen'], palsB:['noir'], layouts:{pip:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['mono'], patMotif:0,
+    dials: clean({collage:[1], lookMix:[.9], panelFlash:[.35,'snare',.45], typeWall:[.45], tintRate:[.7], halftone:[.12], grain:[.3], saturate:[1.3], contrast:[1.15], cutRate:[.35,'hype',.3], clipHold:[.6], flashCuts:[.25,'punch',.4]})},
+  contactsheet: {name:'Contact Sheet', fx:true, sw:'thermo', looks:['duo','sil','punch'], pals:['thermo','mono','slate'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'pair', fonts:['narrow'], patMotif:0,
+    dials: clean({quadGrid:[1], hud:[.2], tintRate:[.7], lookMix:[.3], cutRate:[.38,'hype',.35], grain:[.22], scanlines:[.12], contrast:[1.15]})},
+  // ---- from the blue reference reel (Video-43761): a 16:9 band in a black frame, glowing inset, stretched-pixel bars, solid flash panels ----
+  icestrip: {name:'Ice Strip', fx:true, sw:'glacier', icePal:'glacier', looks:['punch'], pals:['glacier','abyss','frost'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({iceStrip:[1], iceGlow:[.7,'loud',.3], cutRate:[.8,'hype',.2], minHold:[1], flashCuts:[.6,'punch',.4], clipWeight:[.6], clipHold:[.35], clipSpeed:[1,'hype',.4], whiteFlash:[.03,'kick',.15], invertFlk:[0,'const',0], blackBlink:[.06,'hat',.15], zoomPunch:[.05,'kick',.2], grain:[.08]})},
   chaos: {name:'Chaos', sw:'ultra'}
 };
 const STYLE_KEYS = Object.keys(PRESETS).filter(k => k !== 'chaos');

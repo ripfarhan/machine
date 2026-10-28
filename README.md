@@ -1,10 +1,10 @@
 # Maut ki machine
 
-A browser-based engine for audio-reactive, experimental 9:16 video reels.
+A browser-based engine for audio-reactive, experimental video reels — portrait 9:16, square 1:1 or landscape 16:9.
 Drop in photos, GIFs and clips plus a song; the song is analyzed into signals
 (kick, snare, hat, bass, hype, drops, beat grid) and every cut, flicker and
 effect is wired to those signals through a modulation matrix. Exports MP4
-frame by frame with the GPU, at 720×1280 or 1080×1920.
+frame by frame with the GPU, at a 720 or 1080 short side (720×1280 / 1080×1920 portrait, 1080×1080 square, 1920×1080 landscape).
 
 No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 
@@ -36,7 +36,7 @@ No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 | `js/util.js` | shared helpers |
 | `js/fonts.js` | font library and font sets |
 | `js/motifs.js` | symbol library and arrangements (scatter, mandala, frame, column, giant, trail, wallpaper) |
-| `js/presets.js` | palettes, dial definitions, the 58 styles |
+| `js/presets.js` | palettes, dial definitions, the 71 styles |
 | `js/analysis.js` | audio analysis |
 | `js/shader.js` | GLSL effect chain |
 | `js/mp4.js` | MP4 muxer and codec picker |
@@ -79,6 +79,27 @@ video. Several effects also carry alternate forms chosen the same way:
 
 Scanlines model tape rather than stripes: chroma lags luma and the torn
 head-switch strip sits at the bottom of the frame.
+
+## Reference-reel styles
+
+Two reference reels were studied frame by frame (cut lengths, palettes, layouts) and rebuilt as styles on a
+*clean* base — one clip, one strong treatment, a crisp layout, with every stacking/smearing effect at zero:
+
+| style | from | mechanism |
+|---|---|---|
+| Ice Strip | blue portrait reel | a 16:9 band in a black frame (thinner letterbox in landscape); per 30 fps frame one state: glowing inset of the shot in an ice gradient map (positive or negative), stretched-pixel bars (one row of the frame stretched into vertical bars), solid cyan / deep-blue / ice / white flash panels (halves or a 2×2 checker), a stripe frame around a dark window, or black. Half the states last one frame, a few hold 10–30; energy tilts it toward panels and insets, quiet toward black; kicks land on lit frames. |
+| Palette Flicker | landscape reel, opening | the shot holds while its gradient map swaps every 1–4 frames (purple/green/yellow, red mono, olive, violet), over a screen-blended second image |
+| Twin Split | landscape reel, gallery | two different clips side by side (stacked in portrait); one half duotone that changes on a fixed pulse, the other natural; camera HUD ticks |
+| Pinwheel Box | landscape reel, kaleido | the shot boxed on black with big displaced chunks at the edge, a mirrored diagonal fold and a spinning pinwheel of itself, blue/magenta/cream gradient map |
+| Jelly Inset | landscape reel, ending | duotone background clip (magenta or green) with a dark natural clip in a centred inset; grey panels slam over half the frame on snares |
+| Contact Sheet | landscape reel, 2×2 | the analysis grid on the clean base |
+
+## Words
+
+Words are off by default: with the **Words** switch off nothing with words appears in any style (word hits,
+timed lyrics, the type wall, word pattern fills). Switched on, each line of the box is a phrase: it starts on a
+bar line, plays its words in order on a steady grid (Word rate: bar / half-bar / beat) in one style, font,
+colour and position, then rests.
 
 ## Timed lyrics
 

@@ -25,7 +25,7 @@ button,input,select,textarea{font:inherit;color:inherit}
   .stage,.rack{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
   /* the preview, transport and timeline stay put; only what sits under them scrolls */
   .stage{overflow:hidden}
-  .stage .screen{width:min(100%,max(200px,calc((100vh - 455px) * 9 / 16)),440px)}
+  .stage .screen{width:min(100%,max(200px,calc((100vh - 455px) * var(--ar,.5625))),var(--sw,440px))}
   .stage > .stagescroll{flex:1 1 auto;min-height:110px;overflow-y:auto;overscroll-behavior:contain;width:100%;display:flex;flex-direction:column;gap:10px;align-items:center;padding-right:6px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
   .stagescroll > .sec{align-self:stretch}
 }
@@ -40,7 +40,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .stage > .sec,.stagescroll > .sec{align-self:stretch}
 .stage > *,.rack > *{flex-shrink:0}
 .stagescroll{display:flex;flex-direction:column;gap:10px;align-items:center;width:100%}
-.screen{position:relative;width:min(100%,calc(64vh * 9 / 16),440px);aspect-ratio:9/16;max-width:100%;background:#000;border:1px solid var(--line);overflow:hidden}
+.screen{position:relative;width:min(100%,calc(64vh * var(--ar,.5625)),var(--sw,440px));aspect-ratio:var(--arc,9/16);max-width:100%;background:#000;border:1px solid var(--line);overflow:hidden}
 .screen canvas{width:100%;height:100%;display:block}
 .screen.drag{outline:3px dashed var(--hot);outline-offset:-10px}
 .badge{position:absolute;top:10px;left:10px;font:600 11px/1 var(--mono);letter-spacing:.06em;padding:6px 8px;background:rgba(0,0,0,.6);text-transform:uppercase}
@@ -98,7 +98,7 @@ select,.num{background:var(--ink);border:1px solid var(--line);padding:6px 6px;m
 .chk input{accent-color:var(--hot);width:16px;height:16px}
 .toast{position:fixed;pointer-events:none;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--ink);padding:9px 14px;font-weight:600;z-index:20;max-width:calc(100% - 32px)}
 .result{display:flex;flex-direction:column;gap:8px;width:min(100%,560px)}
-.result video{width:160px;aspect-ratio:9/16;background:#000;border:1px solid var(--line)}
+.result video{width:calc(160px * max(1, var(--ar,.5625) * 1.2));aspect-ratio:var(--arc,9/16);background:#000;border:1px solid var(--line)}
 /* modulation rows */
 .mods{display:flex;flex-direction:column;gap:7px}
 .mod{display:grid;grid-template-columns:92px minmax(0,1fr) 74px 54px;gap:6px;align-items:center;font-size:12px}
@@ -139,3 +139,5 @@ details.more>summary{cursor:pointer;list-style:none;padding:4px 0}
 details.more>summary::-webkit-details-marker{display:none}
 details.more>summary::before{content:'+ ';color:var(--hot)}
 details.more[open]>summary::before{content:'− '}
+#wordsBody.off{opacity:.4}
+.locked{opacity:.45;filter:grayscale(.6)}
