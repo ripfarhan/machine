@@ -20,7 +20,7 @@
   const F = {tl: new Float32Array(2048), tr: new Float32Array(2048), fd: new Float32Array(4096), spec: new Float32Array(128), sp16: new Float32Array(16), kick: 0, snare: 0, hat: 0, bass: 0, energy: .3, chaos: .2, motion: .4, glitch: 0, fx: 1, motionScale: 1, tearOK: 1, bright: 1,
     hot: '#ff2e88', cyan: '#22e5ff', c1: [1, .18, .53], c2: [.13, .9, 1], warn: '#ffd23f', laneCol: [], peakSm: .5, pkL: 0, pkR: 0, step: -1, beat: -1, beatSec: .5, chordName: '', moodWord: '', loudN: 0, knobLive: {}, secName: '', worldName: '', keyName: '', bpm: 0, calm: false};
   // ---------------------------------------------------------------- components
-  const field = new VZ.Field($('#field')), hero = new VZ.Hero($('#heroCv')), lanes = new VZ.Lanes($('#lanes')), wheel = new VZ.Wheel($('#wheel')), gonio = new VZ.Gonio($('#gonio')), meter = new VZ.Meter($('#meter')), arc = new VZ.Arc($('#arc'), bar => seekTo(bar)), brain = new VZ.Brain($('#brain'));
+  const field = new VZ.Field($('#field')), hero = new VZ.Hero($('#heroCv')), lanes = new VZ.Lanes($('#lanes'), rel => { if (S.pos !== null && S.pos !== undefined) seekTo(Math.max(0, Math.floor(S.pos / 4) * 4 + rel)); }), wheel = new VZ.Wheel($('#wheel')), gonio = new VZ.Gonio($('#gonio')), meter = new VZ.Meter($('#meter')), arc = new VZ.Arc($('#arc'), bar => seekTo(bar)), brain = new VZ.Brain($('#brain'));
   const reel = new AwaazReel($('#reelCv'), host);
   const knobs = {}; const mEl = $('#macros');
   for (const d of MACROS){ const el = document.createElement('div'); el.className = 'knob'; el.innerHTML = `<canvas></canvas><input type="range" min="0" max="100" aria-label="${d.name}"><div class="kn">${d.name}</div><div class="kd">${d.desc}</div>`; mEl.appendChild(el);
@@ -76,7 +76,7 @@
     if (S.lastMode && x.mode !== S.lastMode) brain.add(`mood shift → ${x.mode.toUpperCase()} (${MOODW[x.mode]})`, 'ai'); S.lastMode = x.mode;
     if (S.piece && x.chordStart && S.piece.loop.every(c => c.name !== x.chord) && x.mode === S.piece.mode) brain.add(`borrowed colour: ${chord} for one cycle`, 'ai');
     $$('.pan').forEach(p => { p.classList.add('bar-sweep'); }); setTimeout(() => $$('.pan').forEach(p => p.classList.remove('bar-sweep')), 160); }
-  function seekTo(bar){ if (!S.g) return; host.send({type: 'seek', bar}); const t = host.now(); S.timed = S.timed.filter(e => e.t <= t); lanes.cut(t); arc.cutTrace(bar); toast(`jumping to bar ${bar + 1}`); }
+  function seekTo(bar){ if (!S.g) return; if (S.plan) bar = Math.max(0, Math.min(S.plan.total - 4, Math.round(bar / 4) * 4)); host.send({type: 'seek', bar}); S.pos = bar; S.barT0 = host.now(); const t = host.now(); S.timed = S.timed.filter(e => e.t <= t); lanes.cut(t); arc.cutTrace(bar); toast(`jumping to bar ${bar + 1}`); }
   function onMeters(x){ S.meters = x; F.loudN = Math.max(0, Math.min(1, (x.lufs + 36) / 28)); }
   function onVoice(x){ const st = S.strips && S.strips[x.slot]; if (!st) return; st.m.classList.toggle('on', x.mute); st.s.classList.toggle('on', x.solo); st.el.querySelector('.sp2').textContent = x.patch; st.f.textContent = x.user === 1 ? 'ON' : x.user === -1 ? 'OFF' : 'AUTO'; st.f.classList.toggle('on', x.user !== 0); }
   // ---------------------------------------------------------------- strips

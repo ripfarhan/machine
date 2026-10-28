@@ -67,13 +67,20 @@ VZ.Hero = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); t
     this.ring = this.ring.filter(r => t - r.t < F.beatSec); for (const r of this.ring){ const q = (t - r.t) / F.beatSec; c.strokeStyle = VZ.hexA(r.down ? F.hot : F.cyan, (1 - q) * .8); c.lineWidth = r.down ? 2 : 1; c.beginPath(); c.arc(hx, hy, rr + 4 + VZ.ease(q) * 26 * F.fx, 0, 6.283); c.stroke(); } } };
 
 // ---------------------------------------------------------------- voice lanes: what the machine is about to play (future notes ghosted, ignite at the playhead)
-VZ.Lanes = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); this.lanes = []; this.notes = []; this.past = 7; this.future = 2.4; }
+VZ.Lanes = class { constructor(cv, onSeek){ this.cv = cv; this.c = cv.getContext('2d'); this.lanes = []; this.notes = []; this.past = 7; this.future = 2.4; this.onSeek = onSeek; this.dragX = null; this.dx = 0; this.sc = 1;
+    cv.style.cursor = 'grab'; cv.style.touchAction = 'none';
+    cv.addEventListener('pointerdown', e => { this.dragX = e.clientX; this.dx = 0; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+    cv.addEventListener('pointermove', e => { if (this.dragX !== null) this.dx = e.clientX - this.dragX; });
+    const up = () => { if (this.dragX === null) return; const bars = this.dragBars(); this.dragX = null; this.dx = 0; cv.style.cursor = 'grab'; if (bars && this.onSeek) this.onSeek(bars); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', () => { this.dragX = null; this.dx = 0; cv.style.cursor = 'grab'; }); }
+  // drag right = go back, drag left = go forward (you move the music under the playhead); 4-bar steps
+  dragBars(){ if (!this.barSec || !this.dx) return 0; const sec = -this.dx / this.sc; return Math.round(sec / this.barSec / 4) * 4; }
   setLanes(slots){ this.lanes = slots.map(s => ({slot: s.slot, kind: s.kind, lo: 60, hi: 72, flash: 0, wt: .3, y: 0, h: 0})); this.notes = slots.map(() => []); }
   shift(t, d){ for (const a of this.notes) for (const e of a) if (e.t > t) e.t += d; }
   cut(t){ for (const a of this.notes) for (let i = a.length - 1; i >= 0; i--) if (a[i].t > t) a.splice(i, 1); }
   add(lane, t, pitch, vel, dur){ const arr = this.notes[lane]; if (!arr) return; if (arr.length > 3000) arr.splice(0, 1000); arr.push({t, pitch, vel, dur, lit: false}); }
   draw(F, t, dt){ const {w, h, d} = VZ.fit(this.cv, 2), c = this.c; c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h); const n = this.lanes.length; if (!n) return;
-    const LW = 74, top = 16, gw = w - LW, px = LW + gw * .74, sc = (px - LW) / this.past, x0 = t - this.past, x1 = t + (w - px) / sc, H = h - top - 2;
+    const LW = 74, top = 16, gw = w - LW, px = LW + gw * .74, sc = (px - LW) / this.past; this.sc = sc; this.barSec = F.barSec; if (this.dragX !== null) t -= this.dx / sc; const x0 = t - this.past, x1 = t + (w - px) / sc, H = h - top - 2;
     // active lanes grow, silent ones collapse to a thin strip (eased, so nothing jumps)
     let sum = 0; for (let i = 0; i < n; i++){ const L = this.lanes[i], arr = this.notes[i]; while (arr.length && arr[0].t + arr[0].dur < x0 - .5) arr.shift();
       let cnt = 0, lo = 127, hi = 0; for (const e of arr){ if (e.t > x1) break; if (e.t + e.dur >= x0){ cnt++; if (e.pitch >= 0){ if (e.pitch < lo) lo = e.pitch; if (e.pitch > hi) hi = e.pitch; } } }
@@ -100,7 +107,8 @@ VZ.Lanes = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); 
       // label column
       c.fillStyle = 'rgba(7,7,10,.85)'; c.fillRect(0, ly, LW - 2, lh); c.fillStyle = VZ.hexA(col, .35 + .65 * L.flash); c.fillRect(0, ly + 1, 3, Math.max(1, lh - 2));
       if (lh >= 8){ c.font = (lh > 22 ? '700 12px' : '600 10px') + ' "Barlow Condensed", sans-serif'; c.textBaseline = 'middle'; c.fillStyle = L.flash > .05 ? '#fff' : L.wt > .5 ? 'rgba(236,236,244,.85)' : 'rgba(236,236,244,.32)'; c.fillText(L.slot.toUpperCase(), 9, ly + lh / 2); } }
-    c.fillStyle = F.hot; c.fillRect(px, top - 4, 2, H + 4); c.font = '600 9px "Barlow Condensed", sans-serif'; c.textBaseline = 'top'; c.fillStyle = VZ.hexA(F.cyan, .85); c.fillText('NEXT ▸', px + 6, 3); c.fillStyle = 'rgba(236,236,244,.5)'; c.textAlign = 'right'; c.fillText('◂ PLAYED', px - 6, 3); c.textAlign = 'left'; } };
+    if (this.dragX !== null){ const b = this.dragBars(), lab = b ? `${b > 0 ? 'FORWARD' : 'BACK'} ${Math.abs(b)} BARS → bar ${Math.max(1, (F.barNo || 0) + b + 1)}` : 'drag ← → to move through the song'; c.font = '700 13px "Barlow Condensed", sans-serif'; const tw = c.measureText(lab).width + 14; c.fillStyle = 'rgba(7,7,10,.92)'; c.fillRect(px - tw / 2, top + 6, tw, 20); c.fillStyle = F.cyan; c.textBaseline = 'middle'; c.textAlign = 'center'; c.fillText(lab, px, top + 16); c.textAlign = 'left'; }
+    c.fillStyle = F.hot; c.fillRect(px - 1, top - 4, 3, H + 4); c.font = '600 9px "Barlow Condensed", sans-serif'; c.textBaseline = 'top'; c.fillStyle = VZ.hexA(F.cyan, .85); c.fillText('NEXT ▸', px + 6, 3); c.fillStyle = 'rgba(236,236,244,.5)'; c.textAlign = 'right'; c.fillText('◂ PLAYED', px - 6, 3); c.textAlign = 'left'; } };
 
 // ---------------------------------------------------------------- harmony wheel (circle of fifths; scale outlined, chord filled, sounding notes flash)
 VZ.Wheel = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); this.flash = new Float32Array(12); this.rot = 0; this.rotT = 0; this.chord = []; this.scale = []; this.label = ''; this.tonic = 0; }
@@ -191,7 +199,7 @@ VZ.Arc = class { constructor(cv, onSeek){ this.cv = cv; this.c = cv.getContext('
       c.strokeStyle = VZ.hexA(F.cyan, .7); c.lineWidth = 1.5; c.beginPath(); c.moveTo(x0, h - 4 - s.E0 * (h - 22)); c.lineTo(x1 - 2, h - 4 - s.E1 * (h - 22)); c.stroke(); });
     if (now >= 0){ const last = this.trace[this.trace.length - 1]; if (!last || now - last[0] > .05 || now < last[0]) this.trace.push([now, F.loudN]); if (this.trace.length > 6000) this.trace.splice(0, 2000);
       c.strokeStyle = VZ.hexA(F.hot, .8); c.lineWidth = 1.5; c.beginPath(); let prev = -1; for (const p of this.trace){ const x = X(p[0]), y = h - 4 - p[1] * (h - 22); if (p[0] < prev || p[0] - prev > 6) c.moveTo(x, y); else c.lineTo(x, y); prev = p[0]; } c.stroke();
-      const px = X(Math.max(0, Math.min(T, now))); c.fillStyle = '#fff'; c.fillRect(px - .5, 12, 2, h - 12); }
+      const px = X(Math.max(0, Math.min(T, this.drag && this.hover !== null ? this.hover * T : now))); c.fillStyle = '#fff'; c.fillRect(px - 1, 10, 3, h - 10); c.beginPath(); c.moveTo(px - 5, 10); c.lineTo(px + 6, 10); c.lineTo(px + .5, 16); c.fill(); }
     if (this.hover !== null){ const hb = Math.round(this.hover * T / 4) * 4, hx = X(hb), si = P.sections.findIndex((s, i) => hb >= starts[i] && hb < starts[i] + s.bars);
       c.fillStyle = VZ.hexA(F.cyan, this.drag ? .95 : .6); c.fillRect(hx - 1, 12, 2, h - 12); const lab = `${this.drag ? 'JUMP TO' : 'CLICK →'} ${si >= 0 ? P.sections[si].name.toUpperCase() : ''} · BAR ${hb + 1}`;
       c.font = '600 11px "Barlow Condensed", sans-serif'; const tw = c.measureText(lab).width + 10, lx = Math.min(w - tw - 4, Math.max(4, hx + 6)); c.fillStyle = 'rgba(7,7,10,.92)'; c.fillRect(lx, 14, tw, 16); c.fillStyle = F.cyan; c.fillText(lab, lx + 5, 16); }
