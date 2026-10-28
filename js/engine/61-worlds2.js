@@ -71,7 +71,7 @@ function AWZ_WORLDS2(A){
       {part: 'lanes', slot: 'metal', opts: {count: 3, primes: [5, 7, 11], rate: 2}, on: .45},
       {part: 'hats', slot: 'hat', opts: {open: .4}, on: .5, drum: true},
       {part: 'backbeat', slot: 'snare', opts: {}, on: .75, drum: true}],
-    fx: {plate: {decay: .55, damping: .5, predelay: .008}, hall: {rt60: 6, damp: 2600, predelay: .03}, delay: {beats: .75, feedback: .4, lp: 2400, hp: 500, pingpong: 1}, duck: {bass: 10, ret: 4}, master: {tiltHigh: 0}},
+    fx: {plate: {decay: .55, damping: .5, predelay: .008}, hall: {rt60: 6, damp: 2600, predelay: .03}, delay: {beats: .75, feedback: .4, lp: 2400, hp: 500, pingpong: 1}, duck: {bass: 10, ret: 4}, master: {tiltHigh: -2.5}},
     moves: {impact: 1.2, subdrop: 1, down: 1, riser: .8, gap: .9, tapestop: .3}, macros: {chaos: .2}};
 
   W.TREEMAP = {name: 'TREE MAP', desc: 'a melody that branches into itself', ref: 'Transcendental Tree Map', v2: true,
@@ -94,7 +94,7 @@ function AWZ_WORLDS2(A){
       {part: 'clicks', slot: 'click', opts: {count: 4}, on: .4, drum: true},
       {part: 'kick', slot: 'kick', opts: {mode: 'four', vel: .9}, on: .5, drum: true},
       {part: 'hats', slot: 'hat', opts: {open: .2}, on: .65, drum: true}],
-    fx: {plate: {decay: .6, damping: .4}, hall: {rt60: 5, damp: 4000}, delay: {beats: .75, feedback: .4, lp: 3500, hp: 400, pingpong: 1}, duck: {bass: 8, ret: 3}, master: {tiltHigh: .3}},
+    fx: {plate: {decay: .6, damping: .4}, hall: {rt60: 5, damp: 4000}, delay: {beats: .75, feedback: .4, lp: 3500, hp: 400, pingpong: 1}, duck: {bass: 8, ret: 3}, master: {tiltHigh: -2}},
     moves: {riser: .8, freeze: .8, climb: .7}, macros: {chaos: .15, motion: .45}};
 
   W.BERLIN = {name: 'BERLIN', desc: 'one sequence breathing for minutes', ref: 'Tangerine Dream', v2: true,
@@ -176,7 +176,7 @@ function AWZ_WORLDS2(A){
       {part: 'pad', slot: 'pad', opts: {mode: 'gated'}, on: .65},
       {part: 'hats', slot: 'ride', opts: {open: 0}, on: .75, drum: true},
       {part: 'motif', slot: 'lead', opts: {}, on: .82}],
-    fx: {plate: {decay: .55, damping: .45}, hall: {rt60: 4, damp: 3500}, delay: {beats: .75, feedback: .35, lp: 3000, hp: 400, pingpong: 1}, duck: {bass: 10, ret: 4}, master: {tiltHigh: .4}},
+    fx: {plate: {decay: .55, damping: .45}, hall: {rt60: 4, damp: 3500}, delay: {beats: .75, feedback: .35, lp: 3000, hp: 400, pingpong: 1}, duck: {bass: 10, ret: 4}, master: {tiltHigh: -1.5}},
     moves: {riser: 1.3, impact: 1.2, hpbuild: 1.3, gate: 1, roll: 1, gap: 1, subdrop: .8, halftime: .6, climb: .6}, macros: {chaos: .15}};
 
   W.REICH = {name: 'PHASE', desc: 'two players drift apart and lock again', ref: 'Steve Reich', v2: true, aeqFrom: 0,
@@ -234,7 +234,7 @@ function AWZ_WORLDS2(A){
     fx: {plate: {decay: .6, damping: .55}, hall: {rt60: 4, damp: 2500}, delay: {beats: .75, feedback: .45, lp: 2200, hp: 350, pingpong: 1, wow: .003, flutter: .0003}, duck: {bass: 6, ret: 2}, master: {tiltHigh: -2}},
     moves: {tapestop: 1, swell: .8, wash: .8, throw: .8, gap: .4, riser: .3, impact: .2, roll: 0, gate: 0, hpbuild: .3}, macros: {y: .45, chaos: .15}};
 
-  W.BLOOM = {name: 'BLOOM', desc: 'one character voice, tape echo blooming', ref: 'Rival Consoles', v2: true,
+  W.BLOOM = {name: 'BLOOM', desc: 'one character voice, tape echo blooming', ref: 'Rival Consoles', v2: true, aeqFrom: .15,
     tempo: [82, 108], swing: [0, .04], modes: {aeolian: 2, dorian: 2, phrygian: .5}, families: {three: 2, tetra: 1.5, cinematic: 1}, colour: [.3, .6], spread: [.5, .8], form: ['swell'],
     tracks: {
       lead:  {patch: ['cs80_brass', 'pad_warm'], voices: 12, db: -3, hp: 150, delay: .4, hall: .3},
@@ -273,7 +273,7 @@ function AWZ_WORLDS2(A){
       {part: 'bass', slot: 'bass', opts: {mode: 'sub', vel: .7}, on: .5},
       {part: 'backbeat', slot: 'clap', opts: {}, on: .6, drum: true},
       {part: 'pad', slot: 'pad', opts: {mode: 'hold', vel: .4}, on: .7}],
-    fx: {plate: {decay: .5, damping: .5}, hall: {rt60: 4, damp: 3000}, delay: {beats: .75, feedback: .45, lp: 2600, hp: 500, pingpong: 1}, duck: {bass: 8, ret: 3}, master: {tiltHigh: .3}},
+    fx: {plate: {decay: .5, damping: .5}, hall: {rt60: 4, damp: 3000}, delay: {beats: .75, feedback: .45, lp: 2600, hp: 500, pingpong: 1}, duck: {bass: 8, ret: 3}, master: {tiltHigh: -1}},
     moves: {stutter: 1.4, tapestop: .8, hpbuild: 1, gap: 1, riser: .8, impact: .8, roll: .8, climb: .6}, macros: {chaos: .3}};
 
   W.BREAKS = {name: 'BREAKS', desc: 'euphoric chords over a broken beat', ref: 'Bicep — Glue', v2: true,
@@ -294,7 +294,7 @@ function AWZ_WORLDS2(A){
       {part: 'breaks', slot: 'kick', opts: {}, on: .35, drum: true},
       {part: 'chops', slot: 'vox', opts: {}, on: .45},
       {part: 'stab', slot: 'stab', opts: {hits: 12}, on: .55}],
-    fx: {plate: {decay: .55, damping: .45}, hall: {rt60: 5, damp: 3500}, delay: {beats: .75, feedback: .4, lp: 3000, hp: 400, pingpong: 1}, duck: {bass: 9, ret: 3}, master: {tiltHigh: .4}},
+    fx: {plate: {decay: .55, damping: .45}, hall: {rt60: 5, damp: 3500}, delay: {beats: .75, feedback: .4, lp: 3000, hp: 400, pingpong: 1}, duck: {bass: 9, ret: 3}, master: {tiltHigh: -1.5}},
     moves: {riser: 1.2, impact: 1.2, roll: 1, gap: 1, hpbuild: 1, swell: 1, stutter: .8}, macros: {chaos: .2}};
 
   W.COSMIC = {name: 'COSMIC', desc: 'singing brass, phased strings, wind', ref: 'Jarre / Vangelis', v2: true,
@@ -320,7 +320,7 @@ function AWZ_WORLDS2(A){
     fx: {plate: {decay: .7, damping: .4}, hall: {rt60: 6, damp: 3500}, delay: {beats: .75, feedback: .4, lp: 3000, hp: 300, pingpong: 1}, duck: {bass: 5, ret: 2}, master: {tiltHigh: .3}},
     moves: {riser: 1, swell: 1, keylift: .7, wash: 1, impact: .6}, macros: {chaos: .08, space: .65}};
 
-  W.SAW = {name: 'SAW', desc: 'naive melody, flat-tuned pad, 808 bass', ref: 'Aphex Twin — SAW 85–92', v2: true,
+  W.SAW = {name: 'SAW', desc: 'naive melody, flat-tuned pad, 808 bass', ref: 'Aphex Twin — SAW 85–92', v2: true, aeqFrom: .15,
     tempo: [100, 122], swing: [0, .05], modes: {aeolian: 2, dorian: 1.5, phrygian: 1}, families: {oscillate: 2, swing2: 1.5, flip: 1}, colour: [.2, .5], spread: [.5, .8], form: ['swell'],
     tracks: {
       pad:   {patch: ['fm_strings'], voices: 12, db: -3, hp: 120, hall: .5},
@@ -382,7 +382,7 @@ function AWZ_WORLDS2(A){
       {part: 'kick', slot: 'kick', opts: {mode: 'four'}, on: .45, drum: true},
       {part: 'clicks', slot: 'click', opts: {count: 4}, on: .5, drum: true},
       {part: 'hats', slot: 'hat', opts: {open: .4}, on: .6, drum: true}],
-    fx: {plate: {decay: .55, damping: .4}, hall: {rt60: 4.5, damp: 3500}, delay: {beats: .75, feedback: .45, lp: 3200, hp: 400, pingpong: 1}, duck: {bass: 9, ret: 3}, master: {tiltHigh: .3}},
+    fx: {plate: {decay: .55, damping: .4}, hall: {rt60: 4.5, damp: 3500}, delay: {beats: .75, feedback: .45, lp: 3200, hp: 400, pingpong: 1}, duck: {bass: 9, ret: 3}, master: {tiltHigh: -1.5}},
     moves: {hpbuild: 1.2, climb: 1, throw: 1, stutter: .8, riser: .8, impact: .8}, macros: {chaos: .25, motion: .55}};
 
   // every world (v1 and v2) gets a transition-FX track; v1 genomes keep their exact random draws because it is added last
