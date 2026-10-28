@@ -95,6 +95,17 @@ canvas{display:block;width:100%;height:100%}
 #gate .row button{flex:1;height:36px;font-size:13px}
 #go{width:100%;height:56px;font-size:22px;letter-spacing:.2em;border-color:var(--hot);background:rgba(255,46,136,.12);margin-top:8px}
 #gate small{display:block;color:var(--dim);font-size:11px;margin-top:14px;letter-spacing:.03em}
+#endWarn{position:absolute;right:110px;top:14px;z-index:4;padding:7px 12px;background:rgba(7,7,10,.9);border:1px solid var(--hot);color:#fff;font-size:14px;font-weight:700;letter-spacing:.08em;opacity:0;transition:opacity .3s;pointer-events:none;animation:pulse 1s infinite alternate}
+#endWarn.on{opacity:1}
+@keyframes pulse{from{border-color:var(--hot)}to{border-color:rgba(255,255,255,.2)}}
+#hist{position:fixed;top:56px;left:300px;z-index:14;width:330px;max-height:65vh;overflow:auto;background:rgba(10,10,15,.97);border:1px solid var(--line);display:none;padding:6px}
+#hist.open{display:block}
+#hist .hh{font-size:10px;letter-spacing:.16em;color:var(--dim);padding:4px 6px 8px}
+#hist .hi{display:block;width:100%;text-align:left;padding:7px 8px;margin-bottom:3px;border-color:rgba(255,255,255,.06);text-transform:none;letter-spacing:.02em}
+#hist .hi b{display:block;font-size:14px;letter-spacing:.08em}
+#hist .hi span{font-family:var(--m);font-size:10px;color:var(--dim);font-weight:400}
+#hist .hi.cur{border-color:var(--hot)}
+#hist .hi.empty{color:var(--dim);font-size:12px;padding:10px}
 /* toast / export */
 #toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:15;padding:10px 16px;background:rgba(10,10,15,.95);border:1px solid var(--hot);font-size:14px;letter-spacing:.05em;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
@@ -106,7 +117,7 @@ canvas{display:block;width:100%;height:100%}
 #reelBar button{height:32px;padding:0 12px;background:rgba(0,0,0,.6)}
 body.idle #app .pan:not(#hero),body.idle #top{opacity:.35;transition:opacity 1.2s}
 body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
-@media (max-width:1500px){#logo{font-size:18px}#top .num i{display:none}#top button{padding:0 9px}}
+@media (max-width:1500px){#keyTxt{display:none}#logo{font-size:18px}#top .num i{display:none}#top button{padding:0 9px}}
 @media (max-width:1100px){#left{display:none}#main{grid-template-columns:minmax(0,1fr) 270px}}
 </style>
 </head>
@@ -115,7 +126,7 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
 <div id="app">
   <div id="top">
     <div id="logo">MAUT KI <b>AWAAZ</b></div>
-    <div class="grp"><button id="play" title="Space">▶ PLAY</button><button id="next" title="N — next piece now">NEXT ⏭</button></div>
+    <div class="grp"><button id="play" title="Space">▶ PLAY</button><button id="next" title="N — next piece now">NEXT ⏭</button><button id="histBtn" title="every piece you heard — click one to bring it back exactly">⟲ HISTORY</button><button id="endMode">AT END: REPEAT</button></div>
     <div id="worlds" role="group" aria-label="worlds"></div>
     <div class="grp"><span class="num" id="clock"><i>BAR</i> 000:0</span><span class="num" id="bpm"><i>BPM</i> ---</span><span class="num" id="keyTxt"><i>KEY</i> --</span></div>
     <div class="grp"><button id="rec" title="record what you hear (WAV)">● REC</button><button id="export" title="render this whole piece to WAV">⤓ EXPORT</button><button id="reelBtn" title="R — 9:16 visual for reels">REEL</button><button id="mode" title="V — visual intensity">FULL</button></div>
@@ -127,7 +138,7 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
       <div class="pan" id="taste"><button id="like" class="big" title="L — I like this">♥</button><button id="skip" class="big" title="X — skip">✕</button><button id="more" title="more like this">MORE</button><button id="surprise" title="surprise me">SURPRISE</button><div id="learn">The AI learns what you like: ♥ = more of this, ✕ = skip.</div></div>
     </div>
     <div id="center">
-      <div class="pan" id="hero"><canvas id="heroCv"></canvas><div id="heroTxt"><div id="secName">—</div><div id="worldName"></div><div id="worldDesc"></div><div id="chordNow"></div></div></div>
+      <div class="pan" id="hero"><canvas id="heroCv"></canvas><div id="endWarn"></div><div id="heroTxt"><div id="secName">—</div><div id="worldName"></div><div id="worldDesc"></div><div id="chordNow"></div></div></div>
       <div class="pan"><canvas id="lanes"></canvas></div>
     </div>
     <div id="right">
@@ -152,6 +163,7 @@ body:not(.idle) #app .pan,body:not(.idle) #top{transition:opacity .2s}
   <small>Visuals react to the music and include pulses. Choose CALM or STILL if you are sensitive to flashing. Headphones or proper speakers recommended — there is real sub-bass.</small>
 </div></div>
 <div id="reel"><canvas id="reelCv"></canvas><div id="reelBar"><button id="reelRec">● RECORD VIDEO</button><button id="reelExit">EXIT</button></div></div>
+<div id="hist"><div class="hh">HISTORY · click to bring a piece back</div><div id="histList"></div></div>
 <div id="toast"></div>
 <script src="js/engine/00-util.js"></script>
 <script src="js/engine/10-dsp.js"></script>

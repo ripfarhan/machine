@@ -38,8 +38,18 @@
   for (const w of ['EMERGENCE', 'FELT', 'REPETITION', 'DRIFT']){ const b = document.createElement('button'); b.textContent = AWZ.WORLDS[w].name; b.onclick = () => { gateWorld = w; $$('#gateWorlds button').forEach(x => x.classList.remove('on')); b.classList.add('on'); }; gw.appendChild(b); }
   $$('#gate [data-m]').forEach(b => b.onclick = () => { $$('#gate [data-m]').forEach(x => x.classList.remove('on')); b.classList.add('on'); setMode(b.dataset.m); });
   // ---------------------------------------------------------------- loading pieces
-  function loadGenome(g, why, kind){ if (S.g && S.playing){ const sec = host.ctx.currentTime - S.startedAt; if (kind === 'skip') brain.add(taste.skip(S.g, sec, S.plan ? S.plan.total * S.barSec : 300), 'you'); else taste.listened(S.g, sec); }
-    S.loadReason = why || ''; host.load(g); S.expect = g.seed; }
+  // ---------------------------------------------------------------- history: every piece is a genome, so any past piece can be brought back exactly
+  const HKEY = 'awaaz.history.v1'; let HIST = []; try { HIST = JSON.parse(localStorage.getItem(HKEY) || '[]'); } catch (e){ HIST = []; }
+  if (!HIST.length){ try { (taste.s.recent || []).slice().reverse().forEach(r => { const g = AWZ.makeGenome(r.world, r.seed); ['bpm', 'mode', 'family', 'colour', 'tonic'].forEach(k => { if (r[k] !== undefined) g[k] = r[k]; }); if (r.patches) g.patches = Object.assign({}, g.patches, r.patches); HIST.unshift({genome: g, macros: null, at: 0, liked: false, recovered: true}); }); } catch (e){} }
+  function saveHist(){ try { localStorage.setItem(HKEY, JSON.stringify(HIST.slice(0, 40))); } catch (e){} }
+  function histAdd(g){ if (HIST[0] && HIST[0].genome.seed === g.seed && HIST[0].genome.world === g.world) return; HIST.unshift({genome: JSON.parse(JSON.stringify(g)), macros: Object.assign({}, S.macros), at: Date.now(), liked: false}); HIST = HIST.slice(0, 40); saveHist(); renderHist(); }
+  function histTouch(liked){ if (!HIST[0] || !S.g || HIST[0].genome.seed !== S.g.seed) return; HIST[0].macros = Object.assign({}, S.macros); if (liked) HIST[0].liked = true; saveHist(); renderHist(); }
+  function renderHist(){ const el = $('#histList'); if (!el) return; el.innerHTML = ''; if (!HIST.length){ el.innerHTML = '<div class="hi empty">nothing yet</div>'; return; }
+    HIST.forEach((h, i) => { const g = h.genome, w = AWZ.WORLDS[g.world], d = document.createElement('button'); d.className = 'hi' + (S.g && S.g.seed === g.seed && S.g.world === g.world ? ' cur' : '');
+      const when = h.at ? new Date(h.at).toTimeString().slice(0, 5) : 'earlier'; d.innerHTML = `<b>${h.liked ? '♥ ' : ''}${w ? w.name : g.world}</b><span>${AWZ.NOTE[g.tonic]} ${g.mode} · ${g.bpm} BPM · ${when}${h.recovered ? ' · recovered' : ''}</span>`;
+      d.onclick = () => { $('#hist').classList.remove('open'); loadGenome(JSON.parse(JSON.stringify(g)), 'brought back from history', 'pick', h.macros); toast(`bringing back ${w ? w.name : g.world} — same piece, from the start`); }; el.appendChild(d); }); }
+  function loadGenome(g, why, kind, macros){ histTouch(false); if (S.g && S.playing){ const sec = host.ctx.currentTime - S.startedAt; if (kind === 'skip') brain.add(taste.skip(S.g, sec, S.plan ? S.plan.total * S.barSec : 300), 'you'); else taste.listened(S.g, sec); }
+    S.loadReason = why || ''; host.load(g, macros || undefined); S.expect = g.seed; }
   function loadWorld(w, why){ const g = taste.genomeFor(w); loadGenome(g, why, 'pick'); }
   function nextPiece(mode, kind){ const cur = S.g ? S.g.world : null; const n = taste.next(cur, mode); loadGenome(n.genome, n.why, kind); }
   function queueNext(){ if (!S.g) return; const n = taste.next(S.g.world, 'auto'); S.queued = n; host.send({type: 'queue', genome: n.genome}); }
@@ -49,10 +59,10 @@
   host.on(m => { if (m.type === 'error'){ toast('engine error — press NEXT to restart the music', 6000); console.error(m.msg); return; } if (m.type !== 'out') return; const N = m.notes, toCtx = s => m.now + (s - m.et) / m.sr;
     const nowT = host.now(); if (S.timed.length && S.timed[0].t < nowT - 2){ let k = 0; while (k < S.timed.length && S.timed[k].t < nowT - 2) k++; const stale = S.timed.splice(0, k); const lastBar = stale.filter(e => e.k === 'bar').pop(); if (lastBar) onBar(lastBar.x); }   // background tab: drop stale, keep the latest bar
     for (let i = 0; i < N.length; i += 6){ const t = toCtx(N[i]), lane = N[i + 1], pitch = N[i + 2], vel = N[i + 3], dur = N[i + 4] / m.sr; lanes.add(lane, t, pitch, vel, dur); tInsert({t, k: 'n', lane, pitch, vel}); }
-    for (const x of m.msgs){ if (x.type === 'bar'){ x.ct = toCtx(x.t0); tInsert({t: x.ct, k: 'bar', x}); } else if (x.type === 'piece'){ x.ct = toCtx(x.t0); S.timed = S.timed.filter(e => e.t < x.ct - .3); lanes.cut(x.ct); onPiece(x); } else if (x.type === 'meters') onMeters(x); else if (x.type === 'voice') onVoice(x); else if (x.type === 'nudge') {} }
+    for (const x of m.msgs){ if (x.type === 'bar'){ x.ct = toCtx(x.t0); tInsert({t: x.ct, k: 'bar', x}); } else if (x.type === 'piece'){ x.ct = toCtx(x.t0); S.timed = S.timed.filter(e => e.t < x.ct - .3); lanes.cut(x.ct); onPiece(x); } else if (x.type === 'repeat'){ brain.add('piece finished — playing it again from the start (AT END: REPEAT)', 'ai'); toast('song khatam — wahi gaana phir se shuru (AT END: REPEAT)', 4000); } else if (x.type === 'end'){ brain.add('piece finished — stopped here (AT END: STOP). Press NEXT or pick from HISTORY.', 'ai'); toast('song khatam — ruk gaya (AT END: STOP)', 5000); } else if (x.type === 'meters') onMeters(x); else if (x.type === 'voice') onVoice(x); else if (x.type === 'nudge') {} }
   });
   function onPiece(p){ const natural = S.expect !== p.genome.seed; if (natural && S.g){ taste.ended(S.g, S.macros); brain.add(`piece finished — the AI moves on: ${S.queued ? S.queued.why : ''}`, 'ai'); }
-    S.expect = null; S.g = p.genome; S.piece = p; S.startedAt = host.ctx.currentTime; taste.started(p.genome); const w = AWZ.WORLDS[p.genome.world];
+    S.expect = null; S.g = p.genome; histAdd(p.genome); S.piece = p; S.startedAt = host.ctx.currentTime; taste.started(p.genome); const w = AWZ.WORLDS[p.genome.world];
     const pal = PAL[p.genome.world] || PAL.EMERGENCE; F.hot = pal[0]; F.cyan = pal[1]; F.c1 = VZ.rgb(pal[0]); F.c2 = VZ.rgb(pal[1]); document.documentElement.style.setProperty('--hot', pal[0]); document.documentElement.style.setProperty('--cyan', pal[1]);
     F.laneCol = p.slots.map((s, i) => mix(pal[0], pal[1], p.slots.length > 1 ? i / (p.slots.length - 1) : 0));
     lanes.setLanes(p.slots); S.slots = p.slots; buildStrips(p.slots);
@@ -66,7 +76,7 @@
     brain.add(`chord loop (${p.family}): ${p.loop.map(c => c.name).join(' → ')}`); if (S.loadReason) brain.add('why: ' + S.loadReason, 'ai'); S.loadReason = null;
     brain.add(`sounds: ${p.slots.map(s => s.slot + '=' + s.patch).join(', ')}`); setTimeout(queueNext, 1500); updateLearn(); }
   function mix(a, b, k){ const x = VZ.rgb(a), y = VZ.rgb(b); const c = x.map((v, i) => Math.round((v + (y[i] - v) * k) * 255)); return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); }
-  function onBar(x){ S.info = x; S.barT0 = x.ct; S.barSec = x.barN / sr(); S.pos = x.pos; if (x.sections) arc.updateSections(x.sections.map(s => Object.assign({}, s))); F.energy += (x.E - F.energy) * .5;
+  function onBar(x){ endWarn(x); S.info = x; S.barT0 = x.ct; S.barSec = x.barN / sr(); S.pos = x.pos; if (x.sections) arc.updateSections(x.sections.map(s => Object.assign({}, s))); F.energy += (x.E - F.energy) * .5;
     const chord = x.chord.replace(/#/g, '♯'); F.chordName = chord; $('#chordNow').textContent = `${chord}  ▸ next ${x.nextChord.replace(/#/g, '♯')}`; wheel.set(x); F.moodWord = MOODW[x.mode] || x.mode;
     if (x.bis === 0 || x.seeked){ $('#secName').textContent = x.section; F.secName = x.section; scrambleTitle(x.section); globalGlitch(); const s = S.plan && S.plan.sections[x.si]; if (x.seeked && s) brain.add(`you jumped to ${x.section.toUpperCase()} · bar ${x.pos + 1}`, 'you');
       if (s) brain.add(`→ ${x.section.toUpperCase()} · ${s.bars} bars · energy ${Math.round(s.E0 * 100)}→${Math.round(s.E1 * 100)}%${s.tag === 'break' ? ' · drums out' : s.tag === 'peak' ? ' · everything opens' : ''}`, 'sec'); }
@@ -77,6 +87,11 @@
     if (S.piece && x.chordStart && S.piece.loop.every(c => c.name !== x.chord) && x.mode === S.piece.mode) brain.add(`borrowed colour: ${chord} for one cycle`, 'ai');
     $$('.pan').forEach(p => { p.classList.add('bar-sweep'); }); setTimeout(() => $$('.pan').forEach(p => p.classList.remove('bar-sweep')), 160); }
   function seekTo(bar){ if (!S.g) return; if (S.plan) bar = Math.max(0, Math.min(S.plan.total - 4, Math.round(bar / 4) * 4)); host.send({type: 'seek', bar}); S.pos = bar; S.barT0 = host.now(); const t = host.now(); S.timed = S.timed.filter(e => e.t <= t); lanes.cut(t); arc.cutTrace(bar); toast(`jumping to bar ${bar + 1}`); }
+  const END_MODES = ['REPEAT', 'NEXT', 'STOP']; let endMode = 'REPEAT'; try { endMode = localStorage.getItem('awaaz.endMode') || 'REPEAT'; } catch (e){}
+  function setEndMode(m){ endMode = m; $('#endMode').textContent = 'AT END: ' + m; $('#endMode').title = m === 'REPEAT' ? 'when the song ends it plays again from the start' : m === 'NEXT' ? 'when the song ends the AI starts a new one' : 'when the song ends it stops'; host.send({type: 'endMode', mode: m.toLowerCase()}); try { localStorage.setItem('awaaz.endMode', m); } catch (e){} }
+  function endWarn(x){ const el = $('#endWarn'), left = (x.total || 0) - x.pos; if (left > 0 && left <= 16 && !x.done){ const nxt = endMode === 'REPEAT' ? 'then it plays again' : endMode === 'STOP' ? 'then it stops' : `then a new piece${S.queued ? ' → ' + AWZ.WORLDS[S.queued.genome.world].name : ''}`;
+      el.textContent = `SONG ENDS IN ${left} BAR${left === 1 ? '' : 'S'} · ${nxt}`; el.classList.add('on'); if (left === 8 && S.warned !== S.g.seed){ S.warned = S.g.seed; toast(`song 8 bars mein khatam — ${endMode === 'NEXT' ? 'naya gaana aayega (AT END: NEXT)' : endMode === 'REPEAT' ? 'phir se bajega' : 'ruk jaayega'}`, 4000); } }
+    else el.classList.remove('on'); }
   function onMeters(x){ S.meters = x; F.loudN = Math.max(0, Math.min(1, (x.lufs + 36) / 28)); }
   function onVoice(x){ const st = S.strips && S.strips[x.slot]; if (!st) return; st.m.classList.toggle('on', x.mute); st.s.classList.toggle('on', x.solo); st.el.querySelector('.sp2').textContent = x.patch; st.f.textContent = x.user === 1 ? 'ON' : x.user === -1 ? 'OFF' : 'AUTO'; st.f.classList.toggle('on', x.user !== 0); }
   // ---------------------------------------------------------------- strips
@@ -124,14 +139,16 @@
     requestAnimationFrame(frame); }
   // ---------------------------------------------------------------- controls
   async function start(){ $('#go').textContent = 'LOADING…'; try { await host.start(); } catch (e){ $('#go').textContent = 'AUDIO FAILED — ' + e.message; console.error(e); return; }
-    $('#gate').style.display = 'none'; const g = gateWorld ? taste.genomeFor(gateWorld) : taste.next(null, 'auto').genome; S.loadReason = gateWorld ? 'you picked it' : 'first piece — the AI picked'; host.load(g); S.expect = g.seed; play(true); requestAnimationFrame(frame); }
+    $('#gate').style.display = 'none'; const g = gateWorld ? taste.genomeFor(gateWorld) : taste.next(null, 'auto').genome; S.loadReason = gateWorld ? 'you picked it' : 'first piece — the AI picked'; host.load(g); S.expect = g.seed; setEndMode(endMode); play(true); requestAnimationFrame(frame); }
   // the engine clock stops while paused but AudioContext time runs on: shift everything still to come by the pause length
   function play(on){ if (host.ctx){ if (!on){ S.pausedAt = host.ctx.currentTime; S.pauseT = host.now(); } else if (S.pausedAt !== undefined){ const d = host.ctx.currentTime - S.pausedAt, t = S.pauseT;
         for (const e of S.timed) if (e.t > t){ e.t += d; if (e.x) e.x.ct += d; } lanes.shift(t, d); if (S.plan) S.plan.t0 += d; S.barT0 += d; S.pausedAt = undefined; } }
     S.playing = on; host.play(on); $('#play').textContent = on ? '❚❚ PAUSE' : '▶ PLAY'; $('#play').classList.toggle('on', on); }
+  $('#endMode').onclick = () => setEndMode(END_MODES[(END_MODES.indexOf(endMode) + 1) % 3]);
+  $('#histBtn').onclick = e => { e.stopPropagation(); renderHist(); $('#hist').classList.toggle('open'); }; document.addEventListener('pointerdown', e => { if (!$('#hist').contains(e.target) && e.target !== $('#histBtn')) $('#hist').classList.remove('open'); });
   $('#go').onclick = start; $('#play').onclick = () => play(!S.playing);
   $('#next').onclick = () => { nextPiece('auto', 'skip'); };
-  $('#like').onclick = () => { if (!S.g) return; brain.add(taste.like(S.g, S.macros), 'you'); toast('♥ the AI will make more like this'); updateLearn(); $('#like').classList.add('on'); setTimeout(() => $('#like').classList.remove('on'), 600); };
+  $('#like').onclick = () => { if (!S.g) return; histTouch(true); brain.add(taste.like(S.g, S.macros), 'you'); toast('♥ the AI will make more like this'); updateLearn(); $('#like').classList.add('on'); setTimeout(() => $('#like').classList.remove('on'), 600); };
   $('#skip').onclick = () => { nextPiece('auto', 'skip'); toast('✕ skipped — learning'); updateLearn(); };
   $('#more').onclick = () => { if (S.g) taste.like(S.g, S.macros); nextPiece('similar'); toast('more like this — new seed, same world'); };
   $('#surprise').onclick = () => { nextPiece('surprise'); toast('surprise!'); };

@@ -8,7 +8,7 @@ function AWZ_ENGINE(A){
   const DRUM = {kick: 1, snare: 1, hat: 1, shaker: 1, tom: 1, perc: 1};
   A.Engine = class {
     constructor(sr){ this.sr = sr; this.mixer = new A.Mixer(sr); this.q = new A.EventQueue(); this.t = 0; this.tracks = {}; this.slots = []; this.out = new A.Outbox(8192); this.comp = null; this.g = null; this.w = null;
-      this.macro = {energy: .5, mood: .5, space: .5, density: .5, chaos: .2, motion: .4, x: .5, y: .2}; this.auto = true; this.queued = null; this.history = []; this.blocks = 0; this.playing = true; this.lastE = .3;
+      this.macro = {energy: .5, mood: .5, space: .5, density: .5, chaos: .2, motion: .4, x: .5, y: .2}; this.auto = true; this.endMode = 'repeat'; this.queued = null; this.history = []; this.blocks = 0; this.playing = true; this.lastE = .3;
       this.lfoT = 0; this.reroll = {}; this.pieceStart = 0; this.onEnd = null; }
     // ---------------------------------------------------------------- build
     makeInst(slot, gp, spec){ const sr = this.sr, seed = A.hash(this.g.seed, slot) & 0xffff, p = gp.p;
@@ -88,7 +88,9 @@ function AWZ_ENGINE(A){
       return A.makeGenome(r.pick(others), seed); }
     // ---------------------------------------------------------------- run
     schedule(){ const c = this.comp, ahead = c.barN; while (c.t < this.t + BLK + ahead){
-        if (c.done){ this.history.push(this.g); if (this.auto){ const g = this.onEnd ? this.onEnd(this.g) : null; this.load(g || this.pickNext()); return; } else if (!c.endSent){ c.endSent = true; this.out.msg({type: 'end'}); } }
+        if (c.done && this.endMode === 'repeat'){ c.seek(0); c.done = false; this.out.msg({type: 'repeat'}); }
+        if (c.done && this.endMode === 'stop'){ if (!c.endSent){ c.endSent = true; this.out.msg({type: 'end', stopped: true}); } c.t += c.barN; continue; }
+        if (c.done){ this.history.push(this.g); if (this.history.length > 20) this.history.shift(); if (this.auto){ const g = this.onEnd ? this.onEnd(this.g) : null; this.load(g || this.pickNext()); return; } else if (!c.endSent){ c.endSent = true; this.out.msg({type: 'end'}); } }
         const bar = c.nextBar(); this.lastE = bar.info.E; const af = this.w.aeqFrom === undefined ? .35 : this.w.aeqFrom; this.mixer.aeq.gate = clamp((bar.info.E - af) / .3, 0, 1);
         for (const e of bar.events){ const tr = this.tracks[e.slot]; if (!tr) continue; this.q.push({t: Math.round(e.t), slot: e.slot, ev: e.ev});
           const ev = e.ev; if (ev.note !== undefined) this.out.note(e.t, tr.id, ev.note, ev.vel || .7, (ev.dur || .2) * this.sr); else if (ev.level === undefined) this.out.note(e.t, tr.id, ev.kick ? -1 : ev.open ? -3 : -2, ev.vel || .7, 0); }
