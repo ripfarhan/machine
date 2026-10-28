@@ -46,6 +46,8 @@ function AWZ_DSP(A){
     reset(){ this.s.fill(0); } };
 
   // ADSR with exponential segments (RC-style curves), times in seconds. gate on/off via trigger()/release().
+  // render quality (the CPU governor lowers it under load instead of dropping notes): unison voices, release-tail floor, 303 oversampling
+  const Q = A.Q || (A.Q = {uni: 3, tail: 8e-4, os: 4});
   A.ADSR = class { constructor(sr){ this.sr = sr; this.v = 0; this.stage = 0; this.a = .005; this.d = .2; this.s = .7; this.r = .3; this.ka = 0; this.kd = 0; this.kr = 0; this.peak = 1; }
     setTimes(a, d, s, r){ this.a = a; this.d = d; this.s = s; this.r = r; const sr = this.sr; this.ka = 1 - Math.exp(-1 / (Math.max(.0005, a) * sr * .4)); this.kd = 1 - Math.exp(-1 / (Math.max(.001, d) * sr * .25)); this.kr = 1 - Math.exp(-1 / (Math.max(.001, r) * sr * .25)); }
     trigger(peak){ this.stage = 1; this.peak = peak === undefined ? 1 : peak; }
@@ -55,7 +57,7 @@ function AWZ_DSP(A){
         case 1: this.v += (this.peak * 1.3 - this.v) * this.ka; if (this.v >= this.peak){ this.v = this.peak; this.stage = 2; } break;
         case 2: this.v += (this.s * this.peak - this.v) * this.kd; if (Math.abs(this.v - this.s * this.peak) < 1e-4) this.stage = 3; break;
         case 3: this.v = this.s * this.peak; break;
-        case 4: this.v += (0 - this.v) * this.kr; if (this.v < 8e-4){ this.v = 0; this.stage = 0; } break; } }
+        case 4: this.v += (0 - this.v) * this.kr; if (this.v < Q.tail){ this.v = 0; this.stage = 0; } break; } }
     get active(){ return this.stage !== 0; } };
 
   // smoothed parameter (linear-in-time one pole)

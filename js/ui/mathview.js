@@ -11,13 +11,13 @@ class AwaazMath {
     const k = x => `<i>${x}</i>`, hz = mi => 440 * Math.pow(2, (mi - 69) / 12), nm = mi => this.N[((mi % 12) + 12) % 12] + (Math.floor(mi / 12) - 1), big = x => Math.round(x).toLocaleString('en-US'), f = (x, d) => (+x).toFixed(d === undefined ? 2 : d);
     const sr = m.sr, tS = m.t + (playing ? (now - this.at) / 1000 * sr : 0), sec = tS / sr, barF = (tS - (c.k * c.barN - c.barN)) / c.barN;
     const stepInBar = Math.max(0, Math.min(15, Math.floor(((tS / c.stepN) % 16 + 16) % 16)));
-    // 01 clock
-    const prog = '▮'.repeat(stepInBar + 1) + '▯'.repeat(15 - stepInBar);
-    const T = `<h5>01 · CLOCK</h5>
-      <p class="xl">${n(big(tS))}</p>
-      <p>÷${big(sr)} = ${n(sec, 3)} s</p>
-      <p>${n(String(stepInBar + 1).padStart(2, '0'))} ${k(prog)}</p>
-      <p>Σ ${n(big(tS * 2))} nums</p>`;
+    // 01 engine: how hard the audio thread is working right now, and what the CPU saver is doing about it
+    const G = m.gov || {load: 0, level: 0}, ld = Math.max(0, Math.min(1.5, G.load || 0)), bars = Math.round(Math.min(1, ld) * 10), mm = s0 => `${Math.floor(s0 / 60)}:${String(Math.floor(s0 % 60)).padStart(2, '0')}`;
+    const T = `<h5>01 · ENGINE</h5>
+      <p>CPU ${n(Math.round(ld * 100) + '%')} ${k('█'.repeat(bars) + '░'.repeat(10 - bars))}</p>
+      <p>saver ${n(G.level ? G.level + '/3' : 'off')} ${G.level ? k(['', 'unison −1', 'tails short', 'lean'][G.level]) : ''}</p>
+      <p>voices ${n(m.nv || 0, 0)} · events ${n(c.nEvents || 0, 0)}/bar</p>
+      <p>bar ${n(c.k, 0)}/${m.total || '–'} · ${n(mm(sec))}</p>`;
     // 02 energy
     const lerp = c.E0 + (c.E1 - c.E0) * c.prog;
     const E = `<h5>02 · ENERGY</h5>

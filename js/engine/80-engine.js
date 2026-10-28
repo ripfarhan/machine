@@ -127,7 +127,8 @@ function AWZ_ENGINE(A){
         if (o.pat) d.bits = o.pat.join(''); if (o.gate && o.gate.join && p.spec.part === 'pad') d.bits = o.gate.join('');
         if (o.lanes) d.lanes = o.lanes.slice(0, 5).map(L => { const P = L.p || L.period || L.len || 16; return L.hits ? {p: P, bits: L.hits.join(''), i: ((c.k * 16) % P)} : {p: P, bits: L.gate ? L.gate.join('') : L.acc ? L.acc.map(x => x ? 1 : 0).join('') : '', n: L.n, len: L.len}; });
         if (o.target) d.bits = o.target.join(''); if (o.eps !== undefined) d.phase = {base: o.base, eps: o.eps}; if (o.alt) d.kick = {mode: o.mode, alt: o.alt}; pats.push(d); }
-      const g = this.g; return {type: 'math', t: this.t, sr, raw: Array.from(this.rawL || []), comp: c.dbg || null, voices, pats, seed: g.seed, world: g.world,
+      let nv = 0; for (const slot of this.slots){ const tr = this.tracks[slot], inst = tr && tr.inst; if (!inst) continue; if (inst.pool) nv += inst.pool.activeCount(); else if (inst.v && inst.v.on) nv++; }
+      const g = this.g; return {type: 'math', t: this.t, sr, nv, total: c.totalBars || 0, gov: this.gov ? {load: this.gov.load, level: this.gov.level} : null, raw: Array.from(this.rawL || []), comp: c.dbg || null, voices, pats, seed: g.seed, world: g.world,
         macro: Object.assign({}, this.macro), mix: {lufs: M.loud.lufs, lref: M.lref, target: M.target, autoGain: M.autoGain, gr: M.grMaster, peak: M.outPeak, aeqG: Array.from(M.aeq.g), aeqT: M.aeq.target.slice(), aeqM: Array.from(M.aeq.meas).map(x => 10 * Math.log10(x + 1e-12)), aeqF: M.aeq.f, gate: M.aeq.gate,
           duckB: M.duckGain(this.t, M.duckDepth.bass), duckDepth: M.duckDepth.bass, lastKick: M.kicks.length ? (this.t - M.kicks[M.kicks.length - 1]) / sr : -1, tilt: M.tiltHigh, crush: M.crush, gateOn: M.gate.on, hp: M.hpSweep.v, fsh: M.fshiftOn > .002 ? M.fshift.shift : 0, bus: M.busfx.mode, sends: Object.keys(M.x2.sends), phaser: M.phaserMix, musicLP: M.musicLP.v, hallRT: this._rt, delayFB: this._fb}}; }
     next(){ if (this.comp) this.comp.doNudge('next'); }
@@ -141,13 +142,14 @@ function AWZ_ENGINE(A){
       if (this.fxp && this.fxp.gran){ if (this.w && this.w.sends && this.w.sends.gran) this.fxp.gran.set(this.w.sends.gran); else this.fxp.gran.freeze = false; }
       if (this.comp){ this.comp.halfTimeTo = -1; const mv = this.comp.moves; if (mv){ mv.gateOn = mv.freezeOn = mv.tapeStopped = false; mv.rolling = null; mv.hpPlan = null; } } }
     // CPU governor (live playback only; the host feeds it wall-clock ms per block — Date.now() deltas average out to the true cost).
-    // Over ~70% of the real-time budget → cap simultaneous notes per melodic instrument (3 levels); back under ~38% for 5 s → relax.
+    // It never drops notes. Over ~78% of the real-time budget it lowers render quality a step: fewer unison oscillators on new notes,
+    // then release tails end at −50 dB instead of −62, then the 303 runs 2x instead of 4x. Back under ~50% for 5 s → a step back up.
     govern(ms, n){ const G = this.gov || (this.gov = {acc: 0, nb: 0, level: 0, calm: 0, load: 0}); G.acc += ms; G.nb += n; if (G.nb < this.sr * .5) return;
       const load = G.acc / (G.nb / this.sr * 1000); G.acc = 0; G.nb = 0; G.load = load;
-      if (load > .7){ G.calm = 0; if (G.level < 3){ G.level++; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } }
-      else if (load < .38 && G.level > 0){ if (++G.calm >= 10){ G.calm = 0; G.level--; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } } else G.calm = 0; }
-    applyGov(){ const lv = this.gov ? this.gov.level : 0, f = [1, .7, .5, .35][lv];
-      for (const slot in this.tracks){ const tr = this.tracks[slot], inst = tr && tr.inst; if (!inst || !inst.pool || tr.bus === 'drums' || tr.instKind === 'fx') continue; inst.pool.cap = lv ? Math.max(3, Math.ceil(inst.pool.v.length * f)) : 0; } }
+      if (load > .78){ G.calm = 0; if (G.level < 3){ G.level++; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } }
+      else if (load < .5 && G.level > 0){ if (++G.calm >= 10){ G.calm = 0; G.level--; this.applyGov(); this.out.msg({type: 'gov', level: G.level, load}); } } else G.calm = 0; }
+    applyGov(){ const lv = this.gov ? this.gov.level : 0, Q = A.Q || (A.Q = {}), L = [[3, 8e-4, 4], [2, 8e-4, 4], [2, 3e-3, 2], [1, 6e-3, 2]][lv]; Q.uni = L[0]; Q.tail = L[1]; Q.os = L[2];
+      for (const slot in this.tracks){ const inst = this.tracks[slot] && this.tracks[slot].inst; if (inst && inst.pool) inst.pool.cap = 0; } }
     seek(bar){ const c = this.comp; if (!c) return; this.q.clear(); this.resetFx(); for (const tr of this.mixer.tracks) if (tr.inst.pend) tr.inst.pend.length = 0; c.seek(bar); c.t = this.t + 64; c.done = false; c.endSent = false; this.out.msg({type: 'seek', bar, t0: c.t}); }
     pickNext(){ if (this.queued){ const g = this.queued; this.queued = null; return g; }
       const others = A.WORLD_LIST.filter(w => w !== this.g.world); const seed = (A.hash(this.g.seed, 'next', this.history.length) >>> 0); const r = A.rng(seed);

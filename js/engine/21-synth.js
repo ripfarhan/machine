@@ -21,7 +21,7 @@ function AWZ_SYNTH(A){
       this.fenv.v = 0; this.fenv.trigger(1); this.aenv.trigger(1); if (!p.legatoKeep && !sounding){ this.fL.reset(); this.fR.reset(); this.sL.reset(); this.sR.reset(); }
       this.k = 0; this.panW = 0;
       // unison detune ratios and pan gains are fixed per note: precompute (was pow() per sample per voice)
-      const U = Math.max(1, Math.min(3, p.unison || 1)), sp = p.spread || 0, panSp = p.uniPan === undefined ? .6 : p.uniPan; this.U = U;
+      const U = Math.max(1, Math.min(A.Q ? A.Q.uni : 3, p.unison || 1)), sp = p.spread || 0, panSp = p.uniPan === undefined ? .6 : p.uniPan; this.U = U;
       if (!this.um){ this.um = new Float64Array(3); this.uL = new Float64Array(3); this.uR = new Float64Array(3); }
       for (let u = 0; u < U; u++){ const cents = U > 1 ? (u / (U - 1) - .5) * sp : 0; this.um[u] = Math.pow(2, (cents + this.det0) / 1200);
         const pan = U > 1 ? (u / (U - 1) - .5) * 2 * panSp : 0, c = .5 * (1 - Math.abs(pan)); this.uL[u] = (1 - pan) * .5 + c; this.uR[u] = (1 + pan) * .5 + c; } }

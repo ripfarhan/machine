@@ -20,10 +20,9 @@ function AWZ_ACID(A){
   const clamp = A.clamp, blep = A.blep, LN2 = Math.LN2;
   const TAU = (sec, rate) => 1 - Math.exp(-1 / (sec * rate));
   const logcosh = x => { const a = Math.abs(x); return a + Math.log1p(Math.exp(-2 * a)) - LN2; };
-  const OS = 4;
 
   A.AcidVoice = class {
-    constructor(sr, seed){ this.sr = sr; this.fs = sr * OS; const r = this.r = A.rng(seed || 5);
+    constructor(sr, seed){ this.sr = sr; this.os = 4; this.fs = sr * 4; const r = this.r = A.rng(seed || 5);
       this.ph = r(); this.lf = Math.log2(110); this.lt = this.lf; this.y1 = 0; this.y2 = 0; this.y3 = 0; this.y4 = 0; this.fbh = 0; this.sqh = 0;
       this.meg = 0; this.megS = 0; this.accOn = 0; this.vc = 0; this.veg = 0; this.gateLeft = 0; this.relI = -1; this.ga = 0; this.gb = 0; this.vel = .85;
       this.k = {cut: .3, res: .6, env: .5, dec: .3, acc: .6, dist: .3, wave: 0, gain: 1}; this.kt = Object.assign({}, this.k);
@@ -37,7 +36,10 @@ function AWZ_ACID(A){
       this.bH = new A.SVF(); this.bM = new A.SVF(); this.bell = new A.SVF(); this.bH.set(3300, .9, sr); this.bM.set(900, .5, sr); this.bell.set(3200, 1.5, sr); this.eH = 1e-9; this.eM = 1e-9; this.bellG = 1; this.kEn = TAU(.05, sr); }
     knobs(p){ const t = this.kt; if (p.cut !== undefined) t.cut = +p.cut; if (p.res !== undefined) t.res = +p.res; if (p.env !== undefined) t.env = +p.env; if (p.dec !== undefined) t.dec = +p.dec;
       if (p.acc !== undefined) t.acc = +p.acc; if (p.dist !== undefined) t.dist = +p.dist; if (p.wave !== undefined) t.wave = +p.wave; if (p.gain !== undefined) t.gain = +p.gain; }
-    start(off, note, vel, dur, p){ this.off = off; this.knobs(p); if (!this.on) this.k = Object.assign({}, this.kt);
+    // oversampling factor follows render quality (4x normally, 2x when the CPU governor asks); only changed while silent
+    setOS(os){ if (os === this.os) return; this.os = os; this.fs = this.sr * os; this.d1.set(Math.min(17500, this.fs * .2), .5412, this.fs); this.d2.set(Math.min(17500, this.fs * .2), 1.3066, this.fs);
+      this.kFbHp = TAU(1 / (2 * Math.PI * 150), this.fs); this.kSqHp = TAU(1 / (2 * Math.PI * 44.5), this.fs); }
+    start(off, note, vel, dur, p){ this.off = off; this.knobs(p); if (!this.on){ this.k = Object.assign({}, this.kt); this.setOS(A.Q ? A.Q.os : 4); }
       this.note = note; this.lt = Math.log2(A.mtof(note)); this.lf = this.lt; this.vel = vel; this.accOn = p.accOn ? 1 : 0;
       this.meg = 1; this.veg = 1; this.relI = -1; this.gateLeft = Math.max(1, Math.round(dur * this.sr)); }
     glide(note, dur, p){ this.knobs(p); this.note = note; this.lt = Math.log2(A.mtof(note)); this.relI = -1; this.gateLeft = Math.max(1, Math.round(dur * this.sr)); }
@@ -69,7 +71,7 @@ function AWZ_ACID(A){
         const dist = clamp(K.dist, 0, 1), dOn = dist > .02, dDb = 6 + 24 * dist, dGain = Math.pow(10, dDb / 20), bias = .15, tb = Math.tanh(bias), comp = (.5 / Math.tanh(dGain * .5)) * Math.pow(10, -.15 * (dDb - 6) / 20),
           toneK = TAU(1 / (2 * Math.PI * (6000 - 3000 * dist)), fs), wv = clamp(K.wave, 0, 1), dt = f / fs, wet = clamp(dist * 2, 0, 1);
         let out = 0;
-        for (let o = 0; o < OS; o++){
+        for (let o = 0, OS = this.os; o < OS; o++){
           let ph = this.ph + dt; if (ph >= 1) ph -= 1; this.ph = ph;
           const saw = 2 * ph - 1 - blep(ph, dt); let x = saw;
           if (wv > .001){ let p2 = ph + .5 + this.duty; p2 -= Math.floor(p2); const s2 = 2 * p2 - 1 - blep(p2, dt), sq = -Math.tanh(70 * s2 + 4.37);
