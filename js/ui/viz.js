@@ -67,7 +67,7 @@ VZ.Hero = class { constructor(cv){ this.cv = cv; this.c = cv.getContext('2d'); t
     this.ring = this.ring.filter(r => t - r.t < F.beatSec); for (const r of this.ring){ const q = (t - r.t) / F.beatSec; c.strokeStyle = VZ.hexA(r.down ? F.hot : F.cyan, (1 - q) * .8); c.lineWidth = r.down ? 2 : 1; c.beginPath(); c.arc(hx, hy, rr + 4 + VZ.ease(q) * 26 * F.fx, 0, 6.283); c.stroke(); } } };
 
 // ---------------------------------------------------------------- voice lanes: what the machine is about to play (future notes ghosted, ignite at the playhead)
-VZ.Lanes = class { constructor(cv, onSeek){ this.cv = cv; this.c = cv.getContext('2d'); this.lanes = []; this.notes = []; this.past = 7; this.future = 2.4; this.onSeek = onSeek; this.dragX = null; this.dx = 0; this.sc = 1;
+VZ.Lanes = class { constructor(cv, onSeek){ this.cv = cv; this.c = cv.getContext('2d'); this.lanes = []; this.notes = []; this.past = 4.2; this.future = 6; this.onSeek = onSeek; this.dragX = null; this.dx = 0; this.sc = 1;
     cv.style.cursor = 'grab'; cv.style.touchAction = 'none';
     cv.addEventListener('pointerdown', e => { this.dragX = e.clientX; this.dx = 0; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
     cv.addEventListener('pointermove', e => { if (this.dragX !== null) this.dx = e.clientX - this.dragX; });
@@ -80,7 +80,8 @@ VZ.Lanes = class { constructor(cv, onSeek){ this.cv = cv; this.c = cv.getContext
   cut(t){ for (const a of this.notes) for (let i = a.length - 1; i >= 0; i--) if (a[i].t > t) a.splice(i, 1); }
   add(lane, t, pitch, vel, dur){ const arr = this.notes[lane]; if (!arr) return; if (arr.length > 3000) arr.splice(0, 1000); arr.push({t, pitch, vel, dur, lit: false}); }
   draw(F, t, dt){ const {w, h, d} = VZ.fit(this.cv, 2), c = this.c; c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, w, h); const n = this.lanes.length; if (!n) return;
-    const LW = 74, top = 16, gw = w - LW, px = LW + gw * .74, sc = (px - LW) / this.past; this.sc = sc; this.barSec = F.barSec; if (this.dragX !== null) t -= this.dx / sc; const x0 = t - this.past, x1 = t + (w - px) / sc, H = h - top - 2;
+    // playhead at 42 %: more of what is coming
+    const LW = 74, top = 16, gw = w - LW, px = LW + gw * .42, sc = (px - LW) / this.past; this.sc = sc; this.barSec = F.barSec; if (this.dragX !== null) t -= this.dx / sc; const x0 = t - this.past, x1 = t + (w - px) / sc, H = h - top - 2;
     // active lanes grow, silent ones collapse to a thin strip (eased, so nothing jumps)
     let sum = 0; for (let i = 0; i < n; i++){ const L = this.lanes[i], arr = this.notes[i]; while (arr.length && arr[0].t + arr[0].dur < x0 - .5) arr.shift();
       let cnt = 0, lo = 127, hi = 0; for (const e of arr){ if (e.t > x1) break; if (e.t + e.dur >= x0){ cnt++; if (e.pitch >= 0){ if (e.pitch < lo) lo = e.pitch; if (e.pitch > hi) hi = e.pitch; } } }

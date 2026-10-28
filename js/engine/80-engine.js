@@ -157,7 +157,8 @@ function AWZ_ENGINE(A){
       const others = A.WORLD_LIST.filter(w => w !== this.g.world); const seed = (A.hash(this.g.seed, 'next', this.history.length) >>> 0); const r = A.rng(seed);
       return A.makeGenome(r.pick(others), seed); }
     // ---------------------------------------------------------------- run
-    schedule(){ const c = this.comp, ahead = c.barN; while (c.t < this.t + BLK + ahead){
+    // composes two bars ahead, so the lanes can show what is coming
+    schedule(){ const c = this.comp, ahead = c.barN * 2; while (c.t < this.t + BLK + ahead){
         if (c.done && this.endMode === 'repeat'){ c.seek(0); c.done = false; this.out.msg({type: 'repeat'}); }
         if (c.done && this.endMode === 'stop'){ if (!c.endSent){ c.endSent = true; this.out.msg({type: 'end', stopped: true}); } c.t += c.barN; continue; }
         if (c.done){ this.history.push(this.g); if (this.history.length > 20) this.history.shift(); if (this.auto){ const g = this.onEnd ? this.onEnd(this.g) : null; this.load(g || this.pickNext()); return; } else if (!c.endSent){ c.endSent = true; this.out.msg({type: 'end'}); } }
