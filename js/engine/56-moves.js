@@ -46,20 +46,23 @@ function AWZ_MOVES(A){
       if (ctx.sectionStart && c.k > 0){ const tag = S.tag || S.name; this.cleanup(cmd, fx);
         if (tag === 'peak' || ctx.arrivedUp){ if (this.ok('impact')){ fx(0, {fx: 'impact', vel: .85, dur: 3, freq: 50}); this.use('impact', 'impact on the downbeat'); }
           if (tag === 'peak' && this.ok('subdrop') && r() < .55){ fx(0, {fx: 'subdrop', vel: .7, dur: 2.2, freq: 55}); this.use('subdrop', 'sub drop'); }
-          const lastPeak = c.sections.slice(c.si + 1).every(s => s.tag !== 'peak'), peaks = c.sections.filter(s => s.tag === 'peak').length;
-          if (tag === 'peak' && lastPeak && peaks >= 1 && c.si > 2 && !this.lifted && this.weights.keylift && r() < this.weights.keylift){ this.lifted = true; c.keyLift(r.pick([2, 2, 2, 5])); this.use('keylift', 'key lift into the last peak'); } }
+          if (this.liftNote){ this.log.push(this.liftNote); this.liftNote = null; } }
         if ((tag === 'break' || tag === 'outro') && this.ok('down') && r() < .8){ fx(0, {fx: 'down', vel: .6, dur: barN * 2 / c.sr}); this.use('down', 'downlifter'); }
         if (tag === 'break' && this.ok('freeze') && r() < .6 && c.engineHas('gran')){ cmd(0, {cmd: 'freeze', on: true}); this.freezeOn = true; this.use('freeze', 'granular freeze — the last bar hangs in the air'); }
         if (tag === 'build'){ const L = S.bars; const ch = this.pick(['hpbuild', 'gate', 'climb', 'halftime'].filter(x => this.weights[x]), r() < .5 ? 1 : 2);
-          for (const m of ch){ if (m === 'hpbuild'){ const hb = Math.min(L, 8); cmd((L - hb) * 16, {cmd: 'ramp', what: 'hp', from: 20, to: 420 + r() * 400, dur: hb * barN / c.sr, curve: 2}); this.use(m, `filter build: high-pass rises over the last ${hb} bars`); }
+          for (const m of ch){ if (m === 'hpbuild'){ const hb = Math.min(L, 8); this.hpPlan = {hb, to: 420 + r() * 400}; this.use(m, `filter build: high-pass rises over the last ${hb} bars`); }
             else if (m === 'gate'){ cmd(0, {cmd: 'gate', on: true, k: r.pick([9, 11, 12, 13]), rot: r.int(0, 3)}); this.gateOn = true; this.use(m, 'trance gate on the music'); }
             else if (m === 'climb'){ cmd(0, {cmd: 'climb', dur: L * barN / c.sr}); this.use(m, 'barber-pole climb (frequency shifter)'); }
             else if (m === 'halftime'){ c.halfTimeFrom = c.k + Math.max(0, L - 4); c.halfTimeTo = c.k + L; this.use(m, 'drums go half-time for the last 4 bars'); } } }
         if (tag === 'peak' && this.ok('gate') && r() < .25){ cmd(0, {cmd: 'gate', on: true, k: r.pick([11, 13]), rot: 0}); this.gateOn = true; this.use('gate', 'gated pads in the peak'); } }
+      // planned filter build starts when its bars arrive (emitted now, not queued bars ahead, so a cut build never leaks into the next section)
+      if (this.hpPlan && !ctx.hold && (S.tag || S.name) === 'build' && bl <= this.hpPlan.hb){ cmd(0, {cmd: 'ramp', what: 'hp', from: 20, to: this.hpPlan.to, dur: bl * barN / c.sr, curve: 2}); this.hpPlan = null; }
+      // HOLD loops the last 8 bars of a section: no boundary moves (they would fire every loop with no section start to undo them)
+      if (ctx.hold){ if (!this.wasHold){ this.cleanup(cmd, fx); this.wasHold = true; } return this.log; } this.wasHold = false;
       if (!next) return this.log;
       // ---- approaching a boundary
       const bigInto = into === 'peak' || into === 'build' || into === 'up';
-      if (bigInto && (bl === 8 || bl === 4 || bl === 2) && this.ok('riser') && r() < (bl === 8 ? .4 : bl === 4 ? .5 : .35) * (into === 'peak' ? 1 : .7)){ fx(0, {fx: 'riser', vel: .5 + E * .3, dur: bl * barN / c.sr, freq: 55 + r() * 40}); this.use('riser', `riser (${bl} bars) → ${nt.toUpperCase()}`); }
+      if (bigInto && (bl === 8 || bl === 4 || bl === 2) && this.ok('riser') && r() < (bl === 8 ? .4 : bl === 4 ? .5 : .35) * (into === 'peak' ? 1 : .7)){ fx(0, {fx: 'riser', vel: .38 + E * .25, dur: bl * barN / c.sr, freq: 55 + r() * 40}); this.use('riser', `riser (${bl} bars) → ${nt.toUpperCase()}`); }
       if (into === 'peak' && bl === 2 && this.ok('roll') && r() < .7){ const sl = this.slotFor(['snare', 'click', 'perc', 'hat', 'shaker']); if (sl){ for (let s = 0; s < 16; s += 2) at(s, sl, {vel: .25 + s / 16 * .2}); this.use('roll', 'snare roll into the drop'); this.rolling = sl; } }
       if (into === 'peak' && bl === 1 && this.rolling){ const sl = this.rolling; for (let s = 0; s < 8; s++) at(s, sl, {vel: .45 + s / 8 * .2}); for (let s = 8; s < 15.5; s += .5) at(s, sl, {vel: .65 + (s - 8) / 8 * .3}); this.rolling = null; }
       if (bl === 1 && r() < (into === 'peak' ? .15 : into === 'build' || into === 'break' ? .3 : .55)){ /* plain boundary: only the arrangement changes (research/07 §0) */ }
@@ -70,7 +73,7 @@ function AWZ_MOVES(A){
           if (m === 'swell'){ const b = r.pick([4, 8, 8, 12, 16]); fx(16 - b, {fx: 'swell', vel: .45 + r() * .2, dur: b * stepN / c.sr}); this.use(m, `reverse swell (${b / 4} beats) into the downbeat`); }
           else if (m === 'gap'){ cmd(14, {cmd: 'gap', dur: 2 * stepN / c.sr}); this.use(m, 'half a beat of silence before the drop'); }
           else if (m === 'stutter'){ const len = r.pick([1, .5, .5, .25]) * stepN / c.sr; cmd(12, {cmd: 'stutter', len, dur: 4 * stepN / c.sr - .004, pitch: into === 'peak' ? r.pick([0, 1, 2]) : 0}); this.use(m, `stutter (1/${Math.round(16 / (len * c.sr / stepN))} notes)`); }
-          else if (m === 'tapestop'){ const st = r.pick([4, 6, 8]); cmd(16 - st, {cmd: 'tapestop', dur: st * stepN / c.sr * .9}); this.use(m, `tape stop (${st / 4} beats)`); this.tapeStopped = true; }
+          else if (m === 'tapestop'){ const st = r.pick([4, 6, 8]); cmd(16 - st, {cmd: 'tapestop', dur: st * stepN / c.sr * .9}); cmd(16, {cmd: 'release'}); this.use(m, `tape stop (${st / 4} beats)`); this.tapeStopped = true; }
           else if (m === 'throw'){ cmd(12, {cmd: 'throw', send: 'delay', amt: 2.5 + r() * 1.5, fb: .68 + r() * .14, dur: barN * (1 + r()) / c.sr}); this.use(m, 'delay throw'); }
           else if (m === 'wash'){ cmd(8, {cmd: 'throw', send: 'hall', amt: 3.5, dur: barN * 1.2 / c.sr}); this.use(m, 'reverb wash'); } } }
       else if ((c.bis % 8) === 7 && bl > 2 && r() < .12 + chaos * .35){ // phrase ends inside a section: small fills only
@@ -79,6 +82,11 @@ function AWZ_MOVES(A){
       return this.log; }
     // undo section-scoped effects at a boundary
     cleanup(cmd, fx){ if (this.gateOn){ cmd(0, {cmd: 'gate', on: false}); this.gateOn = false; } if (this.freezeOn){ cmd(0, {cmd: 'freeze', on: false}); this.freezeOn = false; }
-      if (this.tapeStopped){ cmd(0, {cmd: 'release'}); this.tapeStopped = false; } cmd(0, {cmd: 'ramp', what: 'hp', to: 10, dur: .05}); cmd(0, {cmd: 'climb', dur: 0}); } };
+      if (this.tapeStopped){ cmd(0, {cmd: 'release'}); this.tapeStopped = false; } cmd(0, {cmd: 'ramp', what: 'hp', to: 10, dur: .05}); cmd(0, {cmd: 'climb', dur: 0}); this.hpPlan = null; this.rolling = null;
+      if (this.c.halfTimeTo > this.c.k) this.c.halfTimeTo = -1; }
+    // before the parts of a section's first bar are written: decide the key lift so the downbeat already sounds in the new key
+    pre(S){ const c = this.c, r = this.r, tag = S.tag || S.name; if (tag !== 'peak') return;
+      const lastPeak = c.sections.slice(c.si + 1).every(s => s.tag !== 'peak'), peaks = c.sections.filter(s => s.tag === 'peak').length;
+      if (lastPeak && peaks >= 1 && c.si > 2 && !this.lifted && this.weights.keylift && this.ok('keylift') && r() < this.weights.keylift){ this.lifted = true; c.keyLift(r.pick([2, 2, 2, 5])); this.last.keylift = c.k; this.liftNote = 'key lift into the last peak'; } } };
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = AWZ_MOVES;

@@ -95,7 +95,9 @@ function AWZ_MIXER(A){
           for (let b = 0; b < 6; b++){ const want = clamp(-(d[b] - mean) * .75, -Q.max, Q.max * .7); Q.g[b] += (want - Q.g[b]) * Q.kg * Q.gate; } }
         for (let b = 0; b < 6; b++) G[b] = Math.pow(10, Q.g[b] / 20) - 1; }
       const hpf = this.hpSweep.tick(); if (hpf > 22){ this.hpL.set(hpf, .75, sr); this.hpR.set(hpf, .75, sr); for (let i = 0; i < n; i++){ this.hpL.tick(oL[i]); oL[i] = this.hpL.hp; this.hpR.tick(oR[i]); oR[i] = this.hpR.hp; } }
-      this.busfx.process(oL, oR, n); const gp = this.gap.tick(); if (gp < .999) for (let i = 0; i < n; i++){ oL[i] *= gp; oR[i] *= gp; }
+      this.busfx.process(oL, oR, n); const gp = this.gap.tick(), g0 = this.gapPrev === undefined ? gp : this.gapPrev; this.gapPrev = gp;
+      // per-sample ramp from last block's value: a block-stepped gain is itself a click
+      if (gp < .999 || g0 < .999) for (let i = 0; i < n; i++){ const gg = g0 + (gp - g0) * (i + 1) / n; oL[i] *= gg; oR[i] *= gg; }
       this.grMaster = this.glue.process(oL, oR, n); this.tape.process(oL, oR, n);
       this.loud.process(oL, oR, n);
       if (this.autoOn){ const st = this.loud.filled > 5 ? this.loud.lufs : -70, dt = n / sr;

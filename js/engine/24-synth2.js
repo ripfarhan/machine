@@ -37,7 +37,7 @@ function AWZ_SYNTH2(A){
       return true; } };
 
   // ---------------------------------------------------------------- formant "choir" / vocal chop: detuned saws + breath through 3 vowel formants; chops bend into pitch
-  const VOW = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [300, 870, 2240]];
+  const FG = [1, .55, .3], VOW = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [300, 870, 2240]];
   A.ChoirVoice = class { constructor(sr, seed){ this.sr = sr; this.o = [new A.VAOsc(sr, seed * 7 + 1), new A.VAOsc(sr, seed * 7 + 2), new A.VAOsc(sr, seed * 7 + 3)]; this.f = [new A.SVF(), new A.SVF(), new A.SVF()]; this.aenv = new A.ADSR(sr); this.nz = new A.Noise(seed * 11 + 5); this.r = A.rng(seed * 17 + 9); this.k = 0; }
     start(off, note, vel, dur, p){ this.p = p; this.off = off; this.note = note; this.vel = vel; this.f0 = mtof(note); this.gateLeft = Math.max(1, Math.round(dur * this.sr));
       this.aenv.setTimes(p.aa || .25, p.ad || .5, p.as === undefined ? .8 : p.as, p.ar || .6); if (!(this.aenv.stage > 0 && this.aenv.v > 1e-3)) this.aenv.v = 0; this.aenv.trigger(1);
@@ -45,11 +45,11 @@ function AWZ_SYNTH2(A){
     release(){ this.gateLeft = 0; this.aenv.release(); }
     render(L, R, n){ const p = this.p, sr = this.sr, g = this.vel * (p.gain || 1) * .5, det = p.detune || 9, br = p.breath === undefined ? .08 : p.breath, bk = Math.exp(-1 / ((p.bendTime || .08) * sr)); let i0 = this.off; this.off = 0;
       for (let s = i0; s < n; s++){ if (this.gateLeft > 0 && --this.gateLeft === 0) this.aenv.release();
-        if (this.k-- <= 0){ this.k = 32; this.t += 32 / sr; let v = this.vow + this.vdrift * this.t; v = ((v % 4) + 4) % 4; const i = Math.floor(v), fr = v - i, a = VOW[i], b = VOW[(i + 1) % 5];
+        if (this.k-- <= 0){ this.k = 32; this.t += 32 / sr; let v = this.vow + this.vdrift * this.t; v = ((v % 8) + 8) % 8; if (v > 4) v = 8 - v; const i = Math.min(3, Math.floor(v)), fr = v - i, a = VOW[i], b = VOW[i + 1];   // ping-pong a→u→a: no jump from the last vowel back to the first
           for (let q = 0; q < 3; q++) this.f[q].set(a[q] + (b[q] - a[q]) * fr, p.q || 7, sr); }
         this.bendK *= bk; const f = this.f0 * Math.pow(2, this.bend * this.bendK / 12);
-        let x = 0; for (let q = 0; q < 3; q++) x += this.o[q].tick(f * Math.pow(2, (q - 1) * det / 1200), 2, .5, 4); x = x * .33 + this.nz.white() * br;
-        let y = 0; for (let q = 0; q < 3; q++){ this.f[q].tick(x); y += this.f[q].bp * [1, .55, .3][q]; }
+        const dr = Math.pow(2, det / 1200); let x = this.o[0].tick(f / dr, 2, .5, 4) + this.o[1].tick(f, 2, .5, 4) + this.o[2].tick(f * dr, 2, .5, 4); x = x * .33 + this.nz.white() * br;
+        let y = 0; for (let q = 0; q < 3; q++){ this.f[q].tick(x); y += this.f[q].bp * FG[q]; }
         const o = y * this.aenv.tick() * g; L[s] += o * this.gl; R[s] += o * this.gr; if (!this.aenv.active) return false; }
       return true; } };
 
@@ -71,10 +71,10 @@ function AWZ_SYNTH2(A){
     begin(off, ev){ this.off = off; this.kind = ev.fx; this.vel = ev.vel === undefined ? .8 : ev.vel; this.N = Math.max(64, Math.round((ev.dur || 2) * this.sr)); this.i = 0; this.ph = 0; this.bp.reset(); this.bp2.reset(); this.lp.reset(); this.base = ev.freq || 55; }
     render(L, R, n){ const sr = this.sr, N = this.N, k = this.kind, g = this.vel; let i0 = this.off; this.off = 0;
       for (let s = i0; s < n; s++){ const i = this.i++, q = i / N; let y = 0, side = 0;
-        if (k === 'riser' || k === 'down'){ if (q >= 1) return false; const u = k === 'riser' ? q : 1 - q, fc = 250 * Math.pow(40, u), amp = k === 'riser' ? Math.pow(q, 2.2) : Math.pow(1 - q, 1.6);
+        if (k === 'riser' || k === 'down'){ if (q >= 1) return false; const u = k === 'riser' ? q : 1 - q, fc = 250 * Math.pow(32, u), amp = (k === 'riser' ? Math.pow(q, 2.2) : Math.pow(1 - q, 1.6)) * Math.min(1, Math.pow(1800 / fc, .45));
           if ((i & 15) === 0){ this.bp.set(fc, 2.5, sr); this.bp2.set(fc * 1.5, 3, sr); } const w = this.nz.white(); this.bp.tick(w); this.bp2.tick(w);
           this.ph += this.base * 2 * Math.pow(4, u) / sr; if (this.ph >= 1) this.ph -= 1; y = (this.bp.bp * .9 + this.bp2.bp * .5) * amp + A.sin1(this.ph) * amp * .12; side = this.bp2.bp * amp * .5; }
-        else if (k === 'swell'){ if (q >= 1) return false; const amp = Math.pow(q, 4); if ((i & 63) === 0) this.bp.set(3500 + 6000 * q, .6, sr); this.bp.tick(this.nz.white()); y = this.bp.hp * amp * 1.2; side = this.bp.bp * amp * .4; }
+        else if (k === 'swell'){ if (q >= 1) return false; const amp = Math.pow(q, 4); if ((i & 63) === 0) this.bp.set(2500 + 4000 * q, .6, sr); this.bp.tick(this.nz.white()); y = this.bp.hp * amp * .7; side = this.bp.bp * amp * .4; }
         else if (k === 'impact'){ if (q >= 1) return false; const t = i / sr, f = this.base * (1 + 2 * Math.exp(-t / .03)); this.ph += f / sr; if (this.ph >= 1) this.ph -= 1;
           if (i === 0) this.lp.set(1800, .7, sr); this.lp.tick(this.nz.white()); y = A.sin1(this.ph) * Math.exp(-t / .55) * 1.1 + this.lp.lp * Math.exp(-t / .09) * .8; side = this.lp.lp * Math.exp(-t / .2) * .3; }
         else if (k === 'subdrop'){ if (q >= 1) return false; const t = i / sr, f = 30 + (this.base * 1.3 - 30) * Math.exp(-t / .35); this.ph += f / sr; if (this.ph >= 1) this.ph -= 1; y = tanh(A.sin1(this.ph) * 1.6) * Math.min(1, t / .004) * Math.exp(-t / ((N / sr) * .45)); }

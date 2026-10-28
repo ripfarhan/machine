@@ -52,7 +52,9 @@ function AWZ_COMPOSER(A){
     seek(bar){ const S = this.sections, total = S.reduce((a, s) => a + s.bars, 0); bar = Math.max(0, Math.min(total - 1, Math.round(bar / 4) * 4)); let acc = 0;
       for (let i = 0; i < S.length; i++){ if (bar < acc + S[i].bars){ this.si = i; this.bis = bar - acc; break; } acc += S[i].bars; }
       const L = this.loop.chords, lb = L.reduce((a, c) => a + c.bars, 0); let r = bar % lb, ci = 0; while (r >= L[ci].bars){ r -= L[ci].bars; ci++; }
-      this.ci = ci; this.bic = r; this.voicing = null; this.done = false; this.forceArr = true; this.nudge = null; }
+      this.ci = ci; this.bic = r; this.voicing = null; this.done = false; this.forceArr = true; this.nudge = null;
+      // a key lift belongs to the run that made it: seeking or repeating starts back in the home key
+      if (this.lifted){ this.key.set(this.key.tonic - this.lifted, this.key.mode); this.rebuildLoopForMode(this.key.mode); this.lifted = 0; } if (this.moves){ this.moves.lifted = false; this.moves.hpPlan = null; this.moves.rolling = null; } this.halfTimeTo = -1; }
     pos(){ let acc = 0; for (let i = 0; i < Math.min(this.si, this.sections.length); i++) acc += this.sections[i].bars; return acc + this.bis; }
     chord(){ const ch = this.loop.chords[this.ci]; return this.subChord && this.subAt === this.cycle && this.ci === this.subIdx ? this.subChord : ch; }
     // v2: modulate the whole loop (same degrees, new tonic) — used by the key-lift move into the last peak
@@ -67,7 +69,8 @@ function AWZ_COMPOSER(A){
       if (this.si >= this.sections.length){ this.done = true; const t0 = this.t; this.t += this.barN; this.k++; return {t0, events: [], info: Object.assign({}, this.lastInfo || {}, {bar: this.k - 1, t0, done: true, changed: [], chordStart: false, bis: -1})}; }   // past the end: silent bar, no nudges
       const S = this.sec(), seeked = !!this.forceArr, sectionStart = this.bis === 0 || seeked; this.forceArr = false;
       if (this.bis % 4 === 0) this.applyNudge();
-      const S2 = this.sec();
+      const S2 = this.sec(), newSec = this.bis === 0 && this.k > 0;   // recomputed after a nudge: a cut can start a new section here
+      if (this.v2 && this.moves && newSec && !this.hold) this.moves.pre(S2);
       // ---- harmony
       let chordStart = false; const loopLen = this.loop.chords.length;
       if (!this.voicing){ chordStart = true; }
@@ -121,7 +124,7 @@ function AWZ_COMPOSER(A){
             for (const e of src) for (let q = 1; q < div; q++) add.push({t: e.t + q * seg, slot: e.slot, ev: Object.assign({}, e.ev, {vel: (e.ev.vel || .7) * Math.pow(kind === 'roll' ? 1.04 : .86, q), dur: e.ev.dur ? Math.min(e.ev.dur, seg / sr * .9) : e.ev.dur, kick: false})}); } }
         if (add.length){ for (const a of add) out.push(a); } for (let i = out.length - 1; i >= 0; i--) if (out[i].drop) out.splice(i, 1); out.sort((a, b) => a.t - b.t); }
       // v2 transition moves (rotation + cooldowns live in 56-moves.js)
-      this.movesLog = []; if (this.v2 && this.moves){ this.movesLog = this.moves.bar({out, t0, S: S2, next: nextS, barsLeft, E, sectionStart: sectionStart && this.bis === 0, arrivedUp: sectionStart && S2.E0 > this.prevE + .15}); out.sort((a, b) => a.t - b.t); }
+      this.movesLog = []; if (this.v2 && this.moves){ this.movesLog = this.moves.bar({out, t0, S: S2, next: nextS, barsLeft, E, sectionStart: newSec && !this.hold, hold: !!this.hold, arrivedUp: newSec && S2.E0 > this.prevE + .15}); out.sort((a, b) => a.t - b.t); }
       this.prevE = E;
       this.dbg = {E0: S2.E0, E1: S2.E1, prog, mE: M.energy, eOff: this.eOff, E, mDen: M.density, density, shift, alpha, chaos: M.chaos, mood: M.mood, pieceProg, barsLeft, si: this.si, bis: this.bis, sbars: S2.bars, section: S2.name, tag: S2.tag,
         ci: this.ci, bic: this.bic, cycle: this.cycle, loopLen, chord: ch.name, deg: ch.deg, type: ch.type, pcs: ch.pcs.slice(), sub: v.sub, bass: v.bass, notes: v.notes.slice(), swing, stepN, barN: this.barN, bpm: this.bpm, k: this.k, nEvents: out.length,

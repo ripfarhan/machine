@@ -28,13 +28,15 @@ function AWZ_UTIL(A){
   A.coef = (sec, rate) => sec <= 0 ? 1 : 1 - Math.exp(-1 / (sec * rate));
 
   // time-ordered event queue (binary heap on .t, sample time)
-  A.EventQueue = class { constructor(){ this.h = []; }
-    push(e){ const h = this.h; h.push(e); let i = h.length - 1; while (i > 0){ const p = (i - 1) >> 1; if (h[p].t <= h[i].t) break; const tmp = h[p]; h[p] = h[i]; h[i] = tmp; i = p; } }
+  // equal times pop in insertion order (sequence tie-break), so a cleanup and a new move on the same step resolve as written
+  A.EventQueue = class { constructor(){ this.h = []; this.seq = 0; }
+    lt(a, b){ return a.t < b.t || (a.t === b.t && a._q < b._q); }
+    push(e){ const h = this.h; if (e._q === undefined) e._q = this.seq++; h.push(e); let i = h.length - 1; while (i > 0){ const p = (i - 1) >> 1; if (!this.lt(h[i], h[p])) break; const tmp = h[p]; h[p] = h[i]; h[i] = tmp; i = p; } }
     peek(){ return this.h[0]; }
-    pop(){ const h = this.h, top = h[0], last = h.pop(); if (h.length){ h[0] = last; let i = 0; for (;;){ const l = 2 * i + 1, r = l + 1; let m = i; if (l < h.length && h[l].t < h[m].t) m = l; if (r < h.length && h[r].t < h[m].t) m = r; if (m === i) break; const tmp = h[m]; h[m] = h[i]; h[i] = tmp; i = m; } } return top; }
+    pop(){ const h = this.h, top = h[0], last = h.pop(); if (h.length){ h[0] = last; let i = 0; for (;;){ const l = 2 * i + 1, r = l + 1; let m = i; if (l < h.length && this.lt(h[l], h[m])) m = l; if (r < h.length && this.lt(h[r], h[m])) m = r; if (m === i) break; const tmp = h[m]; h[m] = h[i]; h[i] = tmp; i = m; } } return top; }
     get size(){ return this.h.length; }
     clear(){ this.h.length = 0; }
-    filter(fn){ this.h = this.h.filter(fn); const o = this.h; this.h = []; for (const e of o) this.push(e); } };
+    filter(fn){ const o = this.h.filter(fn); this.h = []; for (const e of o) this.push(e); } };
 
   // outbox: what the engine tells the UI. Notes are posted when SCHEDULED (ahead of time), with their audible time,
   // so the UI can draw the future. Flat numeric records keep structured-clone cost low.

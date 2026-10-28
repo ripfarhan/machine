@@ -25,7 +25,7 @@ function AWZ_FX2(A){
       g.on = true; g.len = len; g.i = 0; g.inc = rev ? -ratio : ratio; g.pos = (this.w - back - (rev ? 0 : len * ratio) + this.n * 4) % this.n; if (rev) g.pos = (this.w - back + this.n * 4) % this.n;
       const pan = r(); g.gl = Math.cos(pan * 1.5708); g.gr = Math.sin(pan * 1.5708); g.amp = .5 + .5 * r(); }
     process(inL, inR, oL, oR, n){ const sr = this.sr, N = this.n, gain = this.gain / Math.sqrt(Math.max(1, this.density * this.size));
-      for (let i = 0; i < n; i++){ if (!this.freeze){ this.bL[this.w] = inL[i]; this.bR[this.w] = inR[i]; } this.w = (this.w + 1) % N;
+      for (let i = 0; i < n; i++){ if (!this.freeze){ this.bL[this.w] = inL[i]; this.bR[this.w] = inR[i]; this.w = (this.w + 1) % N; }   // frozen: the write head stops, grains stay inside the held moment
         this.acc += this.density / sr; while (this.acc >= 1){ this.acc -= 1; this.spawn(); }
         let l = 0, r = 0;
         for (const g of this.G){ if (!g.on) continue; const ph = g.i / g.len, win = A.sin1(ph * .5), w = win * win * g.amp; let p = g.pos % N; if (p < 0) p += N; const j = p | 0, f = p - j, j2 = (j + 1) % N;
@@ -86,7 +86,7 @@ function AWZ_FX2(A){
   const VOW = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [300, 870, 2240]], VG = [1, .5, .25];
   A.Formant = class { constructor(sr){ this.sr = sr; this.f = []; for (let i = 0; i < 6; i++) this.f.push(new A.SVF()); this.ph = 0; this.set({}); }
     set(o){ this.vowel = o.vowel === undefined ? 0 : o.vowel; this.rate = o.rate || 0; this.depth = o.depth === undefined ? 1 : o.depth; this.mix = o.mix === undefined ? .8 : o.mix; this.q = o.q || 8; }
-    process(L, R, n){ const sr = this.sr; this.ph += this.rate * n / sr; let v = this.vowel + (this.rate ? (.5 + .5 * A.sin1(this.ph)) * 4 * this.depth : 0); v = ((v % 4) + 4) % 4; const i0 = Math.floor(v), fr = v - i0, a = VOW[i0], b = VOW[(i0 + 1) % 5];
+    process(L, R, n){ const sr = this.sr; this.ph += this.rate * n / sr; let v = this.vowel + (this.rate ? (.5 + .5 * A.sin1(this.ph)) * 4 * this.depth : 0); v = ((v % 8) + 8) % 8; if (v > 4) v = 8 - v; const i0 = Math.min(3, Math.floor(v)), fr = v - i0, a = VOW[i0], b = VOW[i0 + 1];
       for (let k = 0; k < 3; k++){ const fq = a[k] + (b[k] - a[k]) * fr; this.f[k].set(fq, this.q, sr); this.f[k + 3].set(fq * 1.01, this.q, sr); }
       for (let i = 0; i < n; i++){ let l = 0, r = 0; for (let k = 0; k < 3; k++){ this.f[k].tick(L[i]); l += this.f[k].bp * VG[k]; this.f[k + 3].tick(R[i]); r += this.f[k + 3].bp * VG[k]; }
         L[i] += (l - L[i]) * this.mix; R[i] += (r - R[i]) * this.mix; } } };
@@ -116,16 +116,20 @@ function AWZ_FX2(A){
     // tape stop: playback slows to zero over `dur` seconds (quadratic), then silence until release()
     tapeStop(dur){ this.mode = 1; this.rd = this.w - 1; this.speed = 1; this.decel = 1 / Math.max(.05, dur) / this.sr; this.fade = 1; }
     // stutter: loop the last `len` seconds for `dur` seconds, each repeat a little quieter (and optionally pitched up)
-    stutter(len, dur, pitchUp){ this.mode = 2; this.len = Math.max(64, Math.round(len * this.sr)); this.s0 = (this.w - this.len + this.n) % this.n; this.i = 0; this.left = Math.round(dur * this.sr); this.rep = 0; this.pu = pitchUp || 0; this.rate = 1; this.fade = 1; }
+    stutter(len, dur, pitchUp){ this.mode = 2; this.len = Math.max(64, Math.round(len * this.sr)); this.s0 = (this.w - this.len + this.n) % this.n; this.i = 0; this.x = 0; this.per = this.len; this.left = Math.round(dur * this.sr); this.rep = 0; this.pu = pitchUp || 0; this.rate = 1; this.fade = 1; }
     release(){ if (this.mode) { this.mode = 3; this.relN = Math.round(.006 * this.sr); this.relI = 0; } }
     process(L, R, n){ const N = this.n;
       for (let i = 0; i < n; i++){ this.bL[this.w] = L[i]; this.bR[this.w] = R[i]; this.w = (this.w + 1) % N; const m = this.mode; if (!m) continue;
         if (m === 1){ this.speed = Math.max(0, this.speed - this.decel * 2 * Math.max(.2, this.speed)); this.rd += this.speed; let p = this.rd % N; if (p < 0) p += N; const j = p | 0, f = p - j, j2 = (j + 1) % N;
           const g = Math.min(1, this.speed * 4); L[i] = (this.bL[j] + (this.bL[j2] - this.bL[j]) * f) * g; R[i] = (this.bR[j] + (this.bR[j2] - this.bR[j]) * f) * g; }
-        else if (m === 2){ if (this.left-- <= 0){ this.release(); continue; } const len = this.len, pos = this.i, x = pos % len; let p = (this.s0 + x * this.rate) % N;
-          const j = p | 0, f = p - j, j2 = (j + 1) % N, edge = Math.min(1, x / 96, (len - x) / 96), gg = Math.pow(.92, this.rep) * edge;
-          L[i] = (this.bL[j] + (this.bL[j2] - this.bL[j]) * f) * gg; R[i] = (this.bR[j] + (this.bR[j2] - this.bR[j]) * f) * gg;
-          if (++this.i % len === 0){ this.rep++; if (this.pu) this.rate = Math.min(2, this.rate * Math.pow(2, this.pu / 12)); } }
+        else if (m === 2){ if (this.left-- <= 0){ this.release(); continue; }
+          // each repeat reads exactly the captured slice (a pitched-up repeat is shorter), fading in and out at its edges
+          const per = this.per || this.len, x = this.x || 0; let p = (this.s0 + x * this.rate) % N;
+          const j = p | 0, f = p - j, j2 = (j + 1) % N, edge = Math.min(1, x / 96, (per - x) / 96), gg = Math.pow(.92, this.rep) * edge;
+          const sl = (this.bL[j] + (this.bL[j2] - this.bL[j]) * f) * gg, sr = (this.bR[j] + (this.bR[j2] - this.bR[j]) * f) * gg;
+          // the very first samples crossfade out of the live signal instead of stepping to silence
+          if (this.i < 96){ const c = this.i / 96; L[i] = sl + L[i] * (1 - c); R[i] = sr + R[i] * (1 - c); } else { L[i] = sl; R[i] = sr; } this.i++;
+          if ((this.x = x + 1) >= per){ this.x = 0; this.rep++; if (this.pu) this.rate = Math.min(2, this.rate * Math.pow(2, this.pu / 12)); this.per = Math.max(64, Math.floor(this.len / this.rate)); } }
         else { const q = this.relI++ / this.relN; if (q >= 1){ this.mode = 0; continue; } L[i] *= q; R[i] *= q; } } } };   // short fade back in to the live signal
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = AWZ_FX2;

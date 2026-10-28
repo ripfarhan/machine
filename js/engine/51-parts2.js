@@ -82,7 +82,9 @@ function AWZ_PARTS2(A){
 
   // ---------------------------------------------------------------- boom: 808 line on the kick pattern, gliding between roots and octaves
   P.boom = class { constructor(Pc, o){ this.slot = o.slot || 'boom'; const r = this.r = Pc.rng('boom'); this.pat = o.pat || r.pick([[0, 10], [0, 7, 10], [0, 3, 10], [0, 6, 8]]); this.vel = o.vel || .9; }
-    bar(c){ const r = this.r, root = fit(c.chordRoot + 36, 31, 42); this.pat.forEach((s, i) => { const oct = i && r() < .25 ? 12 : 0; c.emit(this.slot, s, {note: root + oct, vel: this.vel * (i ? .85 : 1), dur: c.step * (i === this.pat.length - 1 ? 16 - s : this.pat[i + 1] - s) * .95, slide: i > 0 && r() < .35}); }); } };
+    // a note that the next one slides into is held a little past it (legato needs overlap to glide)
+    bar(c){ const r = this.r, root = fit(c.chordRoot + 36, 31, 42), P = this.pat, oct = P.map((_, i) => i && r() < .25 ? 12 : 0), sl = P.map((_, i) => i > 0 && r() < .35);
+      P.forEach((s, i) => { const gap = i === P.length - 1 ? 16 - s : P[i + 1] - s, into = i < P.length - 1 && sl[i + 1]; c.emit(this.slot, s, {note: root + oct[i], vel: this.vel * (i ? .85 : 1), dur: c.step * gap * (into ? 1.08 : .95), slide: sl[i]}); }); } };
 
   // ---------------------------------------------------------------- toms: tonal 16th toms tuned to chord tones (Bodzin)
   P.toms = class { constructor(Pc, o){ this.slot = o.slot || 'tom'; const r = this.r = Pc.rng('toms'); this.pat = o.pat || A.euclid(r.int(5, 7), 16, r.int(0, 3)); this.vel = o.vel || .5; }

@@ -50,7 +50,9 @@ function AWZ_ENGINE(A){
       this.baseDelay = Object.assign({time: (f.delay.beats || .75) * 60 / bpm, feedback: .4, wow: .0009, flutter: .00006}, f.delay); M.delay.set(this.baseDelay);
       // v2 send effects this world uses (created once, reused across pieces); unused ones stop processing
       const SND = {gran: () => new A.Granular(this.sr, 91), shim: () => new A.Shimmer(this.sr), rev: () => new A.ReverseDelay(this.sr), reso: () => new A.Resonator(this.sr)}, ws = this.w.sends || {};
-      this.fxp = this.fxp || {}; for (const k in SND){ if (ws[k]){ const pr = this.fxp[k] || (this.fxp[k] = SND[k]()); const o = Object.assign({}, ws[k]); if (k === 'rev' && o.beats) o.time = o.beats * 60 / bpm; pr.set(o); M.addSend(k, pr, ws[k].ret === undefined ? 1 : ws[k].ret); } else if (M.x2.sends[k]){ delete M.x2.sends[k]; delete M.x2.retG[k]; } }
+      this.fxp = this.fxp || {}; for (const k in SND){ if (ws[k]){ const pr = this.fxp[k] || (this.fxp[k] = SND[k]()); const o = Object.assign({}, ws[k]); if (k === 'rev' && o.beats) o.time = o.beats * 60 / bpm; pr.set(o); M.addSend(k, pr, ws[k].ret === undefined ? 1 : ws[k].ret); if (this.retire) delete this.retire[k]; }
+        // not used by the new world: let its tail ring out under the fading piece, then drop it (a later world gets a fresh one, no stale audio)
+        else if (M.x2.sends[k]){ this.retire = this.retire || {}; if (!this.retire[k]) this.retire[k] = this.t + 14 * this.sr; } }
       M.gate.stepN = 60 / bpm / 4 * this.sr; M.gate.on = false; M.fshiftOn = 0; this.ramps = []; this.throwMul = {plate: 1, hall: 1, delay: 1}; this.fbMul = 1;
       M.duckDepth.bass = f.duck.bass; M.duckDepth.ret = f.duck.ret; M.duckRel = Math.min(.22, 60 / bpm * .42); this.baseTilt = (f.master && f.master.tiltHigh) || 0; }
     // ---------------------------------------------------------------- macros → sound
@@ -103,7 +105,7 @@ function AWZ_ENGINE(A){
         case 'gap': M.gap.snap(0); this.ramp('gap', 0, 1, ev.dur, 8, v => M.gap.set(v < .99 ? 0 : 1)); break;
         case 'ramp': if (ev.what === 'hp'){ const from = ev.from === undefined ? M.hpSweep.v : ev.from; this.ramp('hp', from, ev.to, ev.dur, ev.curve, v => M.hpSweep.set(v)); } break;
         case 'gate': M.gate.on = !!ev.on; if (ev.on){ M.gate.pat = A.euclid(ev.k || 11, 16, ev.rot || 0); M.gate.t0 = this.comp ? this.comp.t - this.comp.barN : this.t; M.gate.depth = .85; } break;
-        case 'freeze': if (this.fxp && this.fxp.gran){ this.fxp.gran.freeze = !!ev.on; if (ev.on) this.fxp.gran.density = Math.max(this.fxp.gran.density, 26); else this.fxp.gran.set(this.w.sends.gran); } break;
+        case 'freeze': if (this.fxp && this.fxp.gran){ this.fxp.gran.freeze = !!ev.on; if (ev.on) this.fxp.gran.density = Math.max(this.fxp.gran.density, 26); else { this.fxp.gran.freeze = false; if (this.w.sends && this.w.sends.gran) this.fxp.gran.set(this.w.sends.gran); } } break;
         case 'throw': { const k = ev.send, tm = this.throwMul; tm[k] = ev.amt || 3; if (ev.fb) this.fbMul = ev.fb / Math.max(.1, this.baseDelay.feedback); this.mapMacros(); this.ramp('throw-' + k, 1, 0, ev.dur || 1, 1, () => {}, () => { tm[k] = 1; this.fbMul = 1; this.mapMacros(); }); break; }
         case 'climb': if (!ev.dur){ this.ramp('climb', M.fshiftOn, 0, .3, 1, v => { M.fshiftOn = v; M.fshift.mix = v; }); break; }
           M.fshift.set({shift: 2, mix: 0, feedback: .45, time: 60 / this.g.bpm / 2}); this.ramp('climb', 0, 1, ev.dur, 1.5, v => { M.fshiftOn = .001 + v * .6; M.fshift.mix = v * .55; M.fshift.shift = 2 + v * 30; }); break; } }
@@ -121,7 +123,7 @@ function AWZ_ENGINE(A){
         for (const v of list) voices.push(vinfo(slot, k, v)); }
       const pats = []; for (const p of c.parts){ const o = p.obj, d = {slot: p.slot, part: p.spec.part, active: p.on};
         if (o.pat) d.bits = o.pat.join(''); if (o.gate && o.gate.join && p.spec.part === 'pad') d.bits = o.gate.join('');
-        if (o.lanes) d.lanes = o.lanes.slice(0, 5).map(L => L.hits ? {p: L.p, bits: L.hits.join(''), i: ((c.k * 16) % L.p)} : {p: L.period, bits: L.gate.join(''), n: L.n, len: L.len});
+        if (o.lanes) d.lanes = o.lanes.slice(0, 5).map(L => { const P = L.p || L.period || L.len || 16; return L.hits ? {p: P, bits: L.hits.join(''), i: ((c.k * 16) % P)} : {p: P, bits: L.gate ? L.gate.join('') : L.acc ? L.acc.map(x => x ? 1 : 0).join('') : '', n: L.n, len: L.len}; });
         if (o.target) d.bits = o.target.join(''); if (o.eps !== undefined) d.phase = {base: o.base, eps: o.eps}; if (o.alt) d.kick = {mode: o.mode, alt: o.alt}; pats.push(d); }
       const g = this.g; return {type: 'math', t: this.t, sr, raw: Array.from(this.rawL || []), comp: c.dbg || null, voices, pats, seed: g.seed, world: g.world,
         macro: Object.assign({}, this.macro), mix: {lufs: M.loud.lufs, lref: M.lref, target: M.target, autoGain: M.autoGain, gr: M.grMaster, peak: M.outPeak, aeqG: Array.from(M.aeq.g), aeqT: M.aeq.target.slice(), aeqM: Array.from(M.aeq.meas).map(x => 10 * Math.log10(x + 1e-12)), aeqF: M.aeq.f, gate: M.aeq.gate,
@@ -131,6 +133,11 @@ function AWZ_ENGINE(A){
     // reset every transition effect (a seek or a new piece must never inherit a tape stop, gate, HP sweep or freeze)
     resetFx(){ const M = this.mixer; M.busfx.mode = 0; M.gate.on = false; M.hpSweep.snap(10); M.gap.snap(1); M.fshiftOn = 0; M.fshift.mix = 0; this.ramps = []; this.throwMul = {plate: 1, hall: 1, delay: 1}; this.fbMul = 1;
       if (this.fxp && this.fxp.gran && this.w && this.w.sends && this.w.sends.gran) this.fxp.gran.set(this.w.sends.gran); else if (this.fxp && this.fxp.gran) this.fxp.gran.freeze = false; if (this.comp && this.comp.moves){ const mv = this.comp.moves; mv.gateOn = mv.freezeOn = mv.tapeStopped = false; mv.rolling = null; this.comp.halfTimeTo = -1; } }
+    // FX MOVES toggle: switching off drops any queued transition commands/sounds and releases whatever is engaged (gently)
+    setV2(on){ on = !!on; if (this.v2 === on) return; this.v2 = on; if (on) return; this.q.filter(e => e.slot !== '@' && e.slot !== 'fx');
+      const M = this.mixer; if (M.busfx.mode) M.busfx.release(); M.gate.on = false; M.hpSweep.set(10); M.gap.set(1); this.ramps = []; this.throwMul = {plate: 1, hall: 1, delay: 1}; this.fbMul = 1; this.mapMacros(); if (M.fshiftOn > .001) this.fxCmd({cmd: 'climb', dur: 0});
+      if (this.fxp && this.fxp.gran){ if (this.w && this.w.sends && this.w.sends.gran) this.fxp.gran.set(this.w.sends.gran); else this.fxp.gran.freeze = false; }
+      if (this.comp){ this.comp.halfTimeTo = -1; const mv = this.comp.moves; if (mv){ mv.gateOn = mv.freezeOn = mv.tapeStopped = false; mv.rolling = null; mv.hpPlan = null; } } }
     seek(bar){ const c = this.comp; if (!c) return; this.q.clear(); this.resetFx(); for (const tr of this.mixer.tracks) if (tr.inst.pend) tr.inst.pend.length = 0; c.seek(bar); c.t = this.t + 64; c.done = false; c.endSent = false; this.out.msg({type: 'seek', bar, t0: c.t}); }
     pickNext(){ if (this.queued){ const g = this.queued; this.queued = null; return g; }
       const others = A.WORLD_LIST.filter(w => w !== this.g.world); const seed = (A.hash(this.g.seed, 'next', this.history.length) >>> 0); const r = A.rng(seed);
@@ -149,7 +156,8 @@ function AWZ_ENGINE(A){
       const end = this.t + n, q = this.q;
       while (q.size && q.peek().t < end){ const e = q.pop(); if (e.slot === '@'){ this.fxCmd(e.ev); continue; } const tr = this.tracks[e.slot]; if (!tr || tr.dying) continue; const off = Math.max(0, Math.min(n - 1, e.t - this.t));
         tr.inst.play(off, e.ev); if (e.ev.kick && !tr.mute) this.mixer.kickAt(Math.max(this.t, e.t)); }
-      if (this.ramps && this.ramps.length){ const tt = this.t; this.ramps = this.ramps.filter(rp => { const q2 = clamp((tt - rp.t0) / Math.max(1, rp.n), 0, 1), v = rp.from + (rp.to - rp.from) * Math.pow(q2, rp.curve || 1); rp.set(v); if (q2 >= 1){ if (rp.done) rp.done(); return false; } return true; }); }
+      if (this.retire){ const MX = this.mixer; for (const k in this.retire) if (this.t > this.retire[k]){ delete MX.x2.sends[k]; delete MX.x2.retG[k]; if (this.fxp) delete this.fxp[k]; delete this.retire[k]; } }
+      if (this.ramps && this.ramps.length){ const tt = this.t, RA = this.ramps; let w = 0; for (let ri = 0; ri < RA.length; ri++){ const rp = RA[ri], q2 = clamp((tt - rp.t0) / Math.max(1, rp.n), 0, 1), v = rp.from + (rp.to - rp.from) * Math.pow(q2, rp.curve || 1); rp.set(v); if (q2 >= 1){ if (rp.done) rp.done(); } else RA[w++] = rp; } if (this.ramps === RA) RA.length = w; }
       // smooth live modulation; slow auto-pan with MOTION; fade dying tracks
       // CHAOS ≥ .5: sample-and-hold filter jumps on every 16th (melodic tracks), snapping, not gliding
       const ch = this.macro.chaos; if (this.comp){ const st = Math.floor((this.t - this.pieceStart) / this.comp.stepN); if (st !== this._shStep){ this._shStep = st; const amt = Math.max(0, ch - .5) * 2.4;
@@ -161,7 +169,7 @@ function AWZ_ENGINE(A){
         if (tr.dying){ tr.fade -= dt / 2.5; if (tr.fade <= 0){ tr.fade = 0; dead = true; } } }
       if (dead) this.mixer.tracks = this.mixer.tracks.filter(t => !(t.dying && t.fade <= 0));
       this.mixer.process(L, R, n, this.t); this.t = end; this.blocks++;
-      if (this.mathOn){ const L0 = this.rawL || (this.rawL = new Float32Array(32)); for (let i = 0; i < 32; i++) L0[i] = L[i * 4]; if (this.blocks % 24 === 0) this.out.msg(this.mathSnap()); }
+      if (this.mathOn){ const L0 = this.rawL || (this.rawL = new Float32Array(32)); for (let i = 0; i < 32; i++) L0[i] = L[i * 4]; if (this.blocks % 24 === 0){ let m = null; try { m = this.mathSnap(); } catch (err){ m = null; } if (m) this.out.msg(m); } }
       if (this.blocks % 8 === 0){ const T = this.tracks; this.out.msg({type: 'meters', t: this.t, peaks: this.slots.map(s => T[s] ? T[s].peak : 0), lufs: this.mixer.loud.lufs, gr: this.mixer.grMaster, out: this.mixer.outPeak}); } } };
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = AWZ_ENGINE;
