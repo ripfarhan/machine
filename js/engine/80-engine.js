@@ -43,7 +43,7 @@ function AWZ_ENGINE(A){
       this.comp = new A.Composer(this.sr, genome, w); this.comp.t = this.t + Math.round((first ? .15 : 1.2) * this.sr);
       // macros: world defaults on top of neutral, the mood knob shows the genome's mode
       this.macro = Object.assign({energy: .5, space: .5, density: .5, chaos: .2, motion: .4, x: .5, y: .2}, genome.macros || {}, {mood: this.comp.modeIdx / 5}); Object.assign(this.comp.macro, this.macro);
-      this.fx(); this.mapMacros(true); this.pieceStart = this.comp.t;
+      this.fx(); this.resetFx(); this.mapMacros(true); this.pieceStart = this.comp.t;
       this.out.msg({type: 'piece', genome, world: w.name, desc: w.desc, ref: w.ref, slots: this.slots.map(s => ({slot: s, patch: this.tracks[s].patchName, kind: this.tracks[s].instKind, bus: this.tracks[s].bus})),
         sections: this.comp.sections, bpm: genome.bpm, key: A.NOTE[genome.tonic], mode: genome.mode, family: genome.family, loop: this.comp.loop.chords.map(c => ({name: c.name, bars: c.bars, deg: c.deg})), t0: this.comp.t, macros: this.macro}); }
     fx(){ const f = this.w.fx, M = this.mixer, bpm = this.g.bpm; M.plate.set(f.plate || {}); M.hall.set(f.hall || {});
@@ -128,7 +128,10 @@ function AWZ_ENGINE(A){
           duckB: M.duckGain(this.t, M.duckDepth.bass), duckDepth: M.duckDepth.bass, lastKick: M.kicks.length ? (this.t - M.kicks[M.kicks.length - 1]) / sr : -1, tilt: M.tiltHigh, crush: M.crush, gateOn: M.gate.on, hp: M.hpSweep.v, fsh: M.fshiftOn > .002 ? M.fshift.shift : 0, bus: M.busfx.mode, sends: Object.keys(M.x2.sends), phaser: M.phaserMix, musicLP: M.musicLP.v, hallRT: this._rt, delayFB: this._fb}}; }
     next(){ if (this.comp) this.comp.doNudge('next'); }
     // scrub: drop what is scheduled but not yet heard and restart the bar grid right now at the chosen bar
-    seek(bar){ const c = this.comp; if (!c) return; this.q.clear(); for (const tr of this.mixer.tracks) if (tr.inst.pend) tr.inst.pend.length = 0; c.seek(bar); c.t = this.t + 64; c.done = false; c.endSent = false; this.out.msg({type: 'seek', bar, t0: c.t}); }
+    // reset every transition effect (a seek or a new piece must never inherit a tape stop, gate, HP sweep or freeze)
+    resetFx(){ const M = this.mixer; M.busfx.mode = 0; M.gate.on = false; M.hpSweep.snap(10); M.gap.snap(1); M.fshiftOn = 0; M.fshift.mix = 0; this.ramps = []; this.throwMul = {plate: 1, hall: 1, delay: 1}; this.fbMul = 1;
+      if (this.fxp && this.fxp.gran && this.w && this.w.sends && this.w.sends.gran) this.fxp.gran.set(this.w.sends.gran); else if (this.fxp && this.fxp.gran) this.fxp.gran.freeze = false; if (this.comp && this.comp.moves){ const mv = this.comp.moves; mv.gateOn = mv.freezeOn = mv.tapeStopped = false; mv.rolling = null; this.comp.halfTimeTo = -1; } }
+    seek(bar){ const c = this.comp; if (!c) return; this.q.clear(); this.resetFx(); for (const tr of this.mixer.tracks) if (tr.inst.pend) tr.inst.pend.length = 0; c.seek(bar); c.t = this.t + 64; c.done = false; c.endSent = false; this.out.msg({type: 'seek', bar, t0: c.t}); }
     pickNext(){ if (this.queued){ const g = this.queued; this.queued = null; return g; }
       const others = A.WORLD_LIST.filter(w => w !== this.g.world); const seed = (A.hash(this.g.seed, 'next', this.history.length) >>> 0); const r = A.rng(seed);
       return A.makeGenome(r.pick(others), seed); }
