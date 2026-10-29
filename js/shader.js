@@ -18,6 +18,7 @@ uniform float uStripOn, uStripMode, uStripH, uStripX, uStripQuad, uStripRow, uSt
 uniform float uPinOn, uPinN, uPinR, uPinRot, uPinFold, uPinChunk, uPanelOn;
 uniform float uBandOn, uBandN, uBandPh, uBandLit, uLoupeOn, uLoupeMag, uLoupeR, uPixHold, uPixRow; uniform vec2 uLoupeC;
 uniform float uGridOn, uGridPh; uniform vec2 uGridN;
+uniform float uFx2On, uFx2Mode, uFx2Kick, uFx2Snare, uFx2Ph, uFx2Seed; uniform vec4 uFx2Sig;
 uniform float uRefOn, uRefMode, uRefAlt, uRefX, uRefX2, uRefT, uRefHit; uniform vec4 uRefR, uRefB0, uRefB1, uRefB2; uniform vec3 uRefC[5]; uniform vec2 uPinM; uniform vec4 uPanelR; uniform vec3 uPanelC;
 uniform vec4 uStripR, uStripO, uStripZ; uniform vec3 uStripC[4]; uniform vec3 uStripP1, uStripP2;
 uniform int uLookA, uLookB, uLook2, uTextMode, uBlendMode;
@@ -99,16 +100,101 @@ vec3 refFx(vec3 col, vec3 base, vec2 uv){ float l = luma(base); int m = int(uRef
     vec3 c = clamp((base-.5)*1.35+.5,0.,1.); c = sat(c, 1.6);
     if(vUv.x > uRefX){ c = sat(c.gbr*vec3(1.1,1.2,.8), 1.7); c = mix(c, uRefC[1], .18); }
     float lz = exp(-abs(vUv.x - uRefX2)*uRes.x*.35); c += mix(uRefC[0], vec3(1.), .6)*lz*1.6 + uRefC[0]*exp(-abs(vUv.x - uRefX2)*uRes.x*.04)*.35;
-    float w = max(1.2, uRes.y/600.); float e = max(max(lineBox(vUv, uRefB0, w), lineBox(vUv, uRefB1, w)), lineBox(vUv, uRefB2, w)); col = mix(c, vec3(1.), e*.85); }
-  else if(m==4){ // BLOCK FIELD (2271 0:17): the frame becomes rectangles of 2-colour noise, each carrying its cell's light; black notches and slits
-    vec2 g = vec2(9., 9./asp*1.4); vec2 cid = floor(vUv*g); float hb = hash(cid + floor(uRefT)*3.17);
-    vec2 cid2 = hb < .35 ? floor(vUv*g*vec2(.5,1.))*vec2(2.,1.) : cid;   // some blocks merge horizontally
-    vec2 cc = (cid2 + (hb < .35 ? vec2(1.,.5) : vec2(.5)))/g; float lb = luma(texture(tBase, cc).rgb); lb = clamp((lb-.08)*1.3,0.,1.);
-    float lp = clamp((l-.06)*1.35,0.,1.); float n = hash(floor(gl_FragCoord.xy*.5) + floor(uTime*12.)); float on = step(n, mix(lb, lp, .7)*.95 + .03);
-    col = mix(uRefC[1], uRefC[0], on); col *= .82 + .18*hash(cid2+.7);
-    if(hash(cid2 + 5.1 + floor(uRefT)) < .1) col = vec3(0.);
-    float sl = fract(vUv.y*g.y); if(hash(vec2(cid.y, floor(uRefT)) + 9.3) < .1 && sl > .45 && sl < .62 && hash(cid*1.7) < .5) col = uRefC[2]*.25;
-    if(vUv.x < .06 || vUv.x > .94) col = vec3(0.); }
+    float w = max(1.2, uRes.y/600.); float e = fract(uRefT) < .6 ? max(max(lineBox(vUv, uRefB0, w), lineBox(vUv, uRefB1, w)), lineBox(vUv, uRefB2, w)) : 0.; col = mix(c, vec3(1.), e*.85); }
+  return clamp(col, 0., 1.); }
+// ---- the machine set: 15 full-frame systems, each with its own physics ----
+const int DIG[10] = int[10](31599, 11415, 29671, 29647, 23497, 31183, 31215, 29257, 31727, 31695);   // 3×5 digit bitmaps, row-major from the top
+float digit(int d, vec2 p){ ivec2 q = ivec2(floor(p*vec2(3.,5.))); if(q.x<0||q.x>2||q.y<0||q.y>4) return 0.; int bit = (4-q.y)*3 + (2-q.x); return float((DIG[d] >> bit) & 1); }
+vec2 vorCell(vec2 p, float jit, out float edge){ vec2 i = floor(p), f = fract(p); vec2 best = vec2(0.); float d1 = 9., d2 = 9.;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 g = vec2(float(x),float(y)); vec2 o = vec2(hash(i+g), hash(i+g+7.3)); o = .5 + (o-.5)*jit; vec2 r = g + o - f; float d = dot(r,r); if(d<d1){ d2=d1; d1=d; best=i+g+o; } else if(d<d2) d2=d; }
+  edge = sqrt(d2)-sqrt(d1); return best; }
+vec3 fx2(vec3 col, vec3 base, vec2 uv){ int m = int(uFx2Mode+.5); float asp = uRes.x/uRes.y; float l = luma(base); vec3 P0 = uPalA[0], P1 = uPalA[1], P2 = uPalA[2], P3 = uPalA[3];
+  float kick = uFx2Kick, bass = uFx2Sig.x, mid = uFx2Sig.y, high = uFx2Sig.z, punch = uFx2Sig.w;
+  if(m==1){ // DATA RAIN (Ikeda): the picture as columns of digits, a barcode band of the audio channels on top, white column flashes on kicks
+    float cols = 42.; vec2 g = vec2(cols, cols/asp*1.6); vec2 cid = floor(vUv*g); vec2 cf = fract(vUv*g);
+    float lc = luma(texture(tBase, (cid+.5)/g).rgb); lc = clamp((lc-.06)*1.3,0.,1.);
+    float hc = hash(cid + floor(uTime*18.)*.37 + uFx2Seed); int d = int(hash(cid*3.1 + floor(uTime*6.))*9.99);
+    float on = step(hc, lc*1.15); float glyph = digit(d, (cf - vec2(.15,.1))/vec2(.7,.8));
+    float colFlash = step(.985 - kick*.5, hash(vec2(cid.x, floor(uTime*20.)) + uFx2Seed)) * step(.2, kick);
+    col = mix(P0, P3, glyph*on*(.55+.45*lc)); col = mix(col, P3, colFlash*.9);
+    if(vUv.y > .93){ float bx = floor(vUv.x*96.); float bw = hash(vec2(bx, 1.7)); float sig = bx < 32. ? bass : bx < 64. ? mid : high; col = mix(P0, P3, step(bw, sig*1.1 + .08) * step(.3, hash(vec2(bx, floor(uTime*30.))) + .4)); } }
+  else if(m==2){ // MOIRÉ GATE (scanimation): three time-offset phases interleaved in 1-px rows, a scrolling slit mask shows one phase at a time → the motion stutters into steps
+    float row = floor(gl_FragCoord.y); float ph = mod(row - floor(uTime*uFx2Sig.w*40. + uTime*8.), 3.); float amt = .012 + bass*.02;
+    vec2 d = vec2(amt*(ph-1.), 0.); vec3 s = texture(tBase, clamp(uv + d, 0., 1.)).rgb; float ls = clamp((luma(s)-.05)*1.2,0.,1.);
+    float open = step(ph, .5); col = mix(gmap(ls, uPalA)*.25, gmap(ls, uPalA), open); col = mix(col, vec3(0.), (1.-open)*.35); }
+  else if(m==3){ // HALFTONE PRESS: CMYK rosette, four screen angles, the plates slip out of register on kicks
+    float cell = max(5., uRes.y/90.); vec3 paper = P0; vec3 inks[4] = vec3[4](vec3(0.,.65,.92), vec3(.93,.05,.55), vec3(1.,.9,0.), vec3(.08)); float ang[4] = float[4](.2618, 1.309, 0., .7854);
+    vec3 cmy = 1. - base; float k = min(min(cmy.r, cmy.g), cmy.b)*.9; vec3 c4 = vec3(cmy - k) ; float v4[4] = float[4](c4.r, c4.g, c4.b, k);
+    vec3 outc = paper;
+    for(int i=0;i<4;i++){ float h = hash(vec2(float(i)*3.3, floor(uFx2Ph))); vec2 slip = (vec2(hash(vec2(h, 1.)), hash(vec2(h, 2.))) - .5) * kick * .018 * uRes.y;
+      vec2 p = gl_FragCoord.xy + slip; float ca = cos(ang[i]), sa = sin(ang[i]); vec2 r = vec2(p.x*ca - p.y*sa, p.x*sa + p.y*ca)/cell; vec2 cc = (floor(r)+.5);
+      vec2 rc = vec2(cc.x*ca + cc.y*sa, -cc.x*sa + cc.y*ca)*cell - slip; vec3 sb = texture(tBase, rc/uRes).rgb; vec3 scmy = 1.-sb; float sk = min(min(scmy.r,scmy.g),scmy.b)*.9;
+      float v = i==0 ? scmy.r-sk : i==1 ? scmy.g-sk : i==2 ? scmy.b-sk : sk; float rad = sqrt(clamp(v,0.,1.))*.72; float dd = length(fract(r)-.5); float dot_ = smoothstep(rad, rad-.08, dd);
+      outc *= mix(vec3(1.), inks[i], dot_*.95); }
+    col = outc; }
+  else if(m==4){ // TIME MIRROR (waterfall): the live picture in a centre band, every frame pushes the band outward both ways — the past piles up left and right
+    float band = .18 + bass*.08; float d = abs(vUv.x - .5);
+    if(d < band){ float ls = clamp((l-.05)*1.2,0.,1.); col = gmap(ls, uPalA); }
+    else { float dir = sign(vUv.x - .5); vec2 pu = vec2(vUv.x - dir*(1.5 + punch*6.)/uRes.x, vUv.y); col = texture(tPrev, pu).rgb * .992; }
+    col += P3 * exp(-abs(d-band)*uRes.x*.12) * .5; }
+  else if(m==5){ // FLIP BOARD (split-flap): the picture on a board of flaps, 4 tones, a seam through each flap; on hits random flaps catch mid-flip
+    vec2 g = vec2(26., 26./asp*1.5); vec2 cid = floor(vUv*g), cf = fract(vUv*g);
+    float lc = luma(texture(tBase, (cid+.5)/g).rgb); float q = floor(clamp((lc-.04)*1.25,0.,1.)*3.999)/3.;
+    float flip = step(1.-kick*.7, hash(cid + floor(uFx2Ph*2.)*1.3 + uFx2Seed)); float hf = step(.5, cf.y);
+    vec3 fc = gmap(q, uPalA); if(flip > .5) fc = mix(fc, gmap(hash(cid+2.2)*.9, uPalA), hf); fc *= .9 + .1*hf;
+    float seam = 1.-smoothstep(0., .07, abs(cf.y-.5)); float gap = step(cf.x, .06) + step(.94, cf.x) + step(cf.y, .05) + step(.95, cf.y);
+    col = mix(fc, P0*.6, seam*.8); col = mix(col, P0*.4, clamp(gap,0.,1.)); }
+  else if(m==6){ // LIDAR: only edges, lit by a radar sweep with phosphor persistence; sparse point returns
+    vec2 e = 1.5/uRes; float gx = luma(texture(tBase,uv+vec2(e.x,0.)).rgb)-luma(texture(tBase,uv-vec2(e.x,0.)).rgb), gy = luma(texture(tBase,uv+vec2(0.,e.y)).rgb)-luma(texture(tBase,uv-vec2(0.,e.y)).rgb);
+    float ed = smoothstep(.03, .18, length(vec2(gx,gy))); vec2 q = (vUv-.5)*vec2(asp,1.); float an = atan(q.y,q.x); float sw = mod(uTime*(1.2 + punch*2.), 6.2831853);
+    float behind = mod(sw - an, 6.2831853); float persist = exp(-behind*.9); float beam = exp(-behind*40.);
+    float pts = step(.996, hash(floor(vUv*uRes*.5) + floor(uTime*6.))) * ed;
+    col = P0 + P2*ed*persist*1.2 + P3*beam*.9 + P3*pts*2.; float grid = step(.985, fract(vUv.x*12.)) + step(.985, fract(vUv.y*12.*asp)); col += P1*grid*.5; }
+  else if(m==7){ // RISO PRINT: two translucent spot inks on cream paper, cut from different tone bands, each plate 1-2 mm out of register, overprint makes a third colour, blotchy coverage
+    vec3 paper = P0; vec3 inkA = P1, inkB = P2; float h = hash(vec2(floor(uFx2Ph), 3.1)), h2 = hash(vec2(floor(uFx2Ph), 7.7));
+    vec2 regA = (vec2(hash(vec2(h,1.)), hash(vec2(h,2.)))-.5)*.016, regB = (vec2(hash(vec2(h2,1.)), hash(vec2(h2,2.)))-.5)*.016;
+    float la = luma(texture(tBase, clamp(uv+regA,0.,1.)).rgb), lb = luma(texture(tBase, clamp(uv+regB,0.,1.)).rgb);
+    la = clamp((la-.03)*1.35,0.,1.); lb = clamp((lb-.03)*1.35,0.,1.); float blot = .8 + .2*fbm(vUv*vec2(60.,60./asp));
+    float dA = step(.5 + (bayer(gl_FragCoord.xy)-.5)*.6, clamp((.42-la)*2.6,0.,1.)*blot);      // shadows plate: deep tones only
+    float dB = step(.5 + (bayer(gl_FragCoord.xy+2.)-.5)*.6, clamp((.8-lb)*1.6,0.,1.)*blot*.9);  // midtone plate: broad, lighter
+    col = paper; col *= mix(vec3(1.), inkA, dA*.88); col *= mix(vec3(1.), inkB, dB*.8); col += (hash(vUv*uRes*.7)-.5)*.06; }
+  else if(m==8){ // TUBE COLLAPSE: a CRT with phosphor triads and scanlines; on some kicks the raster collapses to a horizontal line and snaps back
+    float k = kick * step(.55, hash(vec2(floor(uFx2Ph*4.), 9.1))); float sc = 1. - k*.985; vec2 cu = vec2(uv.x, .5 + (uv.y-.5)/max(sc, .02));
+    bool off = cu.y < 0. || cu.y > 1.; vec3 b = off ? vec3(0.) : texture(tBase, cu).rgb; vec3 tri = vec3(step(mod(gl_FragCoord.x,3.),.9), step(.9,mod(gl_FragCoord.x,3.))*step(mod(gl_FragCoord.x,3.),1.9), step(1.9,mod(gl_FragCoord.x,3.)));
+    col = mix(b, b*tri*2.2, .35) * (.78 + .22*step(.5, fract(gl_FragCoord.y*.5))); col = mix(col, gmap(luma(col), uPalA), .5);
+    float line = exp(-abs(vUv.y-.5)*uRes.y*.25*(1.-k*.9)) * k; col += P3*line*1.6; if(k > .9) col += P3*exp(-abs(vUv.y-.5)*uRes.y*.08)*.6; }
+  else if(m==9){ // HATCH FIELD: engraving — strokes that follow the picture's gradient, dark areas get denser cross-hatching
+    vec2 e = 12./uRes; float gx = 0., gy = 0.; for(int i=-1;i<=1;i++){ gx += luma(texture(tBase,uv+vec2(e.x,float(i)*e.y)).rgb)-luma(texture(tBase,uv-vec2(e.x,-float(i)*e.y)).rgb); gy += luma(texture(tBase,uv+vec2(float(i)*e.x,e.y)).rgb)-luma(texture(tBase,uv-vec2(-float(i)*e.x,e.y)).rgb); }
+    float th = atan(gy, gx); th = floor(th/.7854 + .5)*.7854; vec2 p = gl_FragCoord.xy; float f = 6.283/max(8., uRes.y/70.);
+    float s1 = sin((p.x*cos(th) + p.y*sin(th))*f + uTime*2.*punch); float s2 = sin((p.x*cos(th+1.57) + p.y*sin(th+1.57))*f*1.1);
+    float dark = 1.-clamp((l-.03)*1.2,0.,1.); float t1 = 1.-dark*1.7, t2 = 1.-max(0.,dark-.5)*3.; float ink = smoothstep(t1-.25, t1+.25, s1) + smoothstep(t2-.25, t2+.25, s2); ink = clamp(ink,0.,1.);
+    col = mix(P0, P1, ink); col = mix(col, P2, step(.75, dark)*ink*.6); }
+  else if(m==10){ // STAINED GLASS: a Voronoi mosaic, each pane takes the colour under its centre, leading between panes; panes shake on kicks
+    float n = 14. + 6.*high; float edge; vec2 cc = vorCell(vUv*vec2(n, n/asp) + kick*(vec2(hash(vec2(floor(uFx2Ph),1.)),hash(vec2(floor(uFx2Ph),2.)))-.5)*.6, .9, edge);
+    vec3 pc = texture(tBase, clamp(cc/vec2(n, n/asp),0.,1.)).rgb; float lp = clamp((luma(pc)-.05)*1.2,0.,1.); vec3 glass = mix(gmap(lp, uPalA), pc, .35);
+    float lead = smoothstep(.02, .07, edge); col = mix(P0*.35, glass*(.85+.3*lp), lead); col += P3*(1.-smoothstep(.0,.03,edge))*0.; }
+  else if(m==11){ // OSCILLO WARP: every row displaced by a waveform whose amplitude is the bass, green phosphor trace, the picture inside the scope
+    float amp = (.01 + bass*.09) * (1. + punch); float wv = sin(uv.y*uRes.y*.08 + uTime*9.) * .5 + sin(uv.y*uRes.y*.021 - uTime*3.)*.5;
+    vec2 wu = vec2(uv.x + wv*amp, uv.y); vec3 b = texture(tBase, clamp(wu,0.,1.)).rgb; float lb = clamp((luma(b)-.05)*1.25,0.,1.);
+    col = gmap(lb*.85, uPalA); float trace = exp(-abs(vUv.x - (.5 + wv*amp*4.))*uRes.x*.15); col += P2*trace*1.3;
+    col *= .8 + .2*step(.5, fract(gl_FragCoord.y*.5)); col += P2*exp(-abs(vUv.y-.5)*3.)*.05; }
+  else if(m==12){ // EQUALIZER CUT: the frame split into bars, each bar's picture rises from the floor with its frequency band
+    float nb = 16.; float bi = floor(vUv.x*nb); float tt = bi/(nb-1.); float sig = tt < .33 ? mix(bass, mid, tt*3.) : tt < .66 ? mix(mid, high, (tt-.33)*3.) : mix(high, punch, (tt-.66)*3.);
+    float lvl = clamp(.25 + sig*.9 + (hash(vec2(bi, floor(uFx2Ph*2.)))-.5)*.25, .12, 1.); float yy = vUv.y / lvl;
+    if(yy > 1.){ col = P0; } else { vec3 b = texture(tBase, vec2(uv.x, yy)).rgb; float lb = clamp((luma(b)-.05)*1.2,0.,1.); col = gmap(lb, uPalA); }
+    float cap = exp(-abs(vUv.y - lvl)*uRes.y*.3); col += P3*cap*.8; float gapb = step(fract(vUv.x*nb), .04); col = mix(col, P0, gapb); }
+  else if(m==13){ // INK PUMP: one ink, one paper; the threshold breathes with the bass so the picture floods black and drains back; kicks invert
+    float th = .36 - bass*.3 - punch*.08; float soft = .06 + .1*fbm(vUv*8.); float ink = 1.-smoothstep(th-soft, th+soft, l + (bayer(gl_FragCoord.xy)-.5)*.08);
+    float inv = step(.5, hash(vec2(floor(uFx2Ph*2.), 4.4))) * step(.6, kick); ink = mix(ink, 1.-ink, inv);
+    col = mix(P0, P1, ink); col = mix(col, P2, ink*step(.9, bass)*.5); }
+  else if(m==14){ // PHOTOCOPY: a scanner bar sweeps down each bar; above it the page is frozen from the pass, below it the world is live
+    float bar = fract(uFx2Ph); float frozen = step(bar, 1.-vUv.y) ; // bar sweeps from top (vUv.y=1) down
+    vec3 live = base; float lb = clamp((l-.08)*1.35,0.,1.); vec3 copy = mix(P0, P3, step(.5 + (bayer(gl_FragCoord.xy)-.5)*.45, lb)); copy += (hash(vUv*uRes*.9)-.5)*.08;
+    vec3 held = texture(tPrev, vUv).rgb; col = mix(held, mix(live, copy, .25), 1.-frozen); if(abs((1.-vUv.y) - bar) < .004) col = copy;   // the row under the bar is burned in
+    float glow = exp(-abs((1.-vUv.y) - bar)*uRes.y*.08); col += P3*glow*.9; }
+  else if(m==15){ // CUTOUT: the subject stays photo, the background becomes a flat colour; the two swap sides on beats, with a white cut line
+    float th = uThresh; float mask = smoothstep(th-.06, th+.06, l); float side = step(.5, hash(vec2(floor(uFx2Ph), 6.6))); mask = mix(mask, 1.-mask, side);
+    vec3 flat_ = mix(P0, P1, hash(vec2(floor(uFx2Ph), 8.8))); col = mix(flat_, base, mask); float edge_ = smoothstep(.4,.5,mask)*smoothstep(.6,.5,mask); col = mix(col, P3, edge_*2.); }
   return clamp(col, 0., 1.); }
 vec3 iceStrip(vec3 col){
   float y0 = .5 - uStripH*.5; if(vUv.y < y0 || vUv.y > y0 + uStripH) return vec3(0.);
@@ -301,6 +387,7 @@ void main(){
   if(uPanelOn>.5 && vUv.x>=uPanelR.x && vUv.x<=uPanelR.z && vUv.y>=uPanelR.y && vUv.y<=uPanelR.w) col = uPanelC;
   if(uStripOn>.5) col = iceStrip(col);
   if(uRefOn>.5) col = refFx(col, base, uv);
+  if(uFx2On>.5) col = fx2(col, base, uv);
   if(uPixHold>0.){ float xq=floor(vUv.x*uRes.x*.5)/(uRes.x*.5); vec3 pb=texture(tBase, vec2(xq, uPixRow)).rgb; float pl=smoothstep(.08,.9,luma(pb)); col = mix(col, gmap(pl,uPalA)*(.5+.7*pl), uPixHold); }
   if(uLoupeOn>.5){ vec2 lq=(vUv-uLoupeC)*vec2(asp,1.); float ld=length(lq), lw=1.6/uRes.y;
     if(abs(ld-uLoupeR)<lw*2.2) col=uPalA[3]; else if(ld<uLoupeR && uLoupeR-ld<lw*8.) col*=.5;

@@ -480,7 +480,7 @@ function renderAt(t){
   xBase.fillStyle = '#000'; xBase.fillRect(0, 0, W, H);
   const fi = clipFrame(c, M(c.m), tq);
   const mech = (id, k) => { const a = v(id); return a > 0 && hash1(c.seed * 7.31 + k * 13.7) < a; };
-  const mStrip = mech('iceStrip', 7) && S.strip, mSplit = !mStrip && mech('splitTint', 1), mQuad = !mStrip && !mSplit && mech('quadGrid', 2), mInset = !mStrip && !mQuad && mech('inset', 3), mErode = !mStrip && !mQuad && !mSplit && mech('erode', 4), mPin = !mStrip && !mQuad && !mSplit && !mErode && mech('pinwheel', 9), mBand = !mStrip && !mSplit && !mQuad && !mErode && !mPin && mech('bandMap', 10), mLoupe = !mStrip && !mQuad && !mPin && !mBand && mech('loupe', 11), mRef = !mStrip && c.P && c.P.refMode && mech('refFx', 12), mFlick = mech('palFlick', 8), mHud = mech('hud', 5), mWall = state.wordsOn && mech('typeWall', 6);
+  const mStrip = mech('iceStrip', 7) && S.strip, mSplit = !mStrip && mech('splitTint', 1), mQuad = !mStrip && !mSplit && mech('quadGrid', 2), mInset = !mStrip && !mQuad && mech('inset', 3), mErode = !mStrip && !mQuad && !mSplit && mech('erode', 4), mPin = !mStrip && !mQuad && !mSplit && !mErode && mech('pinwheel', 9), mBand = !mStrip && !mSplit && !mQuad && !mErode && !mPin && mech('bandMap', 10), mLoupe = !mStrip && !mQuad && !mPin && !mBand && mech('loupe', 11), mRef = !mStrip && c.P && c.P.refMode && mech('refFx', 12), mFx2 = !mStrip && c.P && c.P.fx2Mode && mech('fx2', 13), mFlick = mech('palFlick', 8), mHud = mech('hud', 5), mWall = state.wordsOn && mech('typeWall', 6);
   const pulseLen = Math.max(.08, (state.grid ? state.grid.per : .5) * lerp(2, .33, v('tintRate'))), pk = Math.floor(t / pulseLen);
   const palsS = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['mint', 'olive', 'thermo', 'slate'], palS = palsS[Math.floor(hash1(pk * 3.7 + c.seed) * palsS.length) % palsS.length];
   const splitX = .5 + (hash1(c.seed * 3.3) - .5) * .16, splitDir = c.P && c.P.twin ? (W >= H ? 0 : 1) : hash1(c.seed * 5.1) < .65 ? 1 : 0, splitSide = hash1(c.seed * 9.2) < .5 ? 1 : 0;
@@ -565,7 +565,7 @@ function renderAt(t){
   { const ph = v('pixHold'); let e = 0, row = .5; if (ph > 0){ const L = S.trig.kick || [], i = lastTrig(L, tq);
       if (i >= 0 && hash1(i * 3.9 + state.seed) < ph){ e = Math.exp(-(tq - L[i]) * 14) * Math.min(1, ph * 1.6); row = .3 + hash1(i * 1.3 + c.seed) * .4; } }
     f1('uPixHold', e > .04 ? Math.min(1, e) : 0); f1('uPixRow', row); }
-  f1('uRefOn', mRef ? 1 : 0); if (mRef){ const md = c.P.refMode, h = x => hash1(pk * x + c.seed * 1.7); f1('uRefMode', md); f1('uRefT', pk);
+  f1('uRefOn', mRef ? 1 : 0); if (mRef){ const md = c.P.refMode, h = x => hash1(pk * x + c.seed * 1.7); f1('uRefMode', md); f1('uRefT', t / pulseLen);
     if (U.uRefC) gl.uniform3fv(U.uRefC, (md === 1 ? ['#0e0024', '#3a0fb0', '#08b35a', '#ffd400', '#ff2a00'] : md === 2 ? ['#fff35c', '#0d1a8c', '#ffffff', '#5a1a8c', '#ff7a3d'] : md === 3 ? ['#ffe9a8', '#7dff8a', '#ff2a00', '#3cf2ff', '#ffffff'] : ['#d8c46a', '#2a1fa8', '#ffffff', '#000000', '#000000']).flatMap(hexRgb));
     // thermal: the white slab lands on a kick and holds ~4 frames
     let hit = 0; if (md === 1){ const L = S.trig.kick || [], i = lastTrig(L, tq); hit = i >= 0 && tq - L[i] < .14 && hash1(i * 4.1 + c.seed) < .55 ? 1 : 0; } f1('uRefHit', hit);
@@ -573,8 +573,12 @@ function renderAt(t){
     const iw = .5 + h(1.1) * .3, ih = md === 1 ? .2 + h(1.9) * .12 : .55 + h(1.9) * .25, ix = .08 + h(2.7) * (.84 - iw), iy = md === 1 ? .55 + h(3.1) * .2 - ih : .12 + h(3.1) * (.76 - ih);
     if (U.uRefR) gl.uniform4f(U.uRefR, ix, iy, ix + iw, iy + ih);
     f1('uRefX', md === 3 ? .42 + h(4.3) * .2 : h(4.3) < .5 ? .35 : 0); f1('uRefX2', md === 3 ? .15 + h(5.7) * .7 : h(5.7) < .35 ? .3 : 0);
-    if (md === 3){ const box = (a, b) => { const w = .14 + hash1(pk * a) * .3, hh = (.1 + hash1(pk * b) * .3), x = hash1(pk * a + 3) * (1 - w), y = hash1(pk * b + 3) * (1 - hh); return [x, y, x + w, y + hh]; };
-      U.uRefB0 && gl.uniform4f(U.uRefB0, ...box(7.1, 8.3)); U.uRefB1 && gl.uniform4f(U.uRefB1, ...box(9.7, 10.9)); U.uRefB2 && gl.uniform4f(U.uRefB2, ...(hash1(pk * 13.3) < .5 ? box(11.3, 12.1) : [2, 2, 2, 2])); } }
+    if (md === 3){ const show = hash1(pk * 2.9 + c.seed) < .45, two = hash1(pk * 3.7) < .3; const box = (a, b) => { const w = .14 + hash1(pk * a) * .3, hh = (.1 + hash1(pk * b) * .3), x = hash1(pk * a + 3) * (1 - w), y = hash1(pk * b + 3) * (1 - hh); return [x, y, x + w, y + hh]; };
+      const none = [2, 2, 2, 2]; U.uRefB0 && gl.uniform4f(U.uRefB0, ...(show ? box(7.1, 8.3) : none)); U.uRefB1 && gl.uniform4f(U.uRefB1, ...(show && two ? box(9.7, 10.9) : none)); U.uRefB2 && gl.uniform4f(U.uRefB2, ...none); } }
+  f1('uFx2On', mFx2 ? 1 : 0); if (mFx2){ f1('uFx2Mode', c.P.fx2Mode); f1('uFx2Ph', t / pulseLen); f1('uFx2Seed', c.seed);
+    let ke = 0; { const L = S.trig.kick || [], i = lastTrig(L, tq); if (i >= 0) ke = Math.exp(-(tq - L[i]) * 9); } f1('uFx2Kick', ke);
+    let se = 0; { const L = S.trig.snare || (S.trig.snare = triggers('snare', .5, .07)), i = lastTrig(L, tq); if (i >= 0) se = Math.exp(-(tq - L[i]) * 9); } f1('uFx2Snare', se);
+    if (U.uFx2Sig) gl.uniform4f(U.uFx2Sig, sig('bass', t), sig('mid', t), sig('high', t), pu); }
   { const pf = v('panelFlash'), f30 = Math.floor(t * 30), blk = Math.floor(f30 / 2), on = pf > 0 && hash1(blk * 3.3 + state.seed) < pf * .22; f1('uPanelOn', on ? 1 : 0);
     if (on && U.uPanelR){ const kind = Math.floor(hash1(blk * 5.7) * 4), R = kind === 0 ? [0, 0, .5, 1] : kind === 1 ? [.5, 0, 1, 1] : kind === 2 ? [0, .5, 1, 1] : [.1, .3, .9, .7]; gl.uniform4f(U.uPanelR, ...R); gl.uniform3f(U.uPanelC, ...hexRgb(hash1(blk * 7.1) < .7 ? '#8d8d8d' : '#b9b9b9')); } }
   gl.uniform3fv(U.uPalA, PAL[palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));

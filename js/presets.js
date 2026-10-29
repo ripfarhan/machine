@@ -4,7 +4,11 @@ const SIGNALS = ['const','sub','bass','kick','snare','hat','mid','high','punch',
 const PAL = {
   acid:['#14002e','#ff2ea6','#3cf2ff','#fff35c'], toxic:['#001a12','#2b3bff','#5dff6a','#fff7f0'], candy:['#2a0033','#ff3d6e','#ffb13d','#e9fffd'],
   ultra:['#05001a','#6b16ff','#ff4fd8','#c9fbff'], ember:['#0a0000','#c4001a','#ff7a00','#ffe9a8'], riot:['#08004a','#2433ff','#ff1a1a','#ffe1e1'],
-  ice:['#000000','#0055ff','#33f6ff','#ffffff'], spectral:['#12002e','#2433ff','#00e07a','#fff200'], matyellow:['#fff35c','#0d1a8c','#ffffff','#5a1a8c'], wireamber:['#ffe9a8','#7dff8a','#ff2a00','#3cf2ff'], blockgold:['#d8c46a','#2a1fa8','#ffffff','#000000'], mono:['#000000','#3a3a3a','#bdbdbd','#ffffff'], sepia:['#1b120a','#6b4a2b','#c9a477','#f6ead2'],
+  ice:['#000000','#0055ff','#33f6ff','#ffffff'],
+  ikeda:['#000000','#1a1a1a','#e8e8e8','#ffffff'], paper:['#f3ecd8','#1d2f8a','#ff3d9a','#2b1a4a'], press:['#f6f1e4','#2a2a2a','#ff2a8a','#1a1a1a'], phosphor:['#020803','#0b3a1a','#39ff7a','#dfffe8'],
+  lidar:['#02050a','#0b2a3a','#2bd9ff','#ffffff'], glass:['#140a05','#7a2e12','#e8a83a','#fff2c8'], crt:['#06070c','#1c2a66','#73b6ff','#ffffff'], copier:['#1a1a1a','#3a3a3a','#e6e6e6','#ffffff'],
+  flap:['#101010','#30302c','#c8c2a8','#fff9e6'], osc:['#030a06','#0f4a22','#5cff8c','#ffffff'], eq:['#08001a','#5a1fd0','#ff4fd8','#fff35c'], risoink:['#f4efe6','#111111','#d6001c','#ffffff'],
+  cutout:['#ff2e63','#1a0a2e','#fff35c','#ffffff'], hatch:['#efe9dc','#2b2420','#8a1f1f','#ffffff'], mirrorT:['#000000','#0f1f5a','#4fd8ff','#ffffff'], spectral:['#12002e','#2433ff','#00e07a','#fff200'], matyellow:['#fff35c','#0d1a8c','#ffffff','#5a1a8c'], wireamber:['#ffe9a8','#7dff8a','#ff2a00','#3cf2ff'], blockgold:['#d8c46a','#2a1fa8','#ffffff','#000000'], mono:['#000000','#3a3a3a','#bdbdbd','#ffffff'], sepia:['#1b120a','#6b4a2b','#c9a477','#f6ead2'],
   lime:['#0d0021','#a100ff','#b6ff00','#ffffff'], blood:['#000000','#5a0000','#ff0a0a','#fff0f0'], heat:['#000000','#5a00a8','#ff2d00','#fff200'],
   xerox:['#0b0b0b','#2a2a2a','#d8d8d8','#ffffff'], pastel:['#2b1b3d','#ff9de2','#9df7ff','#fff6a8'], chrome:['#050a12','#2a5bff','#9ad7ff','#ffffff'],
   bolly:['#2d0036','#ff2e63','#ffb800','#08f7fe'], news:['#1a1611','#5a4b32','#b8a888','#f4ecdc'], noir:['#000000','#101e3a','#ff2bd6','#9cfcff'],
@@ -98,6 +102,7 @@ const PARAMS = [
   ['bandMap','Frame','Band map',0,1,0,'const',0,'chance a cut splits into horizontal bands, each gradient-mapped in its own palette'],
   ['loupe','Frame','Loupe',0,1,0,'const',0,'chance a cut gets a drifting magnifier circle with a crosshair'],
   ['refFx','Frame','Reel system',0,1,0,'const',0,'chance a cut takes the style’s reference-reel treatment (neon thermal, yellow mat, wireframe, block field)'],
+  ['fx2','Frame','Machine',0,1,0,'const',0,'chance a cut takes the style’s machine treatment (data rain, moiré gate, riso, flip board, lidar, …)'],
   ['palFlick','Frame','Palette flicker',0,1,0,'const',0,'chance a cut holds the shot while its gradient map swaps every frame'],
   ['flickRate','Frame','Flicker speed',0,1,.7,'hype',.3,'palette flicker: every 4 frames (low) to every frame (high)'],
   ['panelFlash','Frame','Panel flash',0,1,0,'snare',0,'solid grey panels slam over half the frame for two frames'],
@@ -300,17 +305,46 @@ const PRESETS = {
     dials: clean({refFx:[1], tintRate:[.7], cutRate:[.3,'hype',.3], clipHold:[.7], flashCuts:[.35,'punch',.4], contrast:[1.1], grain:[.12], zoomPunch:[.05,'kick',.2]})},
   wireframe: {name:'Wireframe', fx:true, refMode:3, sw:'wireamber', looks:['punch'], pals:['wireamber'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
     dials: clean({refFx:[1], tintRate:[.65], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.15], whiteFlash:[.06,'kick',.3], zoomPunch:[.06,'kick',.25]})},
-  blockfield: {name:'Block Field', fx:true, refMode:4, sw:'blockgold', looks:['punch'], pals:['blockgold'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
-    dials: clean({refFx:[1], tintRate:[.8], cutRate:[.32,'hype',.3], clipHold:[.7], flashCuts:[.35,'punch',.4], contrast:[1.1], grain:[.08], blackBlink:[.08,'hat',.2]})},
   // grid mix: Palette Flicker's full-frame cuts, and ~45% of cuts become a grid of different clips (1×2 … 3×3), each cell its own gradient map
   gridmix: {name:'Grid Mix', fx:true, gridMix:.45, sw:'mapA', looks:['gmap'], pals:['mapA','redmono','olivine','violet','glacier'], palsB:['glacier','jellygreen'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
     dials: clean({palFlick:[1], flickRate:[.7,'hype',.3], lookMix:[.95], cutRate:[.28,'hype',.3], clipHold:[.7], flashCuts:[.3,'punch',.4], pixHold:[.35], contrast:[1.15,'punch',.1], saturate:[1.12], grain:[.12], zoomPunch:[.06,'kick',.25]})},
+  // ---- the machine set: 15 treatments, each a full-frame system with its own physics (research/visual-machines.md) ----
+  datarain: {name:'Data Rain', fx:true, fx2Mode:1, sw:'ikeda', looks:['punch'], pals:['ikeda'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], tintRate:[.9], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  moiregate: {name:'Moiré Gate', fx:true, fx2Mode:2, sw:'glacier', looks:['punch'], pals:['glacier','mono','redmono'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  halftonepress: {name:'Halftone Press', fx:true, fx2Mode:3, sw:'press', looks:['punch'], pals:['press'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  timemirror: {name:'Time Mirror', fx:true, fx2Mode:4, sw:'mirrorT', looks:['punch'], pals:['mirrorT','violet','redmono'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  flipboard: {name:'Flip Board', fx:true, fx2Mode:5, sw:'flap', looks:['punch'], pals:['flap','mono','olivine'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], tintRate:[.8], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  lidar: {name:'Lidar', fx:true, fx2Mode:6, sw:'lidar', looks:['punch'], pals:['lidar','phosphor'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  riso: {name:'Riso Print', fx:true, fx2Mode:7, sw:'paper', looks:['punch'], pals:['paper','risoink'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], tintRate:[.6], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  tubecollapse: {name:'Tube Collapse', fx:true, fx2Mode:8, sw:'crt', looks:['punch'], pals:['crt','mono'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  hatchfield: {name:'Hatch Field', fx:true, fx2Mode:9, sw:'hatch', looks:['punch'], pals:['hatch','paper'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  stainedglass: {name:'Stained Glass', fx:true, fx2Mode:10, sw:'glass', looks:['punch'], pals:['glass','jelly','glacier'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  oscillo: {name:'Oscillo Warp', fx:true, fx2Mode:11, sw:'osc', looks:['punch'], pals:['osc','phosphor'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  equalizer: {name:'Equalizer Cut', fx:true, fx2Mode:12, sw:'eq', looks:['punch'], pals:['eq','signal','mapA'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], tintRate:[.85], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  inkpump: {name:'Ink Pump', fx:true, fx2Mode:13, sw:'risoink', looks:['punch'], pals:['risoink','paper','redmono'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  photocopy: {name:'Photocopy', fx:true, fx2Mode:14, sw:'copier', looks:['punch'], pals:['copier','mono'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
+  cutout: {name:'Cutout', fx:true, fx2Mode:15, sw:'cutout', looks:['punch'], pals:['cutout','violet','jellygreen','mapA'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({fx2:[1], tintRate:[.7], cutRate:[.3,'hype',.3], clipHold:[.72], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.1], zoomPunch:[.05,'kick',.2]})},
   chaos: {name:'Chaos', sw:'ultra'}
 };
 const STYLE_KEYS = Object.keys(PRESETS).filter(k => k !== 'chaos');
 // polish pass: the spiral decoration and the rings texture are retired everywhere; the pre-reference styles
 // pull toward the reference-reel crispness — stacking and smear trimmed, the one-frame flash language on
-const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','signalflip','timesmear','pixelhold','neonthermal','yellowmat','wireframe','blockfield','gridmix']);
+const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','signalflip','timesmear','pixelhold','neonthermal','yellowmat','wireframe','gridmix','datarain','moiregate','halftonepress','timemirror','flipboard','lidar','riso','tubecollapse','hatchfield','stainedglass','oscillo','equalizer','inkpump','photocopy','cutout']);
 for (const k of STYLE_KEYS){ const p = PRESETS[k], d = p.dials || (p.dials = {});
   if (p.deco) delete p.deco.spiral;
   d.rings = [0,'const',0];
