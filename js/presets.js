@@ -42,7 +42,7 @@ const PARAMS = [
   ['whiteFlash','Flicker','White flash',0,1,.4,'kick',.7,'blow-out on the hit'],
   ['blackBlink','Flicker','Black blink',0,1,.25,'hat',.5,'single black frames'],
   ['strobe','Flicker','Strobe',0,1,.2,'drop',.8,'full-frame strobe when the song peaks'],
-  ['bands','Flicker','Band invert',0,1,0,'snare',.8,'horizontal stripes flip negative on the hit'],
+  ['bands','Flicker','Band invert',0,1,0,'snare',0,'horizontal stripes flip negative on the hit (off by default; only styles that ask for it)'],
   ['hueShift','Color','Hue shift',0,1,.3,'bar',.6,'rotate colors'],
   ['saturate','Color','Saturation',0,2,1.15,'loud',.3,''],
   ['contrast','Color','Contrast',0,2,1.1,'punch',.3,''],
@@ -301,6 +301,8 @@ const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox
 for (const k of STYLE_KEYS){ const p = PRESETS[k], d = p.dials || (p.dials = {});
   if (p.deco) delete p.deco.spiral;
   d.rings = [0,'const',0];
+  // band invert (horizontal negative stripes) retired too; CCTV keeps it, it is literally interference there
+  if (k !== 'cctv') d.bands = [0,'const',0];
   if (REF_SET.has(k)) continue;
   const mul = (id, f) => { if (d[id] && d[id][0] > 0) d[id] = [d[id][0] * f].concat(d[id].slice(1)); };
   mul('overlap', .65); mul('clones', .65); mul('feedback', .7); mul('warp', .7); mul('motifs', .7); mul('melt', .75);
