@@ -107,7 +107,8 @@ function AWZ_COMPOSER(A){
         voicing: v, chord: ch, chordStart, chordBars: ch.bars, barInChord: this.bic, nextChordIn: ch.bars - this.bic, opening: E > .82 && S2.tag === 'peak',
         chordPcs: ch.pcs, chordRoot: ch.root, key: this.key, pent: new Set(this.key.pentatonic(60, 72).map(m => m % 12)), bassNote: v.bass, droneNote: v.sub + 12,
         barIndex: this.k, barInSection: this.bis, sectionIdx: this.si, section: S2, barsLeftInSection: barsLeft, nextBigger, layerIndex: clamp(pieceProg * 1.6, 0, 1),
-        E, density, chaos: M.chaos, mutation: .02 + M.chaos * .35, motion: M.motion, space: M.space, brightness: M.mood * .5 + M.x * .5, calm: E < .3, alpha, forceAll: false, halfTime: this.v2 && this.k >= this.halfTimeFrom && this.k < this.halfTimeTo};
+        E, density, chaos: M.chaos, mutation: .02 + M.chaos * .35, motion: M.motion, space: M.space, brightness: M.mood * .5 + M.x * .5, calm: E < .3, alpha, forceAll: false, halfTime: this.v2 && this.k >= this.halfTimeFrom && this.k < this.halfTimeTo,
+        v2: this.v2, nextChordPcs: this.loop.chords[(this.ci + 1) % loopLen].pcs};
       const t0 = this.t, stepN = this.stepN, swing = this.g.swing || 0, hum = this.hum, chaos = M.chaos;
       for (const p of this.parts){ if (!p.on) continue; const slot = p.slot, drum = !!p.spec.drum, tight = p.spec.tight;
         c.emit = (sl, step, ev, raw) => { let s = step; if (!raw && swing && Math.abs(s - Math.round(s)) < .01 && (Math.round(s) & 1)) s += swing;
@@ -118,7 +119,7 @@ function AWZ_COMPOSER(A){
       // CHAOS glitch layer: beat-repeats (1/16 · 1/32 stutters), drop-outs and octave flips, never on the first beat of a phrase
       if (chaos > .3){ const beatN = stepN * 4, gr = this.P.rng('glitch' + this.k), add = [];
         for (let b = (this.bis % 8 === 0 ? 1 : 0); b < 4; b++){ if (gr() > (chaos - .3) * .7) continue; const b0 = t0 + b * beatN, b1 = b0 + beatN, kind = gr.weighted({stutter: 3, drop: 1, octave: 1.2, roll: chaos > .6 ? 1.5 : 0});
-          const inBeat = out.filter(e => e.t >= b0 && e.t < b1 && e.ev.level === undefined);
+          const inBeat = out.filter(e => e.t >= b0 && e.t < b1 && e.ev.level === undefined && e.slot !== 'ghost');
           if (kind === 'drop'){ for (const e of inBeat) if (!e.ev.kick && gr() < .8) e.drop = true; }
           else if (kind === 'octave'){ for (const e of inBeat) if (e.ev.note !== undefined && e.ev.note < 84) e.ev = Object.assign({}, e.ev, {note: e.ev.note + 12}); }
           else { const div = kind === 'roll' ? 8 : gr() < .5 ? 4 : 8, seg = beatN / div, src = inBeat.filter(e => e.t < b0 + seg * 1.5); for (const e of inBeat) if (e.t >= b0 + seg * 1.5 && !e.ev.kick) e.drop = true;
