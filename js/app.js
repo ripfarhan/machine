@@ -531,12 +531,17 @@ function renderAt(t){
   i1('uLookA', c.lookA); i1('uLookB', c.lookB); i1('uLook2', c.look2); i1('uTextMode', ev ? ev.mode : 0);
   // palette flicker (landscape reference reel, opening): the shot holds while its gradient map swaps every frame or two
   let palA = c.palA; if (mFlick){ const pls = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['acid', 'ember', 'olive'], stepF = Math.round(lerp(4, 1, v('flickRate'))), fk = Math.floor(t * 30 / stepF);
-    palA = pls[Math.floor(hash1(fk * 1.37 + c.seed * .11) * pls.length) % pls.length]; i1('uLookA', LOOK[c.P && c.P.looks && c.P.looks[0] === 'gmap' ? 'gmap' : 'duo']); }
+    palA = pls[Math.floor(hash1(fk * 1.37 + c.seed * .11) * pls.length) % pls.length];
+    if (c.P && c.P.flickLook){ const lks = c.P.looks; i1('uLookA', LOOK[lks[Math.floor(hash1(fk * 2.9 + c.seed * .7) * lks.length) % lks.length]]); }
+    else i1('uLookA', LOOK[c.P && c.P.looks && c.P.looks[0] === 'gmap' ? 'gmap' : 'duo']); }
   f1('uPinOn', mPin ? 1 : 0); if (mPin){ f1('uPinN', [6, 8, 8, 10][Math.floor(hash1(c.seed * 1.9) * 4)]); f1('uPinR', .26 + hash1(c.seed * 2.7) * .14); f1('uPinRot', t * (hash1(c.seed * 3.1) < .5 ? -.35 : .35) + c.seed); f1('uPinFold', hash1(c.seed * 4.3)); f1('uPinChunk', hash1(Math.floor(t * 4) + c.seed)); if (U.uPinM) gl.uniform2f(U.uPinM, .05 + hash1(c.seed * 5.9) * .05, .08 + hash1(c.seed * 6.3) * .06); }
   f1('uBandOn', mBand ? 1 : 0); if (mBand){ const bn = [6, 8, 10, 12][Math.floor(hash1(c.seed * 2.3) * 4)]; f1('uBandN', bn);
     const bPh = Math.floor(t * 30 / Math.round(lerp(5, 2, v('flickRate')))); f1('uBandPh', bPh * .137 + c.seed); f1('uBandLit', Math.floor(hash1(bPh * 1.7 + c.seed) * bn)); }
   f1('uLoupeOn', mLoupe ? 1 : 0); if (mLoupe){ const lx = .5 + Math.sin(t * .4 + c.seed * 9) * .16, ly = .48 + Math.cos(t * .31 + c.seed * 5) * .14;
     U.uLoupeC && gl.uniform2f(U.uLoupeC, lx, ly); f1('uLoupeR', .16 + hash1(c.seed * 7.3) * .1); f1('uLoupeMag', 1.7 + hash1(c.seed * 9.1) * 1.2); }
+  { const ph = v('pixHold'); let e = 0, row = .5; if (ph > 0){ const L = S.trig.kick || [], i = lastTrig(L, tq);
+      if (i >= 0 && hash1(i * 3.9 + state.seed) < ph){ e = Math.exp(-(tq - L[i]) * 14) * Math.min(1, ph * 1.6); row = .3 + hash1(i * 1.3 + c.seed) * .4; } }
+    f1('uPixHold', e > .04 ? Math.min(1, e) : 0); f1('uPixRow', row); }
   { const pf = v('panelFlash'), f30 = Math.floor(t * 30), blk = Math.floor(f30 / 2), on = pf > 0 && hash1(blk * 3.3 + state.seed) < pf * .22; f1('uPanelOn', on ? 1 : 0);
     if (on && U.uPanelR){ const kind = Math.floor(hash1(blk * 5.7) * 4), R = kind === 0 ? [0, 0, .5, 1] : kind === 1 ? [.5, 0, 1, 1] : kind === 2 ? [0, .5, 1, 1] : [.1, .3, .9, .7]; gl.uniform4f(U.uPanelR, ...R); gl.uniform3f(U.uPanelC, ...hexRgb(hash1(blk * 7.1) < .7 ? '#8d8d8d' : '#b9b9b9')); } }
   gl.uniform3fv(U.uPalA, PAL[palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));

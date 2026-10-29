@@ -63,6 +63,7 @@ const PARAMS = [
   ['weave','Glitch','Time weave',0,1,0,'hat',0,'vertical strips of the previous frame interleave with now'],
   ['staticveil','Glitch','Static veil',0,1,0,'high',0,'shadows dissolve into TV static'],
   ['ghost','Glitch','Ghost',0,1,0,'punch',.5,'offset difference echoes of the image'],
+  ['pixHold','Glitch','Pixel hold',0,1,0,'const',0,'on every kick the frame snaps to stretched-pixel bars for a flash'],
   ['zoomPunch','Motion','Zoom punch',0,1,.4,'kick',.8,'scale jolt'],
   ['punchBlur','Motion','Punch blur',0,1,.3,'kick',.7,'radial smear on the hit'],
   ['shake','Motion','Shake',0,1,.3,'punch',.6,'position jitter'],
@@ -284,19 +285,19 @@ const PRESETS = {
     dials: clean({iceStrip:[1], iceGlow:[.7,'loud',.3], cutRate:[.8,'hype',.2], minHold:[1], flashCuts:[.6,'punch',.4], clipWeight:[.6], clipHold:[.35], clipSpeed:[1,'hype',.4], whiteFlash:[.03,'kick',.15], invertFlk:[0,'const',0], blackBlink:[.06,'hat',.15], zoomPunch:[.05,'kick',.2], grain:[.08]})},
   // ---- siblings of the reference set: one strong mechanism each, clean base, strict palettes ----
   bandscan: {name:'Band Scan', fx:true, sw:'signal', looks:['gmap'], pals:['signal','mapA','glacier','redmono'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
-    dials: clean({bandMap:[1], flickRate:[.7,'hype',.3], lookMix:[.95], tintRate:[.8], cutRate:[.24,'hype',.3], clipHold:[.7], flashCuts:[.3,'punch',.4], contrast:[1.18,'punch',.1], saturate:[1.12], grain:[.12], panelFlash:[.18,'snare',.4], zoomPunch:[.07,'kick',.25]})},
-  specimen: {name:'Specimen', fx:true, sw:'bone', looks:['duo','sil'], pals:['bone','mono','frost','slate'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['mono'], patMotif:0,
-    dials: clean({loupe:[1], hud:[.85], lookMix:[.85], tintRate:[.6], contrast:[1.2,'punch',.1], saturate:[.92], grain:[.18], scanlines:[.08], cutRate:[.3,'hype',.3], clipHold:[.7], invertFlk:[.1,'snare',.3], panelFlash:[.12,'snare',.3]})},
-  proofstrip: {name:'Proof Strip', fx:true, sw:'rust', looks:['duo','punch'], pals:['rust','sepia','ochre','mono'], layouts:{trip:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
-    dials: clean({collage:[1], lookMix:[.75], tintRate:[.75], contrast:[1.15], saturate:[1.1], grain:[.3], halftone:[.07], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], blackBlink:[.12,'hat',.3], stutter:[.2,'kick',.4]})},
-  motionprint: {name:'Motion Print', fx:true, sw:'violet', looks:['gmap','duo'], pals:['violet','glacier','jellygreen','redmono'], layouts:{mgrid:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'pair', fonts:['narrow'], patMotif:0,
-    dials: clean({collage:[1], lookMix:[.9], tintRate:[.85], contrast:[1.2,'punch',.1], saturate:[1.15], grain:[.15], cutRate:[.2,'hype',.3], clipHold:[.85], stutter:[.25,'kick',.4], panelFlash:[.15,'snare',.35], whiteFlash:[.04,'kick',.3]})},
+    dials: clean({bandMap:[1], flickRate:[.7,'hype',.3], lookMix:[.95], tintRate:[.8], cutRate:[.24,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], contrast:[1.18,'punch',.1], saturate:[1.12], grain:[.12], panelFlash:[.15,'snare',.4], zoomPunch:[.07,'kick',.25]})},
+  signalflip: {name:'Signal Flip', fx:true, flickLook:true, sw:'redmono', looks:['gmap','solar','duo','sil'], pals:['redmono','glacier','olivine','violet'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({palFlick:[1], flickRate:[.55,'hype',.35], lookMix:[.95], cutRate:[.22,'hype',.3], clipHold:[.75], flashCuts:[.35,'punch',.4], contrast:[1.15,'punch',.1], saturate:[1.1], grain:[.14], panelFlash:[.2,'snare',.45], zoomPunch:[.08,'kick',.3]})},
+  timesmear: {name:'Time Smear', fx:true, sw:'abyss', looks:['gmap','duo'], pals:['abyss','mapA','rust','frost'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({slitscan:[.62,'punch',.38], lookMix:[.85], tintRate:[.7], cutRate:[.26,'hype',.3], clipHold:[.8], flashCuts:[.25,'punch',.4], contrast:[1.16,'punch',.1], saturate:[1.1], grain:[.18], blackBlink:[.08,'hat',.25], zoomPunch:[.06,'kick',.25]})},
+  pixelhold: {name:'Pixel Hold', fx:true, sw:'glacier', looks:['gmap'], pals:['glacier','signal','redmono','mapA'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({pixHold:[1], lookMix:[.9], tintRate:[.75], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], contrast:[1.18,'punch',.1], saturate:[1.12], grain:[.12], stutter:[.2,'kick',.4], panelFlash:[.15,'snare',.35]})},
   chaos: {name:'Chaos', sw:'ultra'}
 };
 const STYLE_KEYS = Object.keys(PRESETS).filter(k => k !== 'chaos');
 // polish pass: the spiral decoration and the rings texture are retired everywhere; the pre-reference styles
 // pull toward the reference-reel crispness — stacking and smear trimmed, the one-frame flash language on
-const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','specimen','proofstrip','motionprint']);
+const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','signalflip','timesmear','pixelhold']);
 for (const k of STYLE_KEYS){ const p = PRESETS[k], d = p.dials || (p.dials = {});
   if (p.deco) delete p.deco.spiral;
   d.rings = [0,'const',0];
