@@ -15,7 +15,8 @@ uniform float uTime, uPulse, uHue, uCycle, uReps, uSplit, uTear, uPix, uScan, uG
 uniform vec4 uQuadT, uInsetR; uniform vec2 uErodeM; uniform vec3 uPalS[4];
 // ice strip (letterboxed band, glowing inset, pixel-stretch stripes, solid panels) — from the blue reference reel
 uniform float uStripOn, uStripMode, uStripH, uStripX, uStripQuad, uStripRow, uStripInv, uStripTint, uStripGlow, uStripLit, uStripLine;
-uniform float uPinOn, uPinN, uPinR, uPinRot, uPinFold, uPinChunk, uPanelOn; uniform vec2 uPinM; uniform vec4 uPanelR; uniform vec3 uPanelC;
+uniform float uPinOn, uPinN, uPinR, uPinRot, uPinFold, uPinChunk, uPanelOn;
+uniform float uBandOn, uBandN, uBandPh, uBandLit, uLoupeOn, uLoupeMag, uLoupeR; uniform vec2 uLoupeC; uniform vec2 uPinM; uniform vec4 uPanelR; uniform vec3 uPanelC;
 uniform vec4 uStripR, uStripO, uStripZ; uniform vec3 uStripC[4]; uniform vec3 uStripP1, uStripP2;
 uniform int uLookA, uLookB, uLook2, uTextMode, uBlendMode;
 uniform vec3 uPalA[4]; uniform vec3 uPalB[4]; uniform vec3 uPal2[4];
@@ -112,6 +113,8 @@ void main(){
     vec2 pq = (uv-.5)*vec2(asp,1.); float pr = length(pq);
     if(pr < uPinR){ float pan = atan(pq.y,pq.x) + uPinRot, pseg = 6.2831853/uPinN, pk = floor(pan/pseg);
       if(mod(pk,2.) < 1.){ float a2 = pan - pseg*.5 - uPinRot*2.; vec2 q2 = vec2(cos(a2), sin(a2))*pr*1.3; uv = .5 + vec2(q2.x/asp, q2.y); pinW = 1.; } } }
+  // loupe (Specimen): inside the circle the shot is magnified; the ring and crosshair are drawn after the look
+  if(uLoupeOn>.5){ vec2 lq=(vUv-uLoupeC)*vec2(asp,1.); if(length(lq)<uLoupeR) uv = uLoupeC + (vUv-uLoupeC)/uLoupeMag; }
   // ---- geometry ----
   vec2 c = uv-.5; c /= (1.+uZoom*.18);
   if(uSpin>0.){ float a = uSpin*sin(uTime*1.7)*.6; float ca=cos(a), sa=sin(a); c = vec2(c.x*ca - c.y*sa/asp, c.x*sa*asp + c.y*ca); }
@@ -186,6 +189,10 @@ void main(){
   if(uSplitOn>.5){ float co = uSplitDir<.5 ? vUv.x : 1.-vUv.y; bool tinted = (co < uSplitX) != (uSplitSide > .5);
     if(tinted){ float l = clamp((luma(base)-.06)*1.15, 0., 1.); if(uSplitPost>.5) l = floor(l*4. + bayer(gl_FragCoord.xy)*.99)/4.; col = gmap(l, uPalS); }
     else col = clamp((base-.5)*1.06+.5, 0., 1.); }
+  if(uBandOn>.5){ float b=floor(vUv.y*uBandN); float hb=hash(vec2(b*1.31, uBandPh));
+    vec2 buv=clamp(uv+vec2((hb-.5)*.05,0.),0.,1.); vec3 bb=texture(tBase,buv).rgb; float lb=clamp((luma(bb)-.05)*1.18,0.,1.);
+    float wch=floor(hb*4.); col = wch<1.? gmap(lb,uPalA) : wch<2.? gmap(lb,uPalB) : wch<3.? gmap(lb,uPal2) : gmap(lb,uPalS);
+    col *= .8+.4*step(abs(b-uBandLit),.4); if(abs(fract(vUv.y*uBandN)-.5)>.47) col=vec3(0.); }
   if(uQuadOn>.5) col = treat(int(uQuadT[quadQ]), uv, base);
   if(uInsetOn>.5 && vUv.x>uInsetR.x && vUv.x<uInsetR.z && vUv.y>uInsetR.y && vUv.y<uInsetR.w) col = treat(int(uInsetT), uv, base);
   col *= 1.-uDim;
@@ -254,6 +261,9 @@ void main(){
     if(pe <= 0. && !(pe > -.7/pbs.x && phb < .2)) col = vec3(0.); else if(pe > 0. && pe < .6/pbs.x && phb > .9) col = vec3(0.); }
   if(uPanelOn>.5 && vUv.x>=uPanelR.x && vUv.x<=uPanelR.z && vUv.y>=uPanelR.y && vUv.y<=uPanelR.w) col = uPanelC;
   if(uStripOn>.5) col = iceStrip(col);
+  if(uLoupeOn>.5){ vec2 lq=(vUv-uLoupeC)*vec2(asp,1.); float ld=length(lq), lw=1.6/uRes.y;
+    if(abs(ld-uLoupeR)<lw*2.2) col=uPalA[3]; else if(ld<uLoupeR && uLoupeR-ld<lw*8.) col*=.5;
+    if(ld>uLoupeR+lw*3. && (abs(vUv.x-uLoupeC.x)*uRes.x<1.2 || abs(vUv.y-uLoupeC.y)*uRes.y<1.2)) col=mix(col,uPalA[3],.55); }
   // ---- text ----
   vec2 to = vec2(uTextSplit*.009*(1.+uPulse*2.), 0.);
   vec4 tr = texture(tText, vUv+to), tg = texture(tText, vUv), tb = texture(tText, vUv-to);

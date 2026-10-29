@@ -266,6 +266,8 @@ function buildScore(){
     } else if (layout === 'tile'){ c.cols = pick(r, [3, 4]); c.card = {x: .12 * W, y: .13 * H, w: .76 * W, h: .62 * H, m: other(m), z0: 1, z1: 1.15, px: 0, py: rr(r, -.4, .4), shadow: {dx: 18, dy: 22, color: pick(r, ['#ff2ea6', '#7a00ff', '#ff3d00'])}}; }
     else if (layout === 'shards'){ c.polys = []; const n = 2 + ((r() * 3) | 0); for (let i = 0; i < n; i++){ const cx = rr(r, .1, .9) * W, cy = rr(r, .1, .9) * H, rad = rr(r, .3, .75) * W, k = r() < .6 ? 3 : 4, a0 = r() * 6.28;
       const pts = []; for (let j = 0; j < k; j++){ const a = a0 + j * 6.28 / k + rr(r, -.4, .4); pts.push([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad * 1.3]); } c.polys.push({pts, cx, cy, m: other(m), z: rr(r, 1, 1.4), spin: rr(r, -.08, .08)}); } }
+    else if (layout === 'trip'){ c.nPan = W >= H ? 4 : 3; c.panFo = []; const fs = pick(r, [4, 6, 8]); for (let i = 0; i < c.nPan; i++) c.panFo.push(i * fs); c.panFlip = r() < .25; }
+    else if (layout === 'mgrid'){ c.gx = W >= H ? 4 : 2; c.gy = W >= H ? 2 : 3; c.gStep = pick(r, [2, 3, 4]); }
     else if (layout === 'stack'){ const n = pick(r, [2, 3, 3, 4]); c.strips = []; for (let i = 0; i < n; i++) c.strips.push({py: rr(r, -.9, .9), flip: r() < .4, z: rr(r, 1.2, 2.2), fo: (r() * 4) | 0}); c.stripDir = r() < .8 ? 'h' : 'v'; }
     else if (layout === 'bands'){ const n = 2 + ((r() * 3) | 0), ys = [0]; for (let i = 1; i < n; i++) ys.push(rr(r, .15, .85)); ys.sort(); ys.push(1); c.bands = []; for (let i = 0; i < n; i++) c.bands.push({y0: ys[i] * H, y1: ys[i + 1] * H, m: i % 2 ? other(m) : m, dx: rr(r, -.1, .1) * W}); }
     // overlap: N extra images stacked on the base, each with its own blend mode, opacity, motion and a signal that breathes its opacity
@@ -459,7 +461,7 @@ function renderAt(t){
   xBase.fillStyle = '#000'; xBase.fillRect(0, 0, W, H);
   const fi = clipFrame(c, M(c.m), tq);
   const mech = (id, k) => { const a = v(id); return a > 0 && hash1(c.seed * 7.31 + k * 13.7) < a; };
-  const mStrip = mech('iceStrip', 7) && S.strip, mSplit = !mStrip && mech('splitTint', 1), mQuad = !mStrip && !mSplit && mech('quadGrid', 2), mInset = !mStrip && !mQuad && mech('inset', 3), mErode = !mStrip && !mQuad && !mSplit && mech('erode', 4), mPin = !mStrip && !mQuad && !mSplit && !mErode && mech('pinwheel', 9), mFlick = mech('palFlick', 8), mHud = mech('hud', 5), mWall = state.wordsOn && mech('typeWall', 6);
+  const mStrip = mech('iceStrip', 7) && S.strip, mSplit = !mStrip && mech('splitTint', 1), mQuad = !mStrip && !mSplit && mech('quadGrid', 2), mInset = !mStrip && !mQuad && mech('inset', 3), mErode = !mStrip && !mQuad && !mSplit && mech('erode', 4), mPin = !mStrip && !mQuad && !mSplit && !mErode && mech('pinwheel', 9), mBand = !mStrip && !mSplit && !mQuad && !mErode && !mPin && mech('bandMap', 10), mLoupe = !mStrip && !mQuad && !mPin && !mBand && mech('loupe', 11), mFlick = mech('palFlick', 8), mHud = mech('hud', 5), mWall = state.wordsOn && mech('typeWall', 6);
   const pulseLen = Math.max(.08, (state.grid ? state.grid.per : .5) * lerp(2, .33, v('tintRate'))), pk = Math.floor(t / pulseLen);
   const palsS = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['mint', 'olive', 'thermo', 'slate'], palS = palsS[Math.floor(hash1(pk * 3.7 + c.seed) * palsS.length) % palsS.length];
   const splitX = .5 + (hash1(c.seed * 3.3) - .5) * .16, splitDir = c.P && c.P.twin ? (W >= H ? 0 : 1) : hash1(c.seed * 5.1) < .65 ? 1 : 0, splitSide = hash1(c.seed * 9.2) < .5 ? 1 : 0;
@@ -470,6 +472,17 @@ function renderAt(t){
   else if (c.layout === 'bands'){ for (const b of c.bands){ xBase.save(); xBase.beginPath(); xBase.rect(0, b.y0, W, b.y1 - b.y0); xBase.clip(); drawCover(xBase, M(b.m), fi, b.dx * k, 0, W, H, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k), lerp(c.py0, c.py1, k), c.flip); xBase.restore(); } }
   else if (c.layout === 'stack'){ const n = c.strips.length; c.strips.forEach((st, i) => { const x = c.stripDir === 'h' ? 0 : i * W / n, y = c.stripDir === 'h' ? i * H / n : 0, w = c.stripDir === 'h' ? W : W / n, h = c.stripDir === 'h' ? H / n : H;
       drawCover(xBase, M(c.m), fi + st.fo, x, y, w, h, st.z * punchZ, lerp(c.px0, c.px1, k) * .5, st.py, st.flip !== c.flip); }); }
+  else if (c.layout === 'trip'){ const n = c.nPan, gap = Math.max(2, Math.round(W * .012)), pw = (W - gap * (n + 1)) / n, lit = Math.floor(hash1(pk * 2.1 + c.seed) * n);
+    for (let i = 0; i < n; i++){ const x = gap + (pw + gap) * i; xBase.save(); xBase.beginPath(); xBase.rect(x, gap, pw, H - 2 * gap); xBase.clip();
+      if (i !== lit && 'filter' in xBase) xBase.filter = 'brightness(.55) saturate(.65)';
+      drawCover(xBase, M(c.m), fi + c.panFo[i], x, gap, pw, H - 2 * gap, lerp(c.z0, c.z1, k) * punchZ, 0, lerp(c.py0, c.py1, k) * .3, c.panFlip && i % 2 === 1); xBase.restore(); }
+    xBase.fillStyle = '#000'; const shh = Math.max(3, Math.round(H * .012)), sww = Math.max(4, Math.round(W * .016));
+    for (let x = gap * 2; x < W - gap; x += sww * 2.6){ xBase.fillRect(x, gap * 2.2, sww, shh); xBase.fillRect(x, H - gap * 2.2 - shh, sww, shh); } }
+  else if (c.layout === 'mgrid'){ const gx = c.gx, gy = c.gy, gap = Math.max(2, Math.round(W * .008)), cw2 = (W - gap * (gx + 1)) / gx, ch2 = (H - gap * (gy + 1)) / gy, lit = Math.floor(hash1(pk * 3.3 + c.seed) * gx * gy);
+    for (let j = 0; j < gy; j++) for (let i = 0; i < gx; i++){ const idx = j * gx + i, x = gap + (cw2 + gap) * i, y = gap + (ch2 + gap) * j;
+      xBase.save(); xBase.beginPath(); xBase.rect(x, y, cw2, ch2); xBase.clip();
+      if ('filter' in xBase && idx !== lit) xBase.filter = hash1(idx * 3.7 + c.seed) < .14 ? 'invert(1)' : 'grayscale(1) brightness(.6) contrast(1.25)';
+      drawCover(xBase, M(c.m), fi + idx * c.gStep, x, y, cw2, ch2, 1.03, 0, 0, false); xBase.restore(); } }
   else if (twinOn){ drawCover(xBase, M(c.m), fi, ...twinA, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k) * .5, lerp(c.py0, c.py1, k) * .5, c.flip); drawCover(xBase, M(c.m2), fi + 7, ...twinB, lerp(c.z0, c.z1, k), 0, 0, false); }
   else drawCover(xBase, M(c.m), fi, 0, 0, W, H, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k), lerp(c.py0, c.py1, k), c.flip);
   if (c.layers && c.layers.length){ const mv = v('overlapMove'); for (const L of c.layers){ let a = L.alpha * clarityOv * fxMul * (L.sig === 'const' ? 1 : .35 + .75 * sig(L.sig, t)); if (L.gate && mv > .3 && hash1(Math.floor(t * 20) + L.fo + c.id) < mv * .5) a = 0; if (a <= .02) continue;
@@ -520,6 +533,10 @@ function renderAt(t){
   let palA = c.palA; if (mFlick){ const pls = c.P && c.P.pals && c.P.pals.length ? c.P.pals : ['acid', 'ember', 'olive'], stepF = Math.round(lerp(4, 1, v('flickRate'))), fk = Math.floor(t * 30 / stepF);
     palA = pls[Math.floor(hash1(fk * 1.37 + c.seed * .11) * pls.length) % pls.length]; i1('uLookA', LOOK[c.P && c.P.looks && c.P.looks[0] === 'gmap' ? 'gmap' : 'duo']); }
   f1('uPinOn', mPin ? 1 : 0); if (mPin){ f1('uPinN', [6, 8, 8, 10][Math.floor(hash1(c.seed * 1.9) * 4)]); f1('uPinR', .26 + hash1(c.seed * 2.7) * .14); f1('uPinRot', t * (hash1(c.seed * 3.1) < .5 ? -.35 : .35) + c.seed); f1('uPinFold', hash1(c.seed * 4.3)); f1('uPinChunk', hash1(Math.floor(t * 4) + c.seed)); if (U.uPinM) gl.uniform2f(U.uPinM, .05 + hash1(c.seed * 5.9) * .05, .08 + hash1(c.seed * 6.3) * .06); }
+  f1('uBandOn', mBand ? 1 : 0); if (mBand){ const bn = [6, 8, 10, 12][Math.floor(hash1(c.seed * 2.3) * 4)]; f1('uBandN', bn);
+    const bPh = Math.floor(t * 30 / Math.round(lerp(5, 2, v('flickRate')))); f1('uBandPh', bPh * .137 + c.seed); f1('uBandLit', Math.floor(hash1(bPh * 1.7 + c.seed) * bn)); }
+  f1('uLoupeOn', mLoupe ? 1 : 0); if (mLoupe){ const lx = .5 + Math.sin(t * .4 + c.seed * 9) * .16, ly = .48 + Math.cos(t * .31 + c.seed * 5) * .14;
+    U.uLoupeC && gl.uniform2f(U.uLoupeC, lx, ly); f1('uLoupeR', .16 + hash1(c.seed * 7.3) * .1); f1('uLoupeMag', 1.7 + hash1(c.seed * 9.1) * 1.2); }
   { const pf = v('panelFlash'), f30 = Math.floor(t * 30), blk = Math.floor(f30 / 2), on = pf > 0 && hash1(blk * 3.3 + state.seed) < pf * .22; f1('uPanelOn', on ? 1 : 0);
     if (on && U.uPanelR){ const kind = Math.floor(hash1(blk * 5.7) * 4), R = kind === 0 ? [0, 0, .5, 1] : kind === 1 ? [.5, 0, 1, 1] : kind === 2 ? [0, .5, 1, 1] : [.1, .3, .9, .7]; gl.uniform4f(U.uPanelR, ...R); gl.uniform3f(U.uPanelC, ...hexRgb(hash1(blk * 7.1) < .7 ? '#8d8d8d' : '#b9b9b9')); } }
   gl.uniform3fv(U.uPalA, PAL[palA].flatMap(hexRgb)); gl.uniform3fv(U.uPalB, PAL[c.palB].flatMap(hexRgb)); gl.uniform3fv(U.uPal2, PAL[c.pal2].flatMap(hexRgb));

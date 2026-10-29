@@ -13,6 +13,7 @@ const PAL = {
   glacier:['#000000','#0a14d8','#3fd8ff','#eefbff'], abyss:['#000000','#020a5c','#1d5cff','#a8ecff'], frost:['#02040a','#2a4a7a','#9fd6ff','#ffffff'],
   mapA:['#1a0430','#3d6b1f','#f2c230','#fff4c9'], redmono:['#140000','#7a0000','#ff3a1a','#ffc2a8'], olivine:['#121408','#545a1c','#c9b23a','#ffef9e'], violet:['#0b0420','#5a1a8c','#4cff6a','#fff35c'],
   pinbox:['#05001f','#1a1aff','#d4248f','#f1d98a'], jellygreen:['#03140a','#1f7a3a','#7dff8a','#e9ffe9'],
+  signal:['#030016','#5a00d8','#00e5c3','#f4ffd0'], bone:['#060604','#3c372c','#cfc3a4','#fffdf2'], rust:['#160502','#78200a','#e2641f','#ffdca3'],
   jelly:['#12031a','#5e1665','#e04fd0','#ffd8fb'], neon:['#02031f','#1a2dff','#59e4ff','#ffffff'], slate:['#0e0f12','#4a4f57','#a9adb3','#f2f3f5'], heatmap:['#1c0526','#41701f','#e83a17','#ffe14d']
 };
 const LOOK = {punch:0, hue:1, grad:2, solar:3, invert:4, sil:5, duo:6, poster:7, vhs:8, mash:9, gmap:10};
@@ -80,7 +81,7 @@ const PARAMS = [
   ['dither','Texture','Dither',0,1,0,'const',0,'ordered 1-bit'],
   ['scanlines','Texture','Scanlines',0,1,.15,'const',0,''],
   ['grain','Texture','Grain',0,1,.3,'const',0,''],
-  ['rings','Texture','Rings',0,1,.1,'bass',.5,'concentric pulse'],
+  ['rings','Texture','Rings',0,1,0,'bass',.5,'concentric pulse (off: retired, left for hand use)'],
   ['oilslick','Texture','Oil slick',0,1,0,'loud',0,'iridescent rainbow sheen along edges'],
   ['contour','Texture','Contour',0,1,0,'const',0,'topographic map lines over the image'],
   ['led','Texture','LED wall',0,1,0,'const',0,'stadium screen dots'],
@@ -93,6 +94,8 @@ const PARAMS = [
   ['iceStrip','Frame','Ice strip',0,1,0,'const',0,'chance a cut becomes the letterboxed ice band: glowing inset, stretched-pixel bars, solid flash panels, lots of black'],
   ['iceGlow','Frame','Strip glow',0,1,.6,'loud',.3,'halo bleeding off the lit inset and panels'],
   ['pinwheel','Frame','Pinwheel box',0,1,0,'const',0,'chance the shot sits in a black box with a spinning pinwheel of itself, a mirrored diagonal fold and big displaced chunks at the edges'],
+  ['bandMap','Frame','Band map',0,1,0,'const',0,'chance a cut splits into horizontal bands, each gradient-mapped in its own palette'],
+  ['loupe','Frame','Loupe',0,1,0,'const',0,'chance a cut gets a drifting magnifier circle with a crosshair'],
   ['palFlick','Frame','Palette flicker',0,1,0,'const',0,'chance a cut holds the shot while its gradient map swaps every frame'],
   ['flickRate','Frame','Flicker speed',0,1,.7,'hype',.3,'palette flicker: every 4 frames (low) to every frame (high)'],
   ['panelFlash','Frame','Panel flash',0,1,0,'snare',0,'solid grey panels slam over half the frame for two frames'],
@@ -279,6 +282,27 @@ const PRESETS = {
   // ---- from the blue reference reel (Video-43761): a 16:9 band in a black frame, glowing inset, stretched-pixel bars, solid flash panels ----
   icestrip: {name:'Ice Strip', fx:true, sw:'glacier', icePal:'glacier', looks:['punch'], pals:['glacier','abyss','frost'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
     dials: clean({iceStrip:[1], iceGlow:[.7,'loud',.3], cutRate:[.8,'hype',.2], minHold:[1], flashCuts:[.6,'punch',.4], clipWeight:[.6], clipHold:[.35], clipSpeed:[1,'hype',.4], whiteFlash:[.03,'kick',.15], invertFlk:[0,'const',0], blackBlink:[.06,'hat',.15], zoomPunch:[.05,'kick',.2], grain:[.08]})},
+  // ---- siblings of the reference set: one strong mechanism each, clean base, strict palettes ----
+  bandscan: {name:'Band Scan', fx:true, sw:'signal', looks:['gmap'], pals:['signal','mapA','glacier','redmono'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({bandMap:[1], flickRate:[.7,'hype',.3], lookMix:[.95], tintRate:[.8], cutRate:[.24,'hype',.3], clipHold:[.7], flashCuts:[.3,'punch',.4], contrast:[1.18,'punch',.1], saturate:[1.12], grain:[.12], panelFlash:[.18,'snare',.4], zoomPunch:[.07,'kick',.25]})},
+  specimen: {name:'Specimen', fx:true, sw:'bone', looks:['duo','sil'], pals:['bone','mono','frost','slate'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['mono'], patMotif:0,
+    dials: clean({loupe:[1], hud:[.85], lookMix:[.85], tintRate:[.6], contrast:[1.2,'punch',.1], saturate:[.92], grain:[.18], scanlines:[.08], cutRate:[.3,'hype',.3], clipHold:[.7], invertFlk:[.1,'snare',.3], panelFlash:[.12,'snare',.3]})},
+  proofstrip: {name:'Proof Strip', fx:true, sw:'rust', looks:['duo','punch'], pals:['rust','sepia','ochre','mono'], layouts:{trip:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({collage:[1], lookMix:[.75], tintRate:[.75], contrast:[1.15], saturate:[1.1], grain:[.3], halftone:[.07], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], blackBlink:[.12,'hat',.3], stutter:[.2,'kick',.4]})},
+  motionprint: {name:'Motion Print', fx:true, sw:'violet', looks:['gmap','duo'], pals:['violet','glacier','jellygreen','redmono'], layouts:{mgrid:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'pair', fonts:['narrow'], patMotif:0,
+    dials: clean({collage:[1], lookMix:[.9], tintRate:[.85], contrast:[1.2,'punch',.1], saturate:[1.15], grain:[.15], cutRate:[.2,'hype',.3], clipHold:[.85], stutter:[.25,'kick',.4], panelFlash:[.15,'snare',.35], whiteFlash:[.04,'kick',.3]})},
   chaos: {name:'Chaos', sw:'ultra'}
 };
 const STYLE_KEYS = Object.keys(PRESETS).filter(k => k !== 'chaos');
+// polish pass: the spiral decoration and the rings texture are retired everywhere; the pre-reference styles
+// pull toward the reference-reel crispness — stacking and smear trimmed, the one-frame flash language on
+const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','specimen','proofstrip','motionprint']);
+for (const k of STYLE_KEYS){ const p = PRESETS[k], d = p.dials || (p.dials = {});
+  if (p.deco) delete p.deco.spiral;
+  d.rings = [0,'const',0];
+  if (REF_SET.has(k)) continue;
+  const mul = (id, f) => { if (d[id] && d[id][0] > 0) d[id] = [d[id][0] * f].concat(d[id].slice(1)); };
+  mul('overlap', .65); mul('clones', .65); mul('feedback', .7); mul('warp', .7); mul('motifs', .7); mul('melt', .75);
+  if (!d.contrast) d.contrast = [1.15,'punch',.2];
+  if (!d.flashCuts) d.flashCuts = [.35,'punch',.5];
+  if (!d.minHold) d.minHold = [2]; }

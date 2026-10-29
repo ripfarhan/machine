@@ -34,7 +34,9 @@ const MOTIFS = {
   cluster(x, s){ const r = mulberry32(7); for (let i = 0; i < 14; i++){ const a = r() * 6.28, d = Math.sqrt(r()) * s; x.beginPath(); x.arc(Math.cos(a) * d, Math.sin(a) * d, s * (.06 + r() * .12), 0, 7); x.fill(); } },
   glyph(x, s, mode, g){ x.save(); x.font = (g.font || '400') + ' ' + (s * 2) + 'px ' + (g.family || 'Anton, Impact, sans-serif'); x.textAlign = 'center'; x.textBaseline = 'middle'; mode === 'fill' ? x.fillText(g.ch, 0, s * .05) : x.strokeText(g.ch, 0, s * .05); x.restore(); },
 };
-const MOTIF_KEYS = Object.keys(MOTIFS).filter(k => k !== 'glyph');
+// retired shapes (user call): anything that reads as a ring or a spiral never gets picked
+const MOTIF_RETIRED = new Set(['spiral', 'ring', 'dotring', 'target', 'crosshair']);
+const MOTIF_KEYS = Object.keys(MOTIFS).filter(k => k !== 'glyph' && !MOTIF_RETIRED.has(k));
 const GLYPHS = ['§', '¶', '†', '‡', 'Ω', '∆', 'Σ', '₹', '@', '#', '%', '&', '?', '!', '∞', '÷', '×', '≈', '¿', '¡', '∂', 'Ø', 'Æ', 'ß', 'µ', '∴', '∵', '⁂', '※', '◊', '○', '◇', '△', '▽', '◯', 'क', 'ज', 'ॐ'.replace('ॐ', 'श'), 'ढ'];
 const GLYPH_FAMILIES = ['"Anton",Impact,sans-serif', '"Archivo Black","Arial Black",sans-serif', '"JetBrains Mono",monospace', '"Bodoni Moda","Playfair Display",serif', '"Playfair Display",serif', '"Noto Sans Devanagari",sans-serif'];
 // pick a motif spec from a seeded rng; weight glyphs at ~30%
