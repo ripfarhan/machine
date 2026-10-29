@@ -30,6 +30,7 @@
         <button class="btn" id="reroll" title="New random cut (R)">Reroll</button>
         <button class="btn primary" id="export">Export video</button>
         <button class="btn ghost" id="still">Save frame</button>
+        <select id="aspect" class="fmt" aria-label="Video format" title="Video format (portrait / square / landscape)"><option value="portrait" selected>9:16 Portrait</option><option value="square">1:1 Square</option><option value="landscape">16:9 Landscape</option></select>
         <span class="time" id="time">0:00.0 / 0:30</span>
       </div>
       <div class="strip" id="strip"><canvas id="stripc" width="1120" height="128"></canvas><div class="shade" id="shadeL"></div><div class="shade" id="shadeR"></div><div class="head" id="head"></div></div>
@@ -52,7 +53,6 @@
           <select id="length"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="0">Whole song</option><option value="-1">Custom…</option></select>
           <input class="num" id="lenCustom" type="number" min="3" max="600" step="0.5" value="20" hidden aria-label="Custom length in seconds"></label>
         <label class="f"><span>Frame rate</span><select id="fps"><option value="30">30 fps</option><option value="60" selected>60 fps</option></select></label>
-        <label class="f"><span>Format</span><select id="aspect"><option value="portrait" selected>Portrait 9:16 (reels)</option><option value="square">Square 1:1</option><option value="landscape">Landscape 16:9</option></select></label>
         <label class="f"><span>Preview size</span><select id="pvSize"><option value="540">540 × 960 (fast)</option><option value="720" selected>720 × 1280</option></select></label>
         <label class="f"><span>Export size</span><select id="exSize"><option value="720">720 × 1280</option><option value="1080" selected>1080 × 1920</option></select></label>
         <label class="f"><span>Export quality</span><select id="exQ"><option value="8">Good (8 Mbps)</option><option value="16" selected>High (16 Mbps)</option><option value="28">Max (28 Mbps)</option></select></label>

@@ -730,7 +730,7 @@ async function addFiles(files){ if (state.exporting){ toast('Export in progress 
 }
 function rebuild(){ if (state.exporting) return; buildScore(); if (!playing) frame(); }
 // while an export renders, every control is locked: the file is made from the settings at the moment Export was pressed
-function lockUI(on){ ['#visualRack', '#audioRack', '#exportSettings'].forEach(sel => { const el = $(sel); if (!el) return; if (on){ el.setAttribute('inert', ''); el.classList.add('locked'); } else { el.removeAttribute('inert'); el.classList.remove('locked'); } }); }
+function lockUI(on){ const fm = $('#aspect'); if (fm) fm.disabled = on; ['#visualRack', '#audioRack', '#exportSettings'].forEach(sel => { const el = $(sel); if (!el) return; if (on){ el.setAttribute('inert', ''); el.classList.add('locked'); } else { el.removeAttribute('inert'); el.classList.remove('locked'); } }); }
 async function rebuildAll(){ const was = playing; pause(); await rebuildAudio(); offset = Math.min(offset, state.dur - .01); buildScore(); if (was) play(); else frame(); }
 
 $('#mediaIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
@@ -759,7 +759,7 @@ $('#fps').onchange = e => { state.fps = +e.target.value; rebuild(); };
 $('#exSize').onchange = e => { state.exSize = +e.target.value; };
 $('#pvSize').onchange = e => { if (state.exporting) return; state.pvSize = +e.target.value; const [w, h] = dimsFor(state.pvSize); resizeAll(w, h); rebuild(); };
 function setAspect(a){ if (state.exporting || !ASPECTS[a]) return; state.aspect = a; const [x, y] = ASPECTS[a], ar = x / y; const [w, h] = dimsFor(state.pvSize || 720); resizeAll(w, h);
-  document.documentElement.style.setProperty('--ar', ar); document.documentElement.style.setProperty('--arc', x + ' / ' + y); document.documentElement.style.setProperty('--sw', a === 'portrait' ? '440px' : a === 'square' ? '600px' : '100%');
+  document.documentElement.style.setProperty('--ar', ar); document.documentElement.style.setProperty('--arc', x + ' / ' + y); document.documentElement.style.setProperty('--sw', a === 'portrait' ? '520px' : '100%');
   const sel = $('#aspect'); if (sel) sel.value = a; const lab = (sh) => { const [ww, hh] = dimsFor(sh); return ww + ' × ' + hh; };
   [['#pvSize', [540, 720]], ['#exSize', [720, 1080]]].forEach(([id, vals]) => { const el = $(id); if (el) [...el.options].forEach((o, i) => { o.textContent = lab(vals[i]) + (id === '#pvSize' && i === 0 ? ' (fast)' : ''); }); });
   if (state.score) rebuild(); }
