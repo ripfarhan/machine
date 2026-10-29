@@ -1,7 +1,7 @@
 /* Maut ki Awaaz — audio host: builds the AudioWorklet from the engine modules (data: URL, works from file://), runs it,
    converts engine sample times to AudioContext time, records the master (lossless WAV) and renders whole pieces offline. */
 'use strict';
-const AWZ_MODS = [AWZ_UTIL, AWZ_DSP, AWZ_DRUMS, AWZ_SYNTH, AWZ_FX, AWZ_FX2, AWZ_SYNTH2, AWZ_INST, AWZ_MIXER, AWZ_THEORY, AWZ_PARTS, AWZ_PARTS2, AWZ_ACID, AWZ_COMPOSER, AWZ_MOVES, AWZ_TARGET, AWZ_NORM, AWZ_WORLDS, AWZ_WORLDS2, AWZ_GHOSTS, AWZ_ENGINE];
+const AWZ_MODS = [AWZ_UTIL, AWZ_DSP, AWZ_DRUMS, AWZ_SYNTH, AWZ_FX, AWZ_FX2, AWZ_SYNTH2, AWZ_INST, AWZ_MIXER, AWZ_THEORY, AWZ_PARTS, AWZ_PARTS2, AWZ_ACID, AWZ_COMPOSER, AWZ_MOVES, AWZ_TARGET, AWZ_NORM, AWZ_WORLDS, AWZ_WORLDS2, AWZ_GHOSTS, AWZ_AO, AWZ_ENGINE];
 const AWZ = {}; AWZ_MODS.forEach(f => f(AWZ));   // main-thread namespace (genomes, theory, world list)
 
 function awzWorkletSource(){

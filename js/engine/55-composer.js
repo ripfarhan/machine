@@ -108,7 +108,7 @@ function AWZ_COMPOSER(A){
         chordPcs: ch.pcs, chordRoot: ch.root, key: this.key, pent: new Set(this.key.pentatonic(60, 72).map(m => m % 12)), bassNote: v.bass, droneNote: v.sub + 12,
         barIndex: this.k, barInSection: this.bis, sectionIdx: this.si, section: S2, barsLeftInSection: barsLeft, nextBigger, layerIndex: clamp(pieceProg * 1.6, 0, 1),
         E, density, chaos: M.chaos, mutation: .02 + M.chaos * .35, motion: M.motion, space: M.space, brightness: M.mood * .5 + M.x * .5, calm: E < .3, alpha, forceAll: false, halfTime: this.v2 && this.k >= this.halfTimeFrom && this.k < this.halfTimeTo,
-        v2: this.v2, nextChordPcs: this.loop.chords[(this.ci + 1) % loopLen].pcs};
+        v2: this.v2, nextChordPcs: this.loop.chords[(this.ci + 1) % loopLen].pcs, pieceProg};
       const t0 = this.t, stepN = this.stepN, swing = this.g.swing || 0, hum = this.hum, chaos = M.chaos;
       for (const p of this.parts){ if (!p.on) continue; const slot = p.slot, drum = !!p.spec.drum, tight = p.spec.tight;
         c.emit = (sl, step, ev, raw) => { let s = step; if (!raw && swing && Math.abs(s - Math.round(s)) < .01 && (Math.round(s) & 1)) s += swing;

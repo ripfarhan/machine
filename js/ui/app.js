@@ -7,7 +7,7 @@
     RETRO: ['#ffb347', '#ff6fae'], CRESCENDO: ['#ff4f7a', '#ffe066'], FELT: ['#f0dcc0', '#86b4ff'], INTENSE: ['#ff2e88', '#c4ff2e'],
     VOID: ['#8a7dff', '#2ee6c8'], TREEMAP: ['#7dff9b', '#ffe27a'], BERLIN: ['#ff7a3d', '#6fd2ff'], NIGHTBUS: ['#6f8cff', '#c7d0ff'], AIRPORT: ['#f5e6c8', '#9ad7ff'],
     ARPRIDE: ['#ff3d6e', '#41f0ff'], REICH: ['#ffd23f', '#ffffff'], POLYMETER: ['#ff9f43', '#7af5d0'], TAPE: ['#ffc48a', '#9fe3b0'], BLOOM: ['#ff6b8b', '#ffb36b'],
-    ACID: ['#d4ff2e', '#ff2ee0'], BREAKS: ['#ff5ecf', '#5effc1'], ATLAS: ['#ffb347', '#4fd8ff'], COSMIC: ['#7aa5ff', '#ffde7a'], SAW: ['#c0b4ff', '#ff8fa3'], FOG: ['#9fc4c8', '#e8d9b5'], PERPETUAL: ['#ffe15e', '#5ec8ff']};
+    ACID: ['#d4ff2e', '#ff2ee0'], BREAKS: ['#ff5ecf', '#5effc1'], ATLAS: ['#ffb347', '#4fd8ff'], AO: ['#5b7cff', '#e8e2ff'], COSMIC: ['#7aa5ff', '#ffde7a'], SAW: ['#c0b4ff', '#ff8fa3'], FOG: ['#9fc4c8', '#e8d9b5'], PERPETUAL: ['#ffe15e', '#5ec8ff']};
   const MOODW = {phrygian: 'dark · tense', aeolian: 'dark · melancholic', dorian: 'bittersweet', mixolydian: 'warm · open', ionian: 'bright', lydian: 'bright · floating'};
   const MACROS = [
     {key: 'energy', name: 'ENERGY', desc: 'how hard it hits', words: v => v < .2 ? 'whisper' : v < .4 ? 'low' : v < .6 ? 'medium' : v < .8 ? 'high' : 'max'},

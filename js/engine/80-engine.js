@@ -25,6 +25,7 @@ function AWZ_ENGINE(A){
         case 'choir': return new A.PolyInst(sr, A.ChoirVoice, spec.voices || 10, p, seed);
         case 'boom': return new A.MonoInst(sr, A.BoomVoice, p, seed);
         case 'acid': return new A.AcidInst(sr, p, seed);
+        case 'cloud': return new A.CloudInst(sr, A.VAVoice, Math.max(10, (spec.voices || 8) + 2), p, seed);
         case 'fx': return new A.FxInst(sr);
         default: return new A.DrumInst(sr, gp.inst, p, seed); } }
     makeTrack(slot, spec, id){ const gp = A.genomePatch(this.g, slot, this.reroll[slot] || 0), inst = this.makeInst(slot, gp, spec), norm = A.PATCH_NORM[gp.name] || 0;
@@ -113,7 +114,7 @@ function AWZ_ENGINE(A){
     // live telemetry for the MATH view (only while it is open): every number the engine is using right now
     mathSnap(){ const sr = this.sr, M = this.mixer, c = this.comp, voices = [];
       const vinfo = (slot, kind, v) => { const o = {slot, kind, age: v.age || 0};
-        if (kind === 'va' || kind === 'mono'){ Object.assign(o, {note: v.note, f: v.freq * (v.fmul || 1), env: v.aenv ? v.aenv.v : 0, stage: v.aenv ? v.aenv.stage : 0, fenv: v.fenv ? v.fenv.v : 0, cut: v.cutNow || 0, base: v.p ? v.p.cutoff : 0, amt: v.p ? v.p.envAmt || 0 : 0, res: v.p ? v.p.res || 0 : 0, vel: v.vel, U: v.U || 1, lfo: v.lfoPh !== undefined ? A.sin1(v.lfoPh) : 0, lfoCut: v.p ? (v.p.lfoCut || 0) + (v.p.live ? v.p.live.lfo : 0) : 0, live: v.p && v.p.live ? v.p.live.cut : 0}); }
+        if (kind === 'va' || kind === 'mono' || kind === 'cloud'){ Object.assign(o, {note: v.note, f: v.freq * (v.fmul || 1), env: v.aenv ? v.aenv.v : 0, stage: v.aenv ? v.aenv.stage : 0, fenv: v.fenv ? v.fenv.v : 0, cut: v.cutNow || 0, base: v.p ? v.p.cutoff : 0, amt: v.p ? v.p.envAmt || 0 : 0, res: v.p ? v.p.res || 0 : 0, vel: v.vel, U: v.U || 1, lfo: v.lfoPh !== undefined ? A.sin1(v.lfoPh) : 0, lfoCut: v.p ? (v.p.lfoCut || 0) + (v.p.live ? v.p.live.lfo : 0) : 0, live: v.p && v.p.live ? v.p.live.cut : 0}); }
         else if (kind === 'acid') Object.assign(o, {kind: 'mono', note: v.note, f: v.f0, env: v.gb * 3, stage: v.gateLeft > 0 ? 2 : 4, fenv: v.meg, cut: v.cutNow || 0, base: 313.8 * Math.pow(7.6305, v.k.cut), amt: v.k.env, res: v.k.res, vel: v.vel, U: 1, lfo: 0, lfoCut: 0, live: 0});
         else if (kind === 'bass') Object.assign(o, {note: v.note, f: v.freq, fsub: v.freq * (v.p && v.p.subOct === -1 ? .5 : 1), env: v.aenv.v, stage: v.aenv.stage, cut: v.cutNow || 0, vel: v.vel});
         else if (kind === 'modal') Object.assign(o, {note: v.note, f: v.f0, n: v.n, mk: v.p ? v.p.kind : '', t: v.i / sr, vel: v.vel});
