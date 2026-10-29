@@ -246,7 +246,22 @@ function buildScore(){
   const cuts = []; let t = 0, lastM = -1, prevCut = null, flashReturn = null;
   const isClip = i => media[((i % nM) + nM) % nM].type === 'clip';
   const cw = val('clipWeight', dur / 2); // clips weighted up to 5x photos in the pick
-  const other = m => { if (nM <= 1) return 0; let tot = 0; const ws = []; for (let i = 0; i < nM; i++){ const w = i === m ? 0 : (isClip(i) ? 1 + cw * 4 : 1); ws.push(w); tot += w; }
+  // shuffle-bag ("deck"): every item is dealt once before any repeats; a fresh shuffle never starts with the last few dealt.
+  // Seeded by seed + style, so a new style or a reroll deals a different order, and preview == export.
+  const dr = mulberry32(((state.seed * 2654435761) ^ [...String(state.preset)].reduce((a, ch) => a * 31 + ch.charCodeAt(0) | 0, 7)) >>> 0);
+  // two decks: main cuts and the secondary layers (inserts, pip cards, overlap layers) draw separately, so layers never eat the main order
+  const mkDeck = () => { let deck = [], recent = [];
+    const refill = () => { const a = [...Array(nM).keys()]; for (let i = a.length - 1; i > 0; i--){ const j = (dr() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; }
+      const avoid = Math.min(recent.length, Math.floor(nM / 3)); for (let k = 0; k < avoid; k++){ const bad = recent[recent.length - 1 - k], idx = a.lastIndexOf(bad); if (idx >= a.length - avoid){ const sw = (dr() * (a.length - avoid)) | 0; [a[idx], a[sw]] = [a[sw], a[idx]]; } }
+      deck = a; };
+    return exclude => { if (nM <= 1) return 0; if (!deck.length) refill();
+      // clip priority (only matters when photos and clips are mixed): reach a little further into the deck for a clip
+      let at = deck.length - 1; const cwN = val('clipWeight', 0); if (cwN > 0 && !isClip(deck[at])){ for (let k = deck.length - 2; k >= Math.max(0, deck.length - 1 - Math.round(cwN * 6)); k--) if (isClip(deck[k])){ at = k; break; } }
+      if (deck[at] === exclude && deck.length > 1) at = at === 0 ? 1 : at - 1;
+      const m = deck.splice(at, 1)[0]; recent.push(m); if (recent.length > 64) recent.shift(); return m; }; };
+  const deal = mkDeck(), deal2 = mkDeck();
+  const other = m => { if (nM <= 1) return 0; return deal2(m); };
+  const otherWeighted = m => { if (nM <= 1) return 0; let tot = 0; const ws = []; for (let i = 0; i < nM; i++){ const w = i === m ? 0 : (isClip(i) ? 1 + cw * 4 : 1); ws.push(w); tot += w; }
     let x = r() * tot; for (let i = 0; i < nM; i++){ x -= ws[i]; if (x <= 0) return i; } return (m + 1) % nM; };
   function newCut(start, m, isFlash){
     const Pz = getP(), I = (.4 + hype(start)) * state.intensity, col = val('collage', start), coll = (isFlash ? .3 : 1) * col;
@@ -266,6 +281,10 @@ function buildScore(){
     } else if (layout === 'tile'){ c.cols = pick(r, [3, 4]); c.card = {x: .12 * W, y: .13 * H, w: .76 * W, h: .62 * H, m: other(m), z0: 1, z1: 1.15, px: 0, py: rr(r, -.4, .4), shadow: {dx: 18, dy: 22, color: pick(r, ['#ff2ea6', '#7a00ff', '#ff3d00'])}}; }
     else if (layout === 'shards'){ c.polys = []; const n = 2 + ((r() * 3) | 0); for (let i = 0; i < n; i++){ const cx = rr(r, .1, .9) * W, cy = rr(r, .1, .9) * H, rad = rr(r, .3, .75) * W, k = r() < .6 ? 3 : 4, a0 = r() * 6.28;
       const pts = []; for (let j = 0; j < k; j++){ const a = a0 + j * 6.28 / k + rr(r, -.4, .4); pts.push([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad * 1.3]); } c.polys.push({pts, cx, cy, m: other(m), z: rr(r, 1, 1.4), spin: rr(r, -.08, .08)}); } }
+    // grid mix: a share of the cuts become a grid of different clips (1×2 … 3×3), the rest stay full frame
+    if (!isFlash && Pz.gridMix && r() < Pz.gridMix){ c.layout = 'grid'; const land = W >= H;
+      const G = land ? [[2,1],[3,1],[4,1],[2,2],[2,2],[3,2],[4,2],[3,3]] : [[1,2],[1,3],[1,4],[2,2],[2,2],[2,3],[1,2],[3,3]]; const [gx, gy] = pick(r, G);
+      c.gx = gx; c.gy = gy; c.cells = []; for (let i = 0; i < gx * gy; i++) c.cells.push({m: i === 0 ? m : other(m), fo: (r() * 9) | 0, z: rr(r, 1, 1.15), px: rr(r, -.4, .4), py: rr(r, -.4, .4)}); }
     else if (layout === 'trip'){ c.nPan = W >= H ? 4 : 3; c.panFo = []; const fs = pick(r, [4, 6, 8]); for (let i = 0; i < c.nPan; i++) c.panFo.push(i * fs); c.panFlip = r() < .25; }
     else if (layout === 'mgrid'){ c.gx = W >= H ? 4 : 2; c.gy = W >= H ? 2 : 3; c.gStep = pick(r, [2, 3, 4]); }
     else if (layout === 'stack'){ const n = pick(r, [2, 3, 3, 4]); c.strips = []; for (let i = 0; i < n; i++) c.strips.push({py: rr(r, -.9, .9), flip: r() < .4, z: rr(r, 1.2, 2.2), fo: (r() * 4) | 0}); c.stripDir = r() < .8 ? 'h' : 'v'; }
@@ -283,7 +302,7 @@ function buildScore(){
     c.patKind = r() < (Pz.patMotif === undefined ? .6 : Pz.patMotif) ? 'motif' : 'words';
     return c;
   }
-  let cur = newCut(0, (r() * nM) | 0, false); cuts.push(cur); lastM = cur.m;
+  let cur = newCut(0, deal(-1), false); cuts.push(cur); lastM = cur.m;
   let bi = 0, holdFrames = 0;
   for (t = dt; t < dur; t += dt){
     holdFrames++;
@@ -304,7 +323,7 @@ function buildScore(){
     if (!doCut && flash > 0 && pu > .7 && hy > .35 && !((state.dropGate || state.preDrop) && t < state.gateT) && r() < flash * flash * (hy + pu) * .45){ isFlash = true; doCut = true; }
     if (doCut && !isFlash && holdFrames < minHold) doCut = false;
     if (doCut){
-      cur.end = t; prevCut = cur; const m = other(lastM); cur = newCut(t, m, isFlash); cuts.push(cur); holdFrames = 0; lastM = isFlash ? lastM : m;
+      cur.end = t; prevCut = cur; const m = isFlash ? deal2(lastM) : deal(lastM); cur = newCut(t, m, isFlash); cuts.push(cur); holdFrames = 0; lastM = isFlash ? lastM : m;
       if (isFlash) flashReturn = t + dt * (1 + ((r() * 3) | 0));
     }
   }
@@ -472,6 +491,9 @@ function renderAt(t){
   else if (c.layout === 'bands'){ for (const b of c.bands){ xBase.save(); xBase.beginPath(); xBase.rect(0, b.y0, W, b.y1 - b.y0); xBase.clip(); drawCover(xBase, M(b.m), fi, b.dx * k, 0, W, H, lerp(c.z0, c.z1, k) * punchZ, lerp(c.px0, c.px1, k), lerp(c.py0, c.py1, k), c.flip); xBase.restore(); } }
   else if (c.layout === 'stack'){ const n = c.strips.length; c.strips.forEach((st, i) => { const x = c.stripDir === 'h' ? 0 : i * W / n, y = c.stripDir === 'h' ? i * H / n : 0, w = c.stripDir === 'h' ? W : W / n, h = c.stripDir === 'h' ? H / n : H;
       drawCover(xBase, M(c.m), fi + st.fo, x, y, w, h, st.z * punchZ, lerp(c.px0, c.px1, k) * .5, st.py, st.flip !== c.flip); }); }
+  else if (c.layout === 'grid'){ const gx = c.gx, gy = c.gy, gap = Math.max(2, Math.round(Math.min(W, H) * .008)), cw2 = (W - gap * (gx + 1)) / gx, ch2 = (H - gap * (gy + 1)) / gy;
+    for (let j = 0; j < gy; j++) for (let i = 0; i < gx; i++){ const q = c.cells[j * gx + i], x = gap + (cw2 + gap) * i, y = gap + (ch2 + gap) * j; xBase.save(); xBase.beginPath(); xBase.rect(x, y, cw2, ch2); xBase.clip();
+      drawCover(xBase, M(q.m), clipFrame(c, M(q.m), tq) + q.fo, x, y, cw2, ch2, q.z * punchZ, q.px * (k - .5), q.py * (k - .5), false); xBase.restore(); } }
   else if (c.layout === 'trip'){ const n = c.nPan, gap = Math.max(2, Math.round(W * .012)), pw = (W - gap * (n + 1)) / n, lit = Math.floor(hash1(pk * 2.1 + c.seed) * n);
     for (let i = 0; i < n; i++){ const x = gap + (pw + gap) * i; xBase.save(); xBase.beginPath(); xBase.rect(x, gap, pw, H - 2 * gap); xBase.clip();
       if (i !== lit && 'filter' in xBase) xBase.filter = 'brightness(.55) saturate(.65)';
@@ -535,6 +557,7 @@ function renderAt(t){
     if (c.P && c.P.flickLook){ const lks = c.P.looks; i1('uLookA', LOOK[lks[Math.floor(hash1(fk * 2.9 + c.seed * .7) * lks.length) % lks.length]]); }
     else i1('uLookA', LOOK[c.P && c.P.looks && c.P.looks[0] === 'gmap' ? 'gmap' : 'duo']); }
   f1('uPinOn', mPin ? 1 : 0); if (mPin){ f1('uPinN', [6, 8, 8, 10][Math.floor(hash1(c.seed * 1.9) * 4)]); f1('uPinR', .26 + hash1(c.seed * 2.7) * .14); f1('uPinRot', t * (hash1(c.seed * 3.1) < .5 ? -.35 : .35) + c.seed); f1('uPinFold', hash1(c.seed * 4.3)); f1('uPinChunk', hash1(Math.floor(t * 4) + c.seed)); if (U.uPinM) gl.uniform2f(U.uPinM, .05 + hash1(c.seed * 5.9) * .05, .08 + hash1(c.seed * 6.3) * .06); }
+  f1('uGridOn', c.layout === 'grid' ? 1 : 0); if (c.layout === 'grid' && U.uGridN){ gl.uniform2f(U.uGridN, c.gx, c.gy); const gPh = Math.floor(t * 30 / Math.round(lerp(5, 2, v('flickRate')))); f1('uGridPh', gPh * .173 + c.seed); }
   f1('uBandOn', mBand ? 1 : 0); if (mBand){ const bn = [6, 8, 10, 12][Math.floor(hash1(c.seed * 2.3) * 4)]; f1('uBandN', bn);
     const bPh = Math.floor(t * 30 / Math.round(lerp(5, 2, v('flickRate')))); f1('uBandPh', bPh * .137 + c.seed); f1('uBandLit', Math.floor(hash1(bPh * 1.7 + c.seed) * bn)); }
   f1('uLoupeOn', mLoupe ? 1 : 0); if (mLoupe){ const lx = .5 + Math.sin(t * .4 + c.seed * 9) * .16, ly = .48 + Math.cos(t * .31 + c.seed * 5) * .14;

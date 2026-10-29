@@ -302,12 +302,15 @@ const PRESETS = {
     dials: clean({refFx:[1], tintRate:[.65], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.15], whiteFlash:[.06,'kick',.3], zoomPunch:[.06,'kick',.25]})},
   blockfield: {name:'Block Field', fx:true, refMode:4, sw:'blockgold', looks:['punch'], pals:['blockgold'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
     dials: clean({refFx:[1], tintRate:[.8], cutRate:[.32,'hype',.3], clipHold:[.7], flashCuts:[.35,'punch',.4], contrast:[1.1], grain:[.08], blackBlink:[.08,'hat',.2]})},
+  // grid mix: Palette Flicker's full-frame cuts, and ~45% of cuts become a grid of different clips (1×2 … 3×3), each cell its own gradient map
+  gridmix: {name:'Grid Mix', fx:true, gridMix:.45, sw:'mapA', looks:['gmap'], pals:['mapA','redmono','olivine','violet','glacier'], palsB:['glacier','jellygreen'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({palFlick:[1], flickRate:[.7,'hype',.3], lookMix:[.95], cutRate:[.28,'hype',.3], clipHold:[.7], flashCuts:[.3,'punch',.4], pixHold:[.35], contrast:[1.15,'punch',.1], saturate:[1.12], grain:[.12], zoomPunch:[.06,'kick',.25]})},
   chaos: {name:'Chaos', sw:'ultra'}
 };
 const STYLE_KEYS = Object.keys(PRESETS).filter(k => k !== 'chaos');
 // polish pass: the spiral decoration and the rings texture are retired everywhere; the pre-reference styles
 // pull toward the reference-reel crispness — stacking and smear trimmed, the one-frame flash language on
-const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','signalflip','timesmear','pixelhold','neonthermal','yellowmat','wireframe','blockfield']);
+const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','signalflip','timesmear','pixelhold','neonthermal','yellowmat','wireframe','blockfield','gridmix']);
 for (const k of STYLE_KEYS){ const p = PRESETS[k], d = p.dials || (p.dials = {});
   if (p.deco) delete p.deco.spiral;
   d.rings = [0,'const',0];

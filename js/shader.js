@@ -17,6 +17,7 @@ uniform vec4 uQuadT, uInsetR; uniform vec2 uErodeM; uniform vec3 uPalS[4];
 uniform float uStripOn, uStripMode, uStripH, uStripX, uStripQuad, uStripRow, uStripInv, uStripTint, uStripGlow, uStripLit, uStripLine;
 uniform float uPinOn, uPinN, uPinR, uPinRot, uPinFold, uPinChunk, uPanelOn;
 uniform float uBandOn, uBandN, uBandPh, uBandLit, uLoupeOn, uLoupeMag, uLoupeR, uPixHold, uPixRow; uniform vec2 uLoupeC;
+uniform float uGridOn, uGridPh; uniform vec2 uGridN;
 uniform float uRefOn, uRefMode, uRefAlt, uRefX, uRefX2, uRefT, uRefHit; uniform vec4 uRefR, uRefB0, uRefB1, uRefB2; uniform vec3 uRefC[5]; uniform vec2 uPinM; uniform vec4 uPanelR; uniform vec3 uPanelC;
 uniform vec4 uStripR, uStripO, uStripZ; uniform vec3 uStripC[4]; uniform vec3 uStripP1, uStripP2;
 uniform int uLookA, uLookB, uLook2, uTextMode, uBlendMode;
@@ -225,6 +226,8 @@ void main(){
   if(uSplitOn>.5){ float co = uSplitDir<.5 ? vUv.x : 1.-vUv.y; bool tinted = (co < uSplitX) != (uSplitSide > .5);
     if(tinted){ float l = clamp((luma(base)-.06)*1.15, 0., 1.); if(uSplitPost>.5) l = floor(l*4. + bayer(gl_FragCoord.xy)*.99)/4.; col = gmap(l, uPalS); }
     else col = clamp((base-.5)*1.06+.5, 0., 1.); }
+  if(uGridOn>.5){ vec2 gc = floor(vUv*uGridN); float hg = hash(gc*1.37 + uGridPh); float lg = clamp((luma(base)-.05)*1.18,0.,1.); float wg = floor(hg*4.);
+    col = wg<1.? gmap(lg,uPalA) : wg<2.? gmap(lg,uPalB) : wg<3.? gmap(lg,uPal2) : gmap(lg,uPalS); if(luma(base) < .004) col = vec3(0.); }
   if(uBandOn>.5){ float b=floor(vUv.y*uBandN); float hb=hash(vec2(b*1.31, uBandPh));
     float lb=clamp((luma(base)-.05)*1.18,0.,1.);
     float wch=floor(hb*4.); col = wch<1.? gmap(lb,uPalA) : wch<2.? gmap(lb,uPalB) : wch<3.? gmap(lb,uPal2) : gmap(lb,uPalS);
