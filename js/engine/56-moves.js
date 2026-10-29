@@ -67,8 +67,9 @@ function AWZ_MOVES(A){
       if (into === 'peak' && bl === 1 && this.rolling){ const sl = this.rolling; for (let s = 0; s < 8; s++) at(s, sl, {vel: .45 + s / 8 * .2}); for (let s = 8; s < 15.5; s += .5) at(s, sl, {vel: .65 + (s - 8) / 8 * .3}); this.rolling = null; }
       if (bl === 1 && r() < (into === 'peak' ? .15 : into === 'build' || into === 'break' ? .3 : .55)){ /* plain boundary: only the arrangement changes (research/07 §0) */ }
       else if (bl === 1){ // the last bar: 1–2 moves from the pool that suits this boundary
-        const pool = into === 'peak' ? ['gap', 'stutter', 'swell'] : into === 'break' ? ['tapestop', 'throw', 'wash', 'swell', 'stutter'] : into === 'outro' ? ['tapestop', 'wash', 'throw'] : into === 'build' || into === 'up' ? ['swell', 'stutter', 'throw'] : ['swell', 'wash', 'throw'];
-        const ch = this.pick(pool, into === 'peak' || r() < .5 ? 2 : 1);
+        // into a drop: only the reverse swell. The half-beat gap and the buffer stutter read as a skipped note right before the drop.
+        const pool = into === 'peak' ? ['swell'] :into === 'break' ? ['tapestop', 'throw', 'wash', 'swell', 'stutter'] : into === 'outro' ? ['tapestop', 'wash', 'throw'] : into === 'build' || into === 'up' ? ['swell', 'stutter', 'throw'] : ['swell', 'wash', 'throw'];
+        const ch = this.pick(pool, into !== 'peak' && r() < .5 ? 2 : 1);
         for (const m of ch){
           if (m === 'swell'){ const b = r.pick([4, 8, 8, 12, 16]); fx(16 - b, {fx: 'swell', vel: .45 + r() * .2, dur: b * stepN / c.sr}); this.use(m, `reverse swell (${b / 4} beats) into the downbeat`); }
           else if (m === 'gap'){ cmd(14, {cmd: 'gap', dur: 2 * stepN / c.sr}); this.use(m, 'half a beat of silence before the drop'); }
