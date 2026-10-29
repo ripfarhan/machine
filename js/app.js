@@ -580,13 +580,13 @@ function drawSig(){ const w = sigC.width, h = sigC.height, A = state.A; if (!A) 
 let playing = false, startAt = 0, offset = 0, recording = null;
 const now = () => playing ? AC.currentTime - startAt : offset;
 const region = () => { const a = state.rIn === null ? 0 : clamp(state.rIn, 0, state.dur), b = state.rOut === null ? state.dur : clamp(state.rOut, 0, state.dur); return b - a > .1 ? [a, b] : [0, state.dur]; };
-function play(){ ensureAC(); if (!state.buffer) return; { const [a, b] = region(); if (offset < a || offset >= b - .02) offset = a; } srcNode = AC.createBufferSource(); srcNode.buffer = state.buffer; srcNode.connect(master); startAt = AC.currentTime - offset; srcNode.start(0, state.off + offset); playing = true; $('#play').innerHTML = '&#10074;&#10074;'; $('#play').setAttribute('aria-label', 'Pause'); }
-function pause(){ if (playing){ offset = now(); try { srcNode.stop(); } catch(e){} srcNode.disconnect(); } playing = false; $('#play').innerHTML = '&#9654;'; $('#play').setAttribute('aria-label', 'Play'); }
+function play(){ ensureAC(); if (!state.buffer) return; { const [a, b] = region(); if (offset < a || offset >= b - .02) offset = a; } srcNode = AC.createBufferSource(); srcNode.buffer = state.buffer; srcNode.connect(master); startAt = AC.currentTime - offset; srcNode.start(0, state.off + offset); playing = true; $('#play').innerHTML = '&#10074;&#10074;'; $('#play').setAttribute('aria-label', 'Pause'); $('#fsPlay').innerHTML = '&#10074;&#10074;'; }
+function pause(){ if (playing){ offset = now(); try { srcNode.stop(); } catch(e){} srcNode.disconnect(); } playing = false; $('#play').innerHTML = '&#9654;'; $('#play').setAttribute('aria-label', 'Play'); $('#fsPlay').innerHTML = '&#9654;'; }
 function seek(t){ const was = playing; if (was) pause(); offset = clamp(t, 0, state.dur - .01); if (was) play(); else frame(); }
 function frame(){ if (recording && recording.stopping) return; let t = now();
   const [ra, rb] = region();
   if (t >= (recording ? state.dur : rb)){ if (recording){ finishRecording(); t = state.dur - .001; } else { pause(); offset = ra; play(); t = ra; } }
-  renderAt(t); $('#time').textContent = fmt(t) + ' / ' + fmt0(state.dur) + (rb - ra < state.dur - .05 ? '  ·  region ' + fmt(ra) + '–' + fmt(rb) : ''); $('#head').style.left = (t / state.dur * 100) + '%'; if (recording) $('#badge').textContent = 'Recording ' + fmt(t) + ' / ' + fmt0(state.dur); }
+  renderAt(t); $('#time').textContent = fmt(t) + ' / ' + fmt0(state.dur) + (rb - ra < state.dur - .05 ? '  ·  region ' + fmt(ra) + '–' + fmt(rb) : ''); $('#head').style.left = (t / state.dur * 100) + '%'; $('#fsFill').style.width = (t / state.dur * 100) + '%'; $('#fsTime').textContent = fmt(t) + ' / ' + fmt0(state.dur); if (recording) $('#badge').textContent = 'Recording ' + fmt(t) + ' / ' + fmt0(state.dur); }
 function loop(){ if (playing || recording) frame(); requestAnimationFrame(loop); }
 let dl = null; (async () => { try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch(e){ dl = null; } })();
 function toast(msg){ const el = $('#toast'); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 3400); }
@@ -769,6 +769,19 @@ $('#clearMedia').onclick = async () => {
 [$('#drop'), $('#screen')].forEach(el => { el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag'); }); el.addEventListener('dragleave', () => el.classList.remove('drag')); el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drag'); addFiles(e.dataTransfer.files); }); });
 $('#clipFrames').oninput = e => { state.clipFrames = +e.target.value; $('#cfOut').textContent = e.target.value; };
 $('#play').onclick = () => { if (recording) return; playing ? pause() : play(); };
+// full screen preview with its own play / seek bar
+{ const scr = $('#screen'); let idleT = 0;
+  const wake = () => { scr.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => { if (playing) scr.classList.add('idle'); }, 2200); };
+  const toggleFS = () => { if (document.fullscreenElement) document.exitFullscreen(); else if (scr.requestFullscreen) scr.requestFullscreen().then(wake).catch(() => toast('Full screen is not allowed here')); };
+  $('#fullscreen').onclick = toggleFS; $('#fsExit').onclick = e => { e.stopPropagation(); toggleFS(); };
+  $('#fsPlay').onclick = e => { e.stopPropagation(); $('#play').click(); wake(); };
+  scr.addEventListener('mousemove', wake); scr.addEventListener('dblclick', toggleFS);
+  scr.addEventListener('click', e => { if (document.fullscreenElement && e.target.tagName === 'CANVAS'){ $('#play').click(); wake(); } });
+  const fsSeek = $('#fsSeek'); let dragging = false; const seekAt = e => { const r = fsSeek.getBoundingClientRect(); seek(clamp((e.clientX - r.left) / r.width, 0, 1) * state.dur); };
+  fsSeek.addEventListener('pointerdown', e => { e.stopPropagation(); dragging = true; fsSeek.setPointerCapture(e.pointerId); seekAt(e); wake(); });
+  fsSeek.addEventListener('pointermove', e => { if (dragging) seekAt(e); }); fsSeek.addEventListener('pointerup', () => { dragging = false; });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) scr.classList.remove('idle'); frame(); });
+  document.addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return; if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !state.exporting) toggleFS(); }); }
 $('#reroll').onclick = () => { state.seed = 1 + Math.floor(Math.random() * 999998); $('#seed').value = state.seed; rebuild(); };
 $('#seed').onchange = e => { state.seed = clamp(parseInt(e.target.value) || 1, 1, 999999); rebuild(); };
 $('#react').oninput = e => { state.react = +e.target.value; $('#reactOut').textContent = state.react.toFixed(1); }; $('#react').onchange = rebuild;

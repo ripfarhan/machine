@@ -23,6 +23,7 @@
       <canvas id="gl" width="720" height="1280" aria-label="Reel preview"></canvas>
       <div class="badge" id="badge" hidden></div>
       <div class="meters" id="meters" aria-hidden="true"></div>
+      <div class="fsbar" id="fsbar"><button class="fsb" id="fsPlay" aria-label="Play">&#9654;</button><div class="fsseek" id="fsSeek"><div class="fsfill" id="fsFill"></div></div><span class="fstime" id="fsTime">0:00</span><button class="fsb" id="fsExit" aria-label="Exit full screen" title="Exit (Esc)">&#10005;</button></div>
     </div>
     <div class="transport">
       <div class="row">
@@ -30,6 +31,7 @@
         <button class="btn" id="reroll" title="New random cut (R)">Reroll</button>
         <button class="btn primary" id="export">Export video</button>
         <button class="btn ghost" id="still">Save frame</button>
+        <button class="btn" id="fullscreen" title="Full screen preview (F)" aria-label="Full screen preview">&#x26F6;</button>
         <select id="aspect" class="fmt" aria-label="Video format" title="Video format (portrait / square / landscape)"><option value="portrait" selected>9:16 Portrait</option><option value="square">1:1 Square</option><option value="landscape">16:9 Landscape</option></select>
         <span class="time" id="time">0:00.0 / 0:30</span>
       </div>
