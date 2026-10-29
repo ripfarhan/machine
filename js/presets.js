@@ -4,7 +4,7 @@ const SIGNALS = ['const','sub','bass','kick','snare','hat','mid','high','punch',
 const PAL = {
   acid:['#14002e','#ff2ea6','#3cf2ff','#fff35c'], toxic:['#001a12','#2b3bff','#5dff6a','#fff7f0'], candy:['#2a0033','#ff3d6e','#ffb13d','#e9fffd'],
   ultra:['#05001a','#6b16ff','#ff4fd8','#c9fbff'], ember:['#0a0000','#c4001a','#ff7a00','#ffe9a8'], riot:['#08004a','#2433ff','#ff1a1a','#ffe1e1'],
-  ice:['#000000','#0055ff','#33f6ff','#ffffff'], mono:['#000000','#3a3a3a','#bdbdbd','#ffffff'], sepia:['#1b120a','#6b4a2b','#c9a477','#f6ead2'],
+  ice:['#000000','#0055ff','#33f6ff','#ffffff'], spectral:['#12002e','#2433ff','#00e07a','#fff200'], matyellow:['#fff35c','#0d1a8c','#ffffff','#5a1a8c'], wireamber:['#ffe9a8','#7dff8a','#ff2a00','#3cf2ff'], blockgold:['#d8c46a','#2a1fa8','#ffffff','#000000'], mono:['#000000','#3a3a3a','#bdbdbd','#ffffff'], sepia:['#1b120a','#6b4a2b','#c9a477','#f6ead2'],
   lime:['#0d0021','#a100ff','#b6ff00','#ffffff'], blood:['#000000','#5a0000','#ff0a0a','#fff0f0'], heat:['#000000','#5a00a8','#ff2d00','#fff200'],
   xerox:['#0b0b0b','#2a2a2a','#d8d8d8','#ffffff'], pastel:['#2b1b3d','#ff9de2','#9df7ff','#fff6a8'], chrome:['#050a12','#2a5bff','#9ad7ff','#ffffff'],
   bolly:['#2d0036','#ff2e63','#ffb800','#08f7fe'], news:['#1a1611','#5a4b32','#b8a888','#f4ecdc'], noir:['#000000','#101e3a','#ff2bd6','#9cfcff'],
@@ -97,6 +97,7 @@ const PARAMS = [
   ['pinwheel','Frame','Pinwheel box',0,1,0,'const',0,'chance the shot sits in a black box with a spinning pinwheel of itself, a mirrored diagonal fold and big displaced chunks at the edges'],
   ['bandMap','Frame','Band map',0,1,0,'const',0,'chance a cut splits into horizontal bands, each gradient-mapped in its own palette'],
   ['loupe','Frame','Loupe',0,1,0,'const',0,'chance a cut gets a drifting magnifier circle with a crosshair'],
+  ['refFx','Frame','Reel system',0,1,0,'const',0,'chance a cut takes the style’s reference-reel treatment (neon thermal, yellow mat, wireframe, block field)'],
   ['palFlick','Frame','Palette flicker',0,1,0,'const',0,'chance a cut holds the shot while its gradient map swaps every frame'],
   ['flickRate','Frame','Flicker speed',0,1,.7,'hype',.3,'palette flicker: every 4 frames (low) to every frame (high)'],
   ['panelFlash','Frame','Panel flash',0,1,0,'snare',0,'solid grey panels slam over half the frame for two frames'],
@@ -292,12 +293,21 @@ const PRESETS = {
     dials: clean({slitscan:[.62,'punch',.38], lookMix:[.85], tintRate:[.7], cutRate:[.26,'hype',.3], clipHold:[.8], flashCuts:[.25,'punch',.4], contrast:[1.16,'punch',.1], saturate:[1.1], grain:[.18], blackBlink:[.08,'hat',.25], zoomPunch:[.06,'kick',.25]})},
   pixelhold: {name:'Pixel Hold', fx:true, sw:'glacier', looks:['gmap'], pals:['glacier','signal','redmono','mapA'], layouts:{full:10}, textStyles:['tall'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
     dials: clean({pixHold:[1], lookMix:[.9], tintRate:[.75], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], contrast:[1.18,'punch',.1], saturate:[1.12], grain:[.12], stutter:[.2,'kick',.4], panelFlash:[.15,'snare',.35]})},
+  // ---- reference reel, round 3: the four treatments of Video-2271 not built yet (each a full-frame graphic system) ----
+  neonthermal: {name:'Neon Thermal', fx:true, refMode:1, sw:'spectral', looks:['punch'], pals:['spectral'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({refFx:[1], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], contrast:[1.1], saturate:[1.05], grain:[.1], zoomPunch:[.06,'kick',.25], panelFlash:[.1,'snare',.3]})},
+  yellowmat: {name:'Yellow Mat', fx:true, refMode:2, sw:'matyellow', looks:['punch'], pals:['matyellow'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({refFx:[1], tintRate:[.7], cutRate:[.3,'hype',.3], clipHold:[.7], flashCuts:[.35,'punch',.4], contrast:[1.1], grain:[.12], zoomPunch:[.05,'kick',.2]})},
+  wireframe: {name:'Wireframe', fx:true, refMode:3, sw:'wireamber', looks:['punch'], pals:['wireamber'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({refFx:[1], tintRate:[.65], cutRate:[.3,'hype',.3], clipHold:[.75], flashCuts:[.3,'punch',.4], contrast:[1.1], grain:[.15], whiteFlash:[.06,'kick',.3], zoomPunch:[.06,'kick',.25]})},
+  blockfield: {name:'Block Field', fx:true, refMode:4, sw:'blockgold', looks:['punch'], pals:['blockgold'], layouts:{full:10}, textStyles:['small'], textModes:[0], deco:{}, flk:'hold', fonts:['narrow'], patMotif:0,
+    dials: clean({refFx:[1], tintRate:[.8], cutRate:[.32,'hype',.3], clipHold:[.7], flashCuts:[.35,'punch',.4], contrast:[1.1], grain:[.08], blackBlink:[.08,'hat',.2]})},
   chaos: {name:'Chaos', sw:'ultra'}
 };
 const STYLE_KEYS = Object.keys(PRESETS).filter(k => k !== 'chaos');
 // polish pass: the spiral decoration and the rings texture are retired everywhere; the pre-reference styles
 // pull toward the reference-reel crispness — stacking and smear trimmed, the one-frame flash language on
-const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','signalflip','timesmear','pixelhold']);
+const REF_SET = new Set(['splittint','quadscan','palflicker','twinsplit','pinbox','jellyinset','contactsheet','icestrip','bandscan','signalflip','timesmear','pixelhold','neonthermal','yellowmat','wireframe','blockfield']);
 for (const k of STYLE_KEYS){ const p = PRESETS[k], d = p.dials || (p.dials = {});
   if (p.deco) delete p.deco.spiral;
   d.rings = [0,'const',0];

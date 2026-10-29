@@ -16,7 +16,8 @@ uniform vec4 uQuadT, uInsetR; uniform vec2 uErodeM; uniform vec3 uPalS[4];
 // ice strip (letterboxed band, glowing inset, pixel-stretch stripes, solid panels) — from the blue reference reel
 uniform float uStripOn, uStripMode, uStripH, uStripX, uStripQuad, uStripRow, uStripInv, uStripTint, uStripGlow, uStripLit, uStripLine;
 uniform float uPinOn, uPinN, uPinR, uPinRot, uPinFold, uPinChunk, uPanelOn;
-uniform float uBandOn, uBandN, uBandPh, uBandLit, uLoupeOn, uLoupeMag, uLoupeR, uPixHold, uPixRow; uniform vec2 uLoupeC; uniform vec2 uPinM; uniform vec4 uPanelR; uniform vec3 uPanelC;
+uniform float uBandOn, uBandN, uBandPh, uBandLit, uLoupeOn, uLoupeMag, uLoupeR, uPixHold, uPixRow; uniform vec2 uLoupeC;
+uniform float uRefOn, uRefMode, uRefAlt, uRefX, uRefX2, uRefT, uRefHit; uniform vec4 uRefR, uRefB0, uRefB1, uRefB2; uniform vec3 uRefC[5]; uniform vec2 uPinM; uniform vec4 uPanelR; uniform vec3 uPanelC;
 uniform vec4 uStripR, uStripO, uStripZ; uniform vec3 uStripC[4]; uniform vec3 uStripP1, uStripP2;
 uniform int uLookA, uLookB, uLook2, uTextMode, uBlendMode;
 uniform vec3 uPalA[4]; uniform vec3 uPalB[4]; uniform vec3 uPal2[4];
@@ -73,6 +74,41 @@ vec3 stripFoot(vec2 bp, vec4 r){ vec2 f = (bp - r.xy)/max(r.zw-r.xy, vec2(1e-4))
 // a single row of the frame stretched into vertical bars (or one column into horizontal lines)
 vec3 stripeV(vec2 bp){ float x = floor(bp.x*uRes.x*.5)/(uRes.x*.5); float l = luma(texture(tBase, vec2(x, uStripRow)).rgb); l = smoothstep(.12,.85,l); return iceMap(l)*(.55+.6*l); }
 vec3 stripeH(vec2 bp){ float y = floor(bp.y*uRes.y*uStripH*.5)/(uRes.y*uStripH*.5); float l = luma(texture(tBase, vec2(uStripRow, y)).rgb); return vec3(smoothstep(.2,.9,l)); }
+// ---- reference-reel treatments, round 3 (Video-2271): full-frame graphic systems over a readable shot ----
+vec3 grad5(float t, vec3 c[5]){ t = clamp(t,0.,1.)*4.; int i = int(min(3., floor(t))); float f = t - float(i); return i==0 ? mix(c[0],c[1],f) : i==1 ? mix(c[1],c[2],f) : i==2 ? mix(c[2],c[3],f) : mix(c[3],c[4],f); }
+float lineBox(vec2 p, vec4 r, float w){ vec2 px = 1./uRes; bool inX = p.x>=r.x-px.x*w && p.x<=r.z+px.x*w, inY = p.y>=r.y-px.y*w && p.y<=r.w+px.y*w;
+  float e = (inY && (abs(p.x-r.x)<px.x*w || abs(p.x-r.z)<px.x*w)) || (inX && (abs(p.y-r.y)<px.y*w || abs(p.y-r.w)<px.y*w)) ? 1. : 0.;
+  // the construction diagonals (both) inside the box
+  if(p.x>r.x && p.x<r.z && p.y>r.y && p.y<r.w){ vec2 q = (p-r.xy)/(r.zw-r.xy); float d1 = abs(q.x-q.y)*(r.z-r.x)*uRes.x, d2 = abs(q.x-(1.-q.y))*(r.z-r.x)*uRes.x; e = max(e, step(min(d1,d2), w*.8)*.75); }
+  return e; }
+vec3 refFx(vec3 col, vec3 base, vec2 uv){ float l = luma(base); int m = int(uRefMode+.5); float asp = uRes.x/uRes.y;
+  if(m==1){ // NEON THERMAL (2271 0:02–0:07): spectral false colour on luma + bloom; on hits a white threshold slab
+    vec3 bl = vec3(0.); for(int i=0;i<12;i++){ float a = float(i)*.5236; vec2 o = vec2(cos(a), sin(a)*asp)*.018; bl += max(texture(tBase, uv+o).rgb - .45, 0.); } bl /= 12.;
+    float t = pow(clamp((l-.05)*1.45,0.,1.), .95) + (hash(floor(gl_FragCoord.xy*.5) + floor(uTime*15.))-.5)*.09;
+    vec3 c = grad5(t, uRefC); c += grad5(clamp(luma(bl)*3.,0.,1.), uRefC)*luma(bl)*2.4; col = c;
+    if(uRefHit>.5 && inR(vUv, uRefR)){ float th = step(.5 + (bayer(gl_FragCoord.xy)-.5)*.35, l*1.25); col = mix(vec3(.02), vec3(.97), th); } }
+  else if(m==2){ // YELLOW MAT (2271 0:13): a flat mat with the shot inset on a tilted cut, the inset in a low-key duotone; alt = full-bleed 2-tone dither
+    if(uRefAlt>.5){ float d = step(.5 + (bayer(gl_FragCoord.xy)-.5)*.6, l*1.15); col = mix(uRefC[1], uRefC[0], d); col = mix(col, uRefC[2], step(.8, l)*.35); }
+    else { vec4 r = uRefR; bool inside = inR(vUv, r);
+      // one corner sliced off on a 45° line (the mat bites into the inset)
+      vec2 q = (vUv - r.xy)/(r.zw - r.xy); if(inside && (q.x + (1.-q.y)) < uRefX*.5) inside = false; if(inside && ((1.-q.x) + q.y) < uRefX2*.4) inside = false;
+      if(inside){ float k = pow(clamp(l*1.1,0.,1.), 1.5); col = k < .5 ? mix(vec3(0.), uRefC[3], k*2.) : mix(uRefC[3], uRefC[4], (k-.5)*2.); }
+      else col = uRefC[0] * (.94 + .06*hash(floor(gl_FragCoord.xy*.5))); } }
+  else if(m==3){ // WIREFRAME (2271 0:18): a vertical split (right half channel-swapped), a laser beam, construction-line boxes
+    vec3 c = clamp((base-.5)*1.35+.5,0.,1.); c = sat(c, 1.6);
+    if(vUv.x > uRefX){ c = sat(c.gbr*vec3(1.1,1.2,.8), 1.7); c = mix(c, uRefC[1], .18); }
+    float lz = exp(-abs(vUv.x - uRefX2)*uRes.x*.35); c += mix(uRefC[0], vec3(1.), .6)*lz*1.6 + uRefC[0]*exp(-abs(vUv.x - uRefX2)*uRes.x*.04)*.35;
+    float w = max(1.2, uRes.y/600.); float e = max(max(lineBox(vUv, uRefB0, w), lineBox(vUv, uRefB1, w)), lineBox(vUv, uRefB2, w)); col = mix(c, vec3(1.), e*.85); }
+  else if(m==4){ // BLOCK FIELD (2271 0:17): the frame becomes rectangles of 2-colour noise, each carrying its cell's light; black notches and slits
+    vec2 g = vec2(9., 9./asp*1.4); vec2 cid = floor(vUv*g); float hb = hash(cid + floor(uRefT)*3.17);
+    vec2 cid2 = hb < .35 ? floor(vUv*g*vec2(.5,1.))*vec2(2.,1.) : cid;   // some blocks merge horizontally
+    vec2 cc = (cid2 + (hb < .35 ? vec2(1.,.5) : vec2(.5)))/g; float lb = luma(texture(tBase, cc).rgb); lb = clamp((lb-.08)*1.3,0.,1.);
+    float lp = clamp((l-.06)*1.35,0.,1.); float n = hash(floor(gl_FragCoord.xy*.5) + floor(uTime*12.)); float on = step(n, mix(lb, lp, .7)*.95 + .03);
+    col = mix(uRefC[1], uRefC[0], on); col *= .82 + .18*hash(cid2+.7);
+    if(hash(cid2 + 5.1 + floor(uRefT)) < .1) col = vec3(0.);
+    float sl = fract(vUv.y*g.y); if(hash(vec2(cid.y, floor(uRefT)) + 9.3) < .1 && sl > .45 && sl < .62 && hash(cid*1.7) < .5) col = uRefC[2]*.25;
+    if(vUv.x < .06 || vUv.x > .94) col = vec3(0.); }
+  return clamp(col, 0., 1.); }
 vec3 iceStrip(vec3 col){
   float y0 = .5 - uStripH*.5; if(vUv.y < y0 || vUv.y > y0 + uStripH) return vec3(0.);
   vec2 bp = vec2(vUv.x, (vUv.y - y0)/uStripH); int m = int(uStripMode + .5); vec3 c = vec3(0.); float glowSrc = 0.; vec3 gcol = uStripC[3];
@@ -261,6 +297,7 @@ void main(){
     if(pe <= 0. && !(pe > -.7/pbs.x && phb < .2)) col = vec3(0.); else if(pe > 0. && pe < .6/pbs.x && phb > .9) col = vec3(0.); }
   if(uPanelOn>.5 && vUv.x>=uPanelR.x && vUv.x<=uPanelR.z && vUv.y>=uPanelR.y && vUv.y<=uPanelR.w) col = uPanelC;
   if(uStripOn>.5) col = iceStrip(col);
+  if(uRefOn>.5) col = refFx(col, base, uv);
   if(uPixHold>0.){ float xq=floor(vUv.x*uRes.x*.5)/(uRes.x*.5); vec3 pb=texture(tBase, vec2(xq, uPixRow)).rgb; float pl=smoothstep(.08,.9,luma(pb)); col = mix(col, gmap(pl,uPalA)*(.5+.7*pl), uPixHold); }
   if(uLoupeOn>.5){ vec2 lq=(vUv-uLoupeC)*vec2(asp,1.); float ld=length(lq), lw=1.6/uRes.y;
     if(abs(ld-uLoupeR)<lw*2.2) col=uPalA[3]; else if(ld<uLoupeR && uLoupeR-ld<lw*8.) col*=.5;
