@@ -102,91 +102,56 @@ vec3 refFx(vec3 col, vec3 base, vec2 uv){ float l = luma(base); int m = int(uRef
     float lz = exp(-abs(vUv.x - uRefX2)*uRes.x*.35); c += mix(uRefC[0], vec3(1.), .6)*lz*1.6 + uRefC[0]*exp(-abs(vUv.x - uRefX2)*uRes.x*.04)*.35;
     float w = max(1.2, uRes.y/600.); float e = fract(uRefT) < .6 ? max(max(lineBox(vUv, uRefB0, w), lineBox(vUv, uRefB1, w)), lineBox(vUv, uRefB2, w)) : 0.; col = mix(c, vec3(1.), e*.85); }
   return clamp(col, 0., 1.); }
-// ---- the machine set: 15 full-frame systems, each with its own physics ----
-const int DIG[10] = int[10](31599, 11415, 29671, 29647, 23497, 31183, 31215, 29257, 31727, 31695);   // 3×5 digit bitmaps, row-major from the top
-float digit(int d, vec2 p){ ivec2 q = ivec2(floor(p*vec2(3.,5.))); if(q.x<0||q.x>2||q.y<0||q.y>4) return 0.; int bit = (4-q.y)*3 + (2-q.x); return float((DIG[d] >> bit) & 1); }
-vec2 vorCell(vec2 p, float jit, out float edge){ vec2 i = floor(p), f = fract(p); vec2 best = vec2(0.); float d1 = 9., d2 = 9.;
-  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 g = vec2(float(x),float(y)); vec2 o = vec2(hash(i+g), hash(i+g+7.3)); o = .5 + (o-.5)*jit; vec2 r = g + o - f; float d = dot(r,r); if(d<d1){ d2=d1; d1=d; best=i+g+o; } else if(d<d2) d2=d; }
-  edge = sqrt(d2)-sqrt(d1); return best; }
+// ---- the framing set: the footage stays a photo; each mode moves the frame, not the pixels' meaning ----
+float bh(float k, float ph){ return hash(vec2(k, floor(ph)) + uFx2Seed*.37); }   // one random number per beat
 vec3 fx2(vec3 col, vec3 base, vec2 uv){ int m = int(uFx2Mode+.5); float asp = uRes.x/uRes.y; float l = luma(base); vec3 P0 = uPalA[0], P1 = uPalA[1], P2 = uPalA[2], P3 = uPalA[3];
-  float kick = uFx2Kick, bass = uFx2Sig.x, mid = uFx2Sig.y, high = uFx2Sig.z, punch = uFx2Sig.w;
-  if(m==1){ // DATA RAIN (Ikeda): the picture as columns of digits, a barcode band of the audio channels on top, white column flashes on kicks
-    float cols = 42.; vec2 g = vec2(cols, cols/asp*1.6); vec2 cid = floor(vUv*g); vec2 cf = fract(vUv*g);
-    float lc = luma(texture(tBase, (cid+.5)/g).rgb); lc = clamp((lc-.06)*1.3,0.,1.);
-    float hc = hash(cid + floor(uTime*18.)*.37 + uFx2Seed); int d = int(hash(cid*3.1 + floor(uTime*6.))*9.99);
-    float on = step(hc, lc*1.15); float glyph = digit(d, (cf - vec2(.15,.1))/vec2(.7,.8));
-    float colFlash = step(.985 - kick*.5, hash(vec2(cid.x, floor(uTime*20.)) + uFx2Seed)) * step(.2, kick);
-    col = mix(P0, P3, glyph*on*(.55+.45*lc)); col = mix(col, P3, colFlash*.9);
-    if(vUv.y > .93){ float bx = floor(vUv.x*96.); float bw = hash(vec2(bx, 1.7)); float sig = bx < 32. ? bass : bx < 64. ? mid : high; col = mix(P0, P3, step(bw, sig*1.1 + .08) * step(.3, hash(vec2(bx, floor(uTime*30.))) + .4)); } }
-  else if(m==2){ // MOIRÉ GATE (scanimation): three time-offset phases interleaved in 1-px rows, a scrolling slit mask shows one phase at a time → the motion stutters into steps
-    float row = floor(gl_FragCoord.y); float ph = mod(row - floor(uTime*uFx2Sig.w*40. + uTime*8.), 3.); float amt = .012 + bass*.02;
-    vec2 d = vec2(amt*(ph-1.), 0.); vec3 s = texture(tBase, clamp(uv + d, 0., 1.)).rgb; float ls = clamp((luma(s)-.05)*1.2,0.,1.);
-    float open = step(ph, .5); col = mix(gmap(ls, uPalA)*.25, gmap(ls, uPalA), open); col = mix(col, vec3(0.), (1.-open)*.35); }
-  else if(m==3){ // HALFTONE PRESS: CMYK rosette, four screen angles, the plates slip out of register on kicks
-    float cell = max(5., uRes.y/90.); vec3 paper = P0; vec3 inks[4] = vec3[4](vec3(0.,.65,.92), vec3(.93,.05,.55), vec3(1.,.9,0.), vec3(.08)); float ang[4] = float[4](.2618, 1.309, 0., .7854);
-    vec3 cmy = 1. - base; float k = min(min(cmy.r, cmy.g), cmy.b)*.9; vec3 c4 = vec3(cmy - k) ; float v4[4] = float[4](c4.r, c4.g, c4.b, k);
-    vec3 outc = paper;
-    for(int i=0;i<4;i++){ float h = hash(vec2(float(i)*3.3, floor(uFx2Ph))); vec2 slip = (vec2(hash(vec2(h, 1.)), hash(vec2(h, 2.))) - .5) * kick * .018 * uRes.y;
-      vec2 p = gl_FragCoord.xy + slip; float ca = cos(ang[i]), sa = sin(ang[i]); vec2 r = vec2(p.x*ca - p.y*sa, p.x*sa + p.y*ca)/cell; vec2 cc = (floor(r)+.5);
-      vec2 rc = vec2(cc.x*ca + cc.y*sa, -cc.x*sa + cc.y*ca)*cell - slip; vec3 sb = texture(tBase, rc/uRes).rgb; vec3 scmy = 1.-sb; float sk = min(min(scmy.r,scmy.g),scmy.b)*.9;
-      float v = i==0 ? scmy.r-sk : i==1 ? scmy.g-sk : i==2 ? scmy.b-sk : sk; float rad = sqrt(clamp(v,0.,1.))*.72; float dd = length(fract(r)-.5); float dot_ = smoothstep(rad, rad-.08, dd);
-      outc *= mix(vec3(1.), inks[i], dot_*.95); }
-    col = outc; }
-  else if(m==4){ // TIME MIRROR (waterfall): the live picture in a centre band, every frame pushes the band outward both ways — the past piles up left and right
-    float band = .18 + bass*.08; float d = abs(vUv.x - .5);
-    if(d < band){ float ls = clamp((l-.05)*1.2,0.,1.); col = gmap(ls, uPalA); }
-    else { float dir = sign(vUv.x - .5); vec2 pu = vec2(vUv.x - dir*(1.5 + punch*6.)/uRes.x, vUv.y); col = texture(tPrev, pu).rgb * .992; }
-    col += P3 * exp(-abs(d-band)*uRes.x*.12) * .5; }
-  else if(m==5){ // FLIP BOARD (split-flap): the picture on a board of flaps, 4 tones, a seam through each flap; on hits random flaps catch mid-flip
-    vec2 g = vec2(26., 26./asp*1.5); vec2 cid = floor(vUv*g), cf = fract(vUv*g);
-    float lc = luma(texture(tBase, (cid+.5)/g).rgb); float q = floor(clamp((lc-.04)*1.25,0.,1.)*3.999)/3.;
-    float flip = step(1.-kick*.7, hash(cid + floor(uFx2Ph*2.)*1.3 + uFx2Seed)); float hf = step(.5, cf.y);
-    vec3 fc = gmap(q, uPalA); if(flip > .5) fc = mix(fc, gmap(hash(cid+2.2)*.9, uPalA), hf); fc *= .9 + .1*hf;
-    float seam = 1.-smoothstep(0., .07, abs(cf.y-.5)); float gap = step(cf.x, .06) + step(.94, cf.x) + step(cf.y, .05) + step(.95, cf.y);
-    col = mix(fc, P0*.6, seam*.8); col = mix(col, P0*.4, clamp(gap,0.,1.)); }
-  else if(m==6){ // LIDAR: only edges, lit by a radar sweep with phosphor persistence; sparse point returns
-    vec2 e = 1.5/uRes; float gx = luma(texture(tBase,uv+vec2(e.x,0.)).rgb)-luma(texture(tBase,uv-vec2(e.x,0.)).rgb), gy = luma(texture(tBase,uv+vec2(0.,e.y)).rgb)-luma(texture(tBase,uv-vec2(0.,e.y)).rgb);
-    float ed = smoothstep(.03, .18, length(vec2(gx,gy))); vec2 q = (vUv-.5)*vec2(asp,1.); float an = atan(q.y,q.x); float sw = mod(uTime*(1.2 + punch*2.), 6.2831853);
-    float behind = mod(sw - an, 6.2831853); float persist = exp(-behind*.9); float beam = exp(-behind*40.);
-    float pts = step(.996, hash(floor(vUv*uRes*.5) + floor(uTime*6.))) * ed;
-    col = P0 + P2*ed*persist*1.2 + P3*beam*.9 + P3*pts*2.; float grid = step(.985, fract(vUv.x*12.)) + step(.985, fract(vUv.y*12.*asp)); col += P1*grid*.5; }
-  else if(m==7){ // RISO PRINT: two translucent spot inks on cream paper, cut from different tone bands, each plate 1-2 mm out of register, overprint makes a third colour, blotchy coverage
-    vec3 paper = P0; vec3 inkA = P1, inkB = P2; float h = hash(vec2(floor(uFx2Ph), 3.1)), h2 = hash(vec2(floor(uFx2Ph), 7.7));
-    vec2 regA = (vec2(hash(vec2(h,1.)), hash(vec2(h,2.)))-.5)*.016, regB = (vec2(hash(vec2(h2,1.)), hash(vec2(h2,2.)))-.5)*.016;
-    float la = luma(texture(tBase, clamp(uv+regA,0.,1.)).rgb), lb = luma(texture(tBase, clamp(uv+regB,0.,1.)).rgb);
-    la = clamp((la-.03)*1.35,0.,1.); lb = clamp((lb-.03)*1.35,0.,1.); float blot = .8 + .2*fbm(vUv*vec2(60.,60./asp));
-    float dA = step(.5 + (bayer(gl_FragCoord.xy)-.5)*.6, clamp((.42-la)*2.6,0.,1.)*blot);      // shadows plate: deep tones only
-    float dB = step(.5 + (bayer(gl_FragCoord.xy+2.)-.5)*.6, clamp((.8-lb)*1.6,0.,1.)*blot*.9);  // midtone plate: broad, lighter
-    col = paper; col *= mix(vec3(1.), inkA, dA*.88); col *= mix(vec3(1.), inkB, dB*.8); col += (hash(vUv*uRes*.7)-.5)*.06; }
-  else if(m==8){ // TUBE COLLAPSE: a CRT with phosphor triads and scanlines; on some kicks the raster collapses to a horizontal line and snaps back
-    float k = kick * step(.55, hash(vec2(floor(uFx2Ph*4.), 9.1))); float sc = 1. - k*.985; vec2 cu = vec2(uv.x, .5 + (uv.y-.5)/max(sc, .02));
-    bool off = cu.y < 0. || cu.y > 1.; vec3 b = off ? vec3(0.) : texture(tBase, cu).rgb; vec3 tri = vec3(step(mod(gl_FragCoord.x,3.),.9), step(.9,mod(gl_FragCoord.x,3.))*step(mod(gl_FragCoord.x,3.),1.9), step(1.9,mod(gl_FragCoord.x,3.)));
-    col = mix(b, b*tri*2.2, .35) * (.78 + .22*step(.5, fract(gl_FragCoord.y*.5))); col = mix(col, gmap(luma(col), uPalA), .5);
-    float line = exp(-abs(vUv.y-.5)*uRes.y*.25*(1.-k*.9)) * k; col += P3*line*1.6; if(k > .9) col += P3*exp(-abs(vUv.y-.5)*uRes.y*.08)*.6; }
-  else if(m==9){ // HATCH FIELD: engraving — strokes that follow the picture's gradient, dark areas get denser cross-hatching
-    vec2 e = 12./uRes; float gx = 0., gy = 0.; for(int i=-1;i<=1;i++){ gx += luma(texture(tBase,uv+vec2(e.x,float(i)*e.y)).rgb)-luma(texture(tBase,uv-vec2(e.x,-float(i)*e.y)).rgb); gy += luma(texture(tBase,uv+vec2(float(i)*e.x,e.y)).rgb)-luma(texture(tBase,uv-vec2(-float(i)*e.x,e.y)).rgb); }
-    float th = atan(gy, gx); th = floor(th/.7854 + .5)*.7854; vec2 p = gl_FragCoord.xy; float f = 6.283/max(8., uRes.y/70.);
-    float s1 = sin((p.x*cos(th) + p.y*sin(th))*f + uTime*2.*punch); float s2 = sin((p.x*cos(th+1.57) + p.y*sin(th+1.57))*f*1.1);
-    float dark = 1.-clamp((l-.03)*1.2,0.,1.); float t1 = 1.-dark*1.7, t2 = 1.-max(0.,dark-.5)*3.; float ink = smoothstep(t1-.25, t1+.25, s1) + smoothstep(t2-.25, t2+.25, s2); ink = clamp(ink,0.,1.);
-    col = mix(P0, P1, ink); col = mix(col, P2, step(.75, dark)*ink*.6); }
-  else if(m==10){ // STAINED GLASS: a Voronoi mosaic, each pane takes the colour under its centre, leading between panes; panes shake on kicks
-    float n = 14. + 6.*high; float edge; vec2 cc = vorCell(vUv*vec2(n, n/asp) + kick*(vec2(hash(vec2(floor(uFx2Ph),1.)),hash(vec2(floor(uFx2Ph),2.)))-.5)*.6, .9, edge);
-    vec3 pc = texture(tBase, clamp(cc/vec2(n, n/asp),0.,1.)).rgb; float lp = clamp((luma(pc)-.05)*1.2,0.,1.); vec3 glass = mix(gmap(lp, uPalA), pc, .35);
-    float lead = smoothstep(.02, .07, edge); col = mix(P0*.35, glass*(.85+.3*lp), lead); col += P3*(1.-smoothstep(.0,.03,edge))*0.; }
-  else if(m==11){ // OSCILLO WARP: every row displaced by a waveform whose amplitude is the bass, green phosphor trace, the picture inside the scope
-    float amp = (.01 + bass*.09) * (1. + punch); float wv = sin(uv.y*uRes.y*.08 + uTime*9.) * .5 + sin(uv.y*uRes.y*.021 - uTime*3.)*.5;
-    vec2 wu = vec2(uv.x + wv*amp, uv.y); vec3 b = texture(tBase, clamp(wu,0.,1.)).rgb; float lb = clamp((luma(b)-.05)*1.25,0.,1.);
-    col = gmap(lb*.85, uPalA); float trace = exp(-abs(vUv.x - (.5 + wv*amp*4.))*uRes.x*.15); col += P2*trace*1.3;
-    col *= .8 + .2*step(.5, fract(gl_FragCoord.y*.5)); col += P2*exp(-abs(vUv.y-.5)*3.)*.05; }
-  else if(m==12){ // EQUALIZER CUT: the frame split into bars, each bar's picture rises from the floor with its frequency band
-    float nb = 16.; float bi = floor(vUv.x*nb); float tt = bi/(nb-1.); float sig = tt < .33 ? mix(bass, mid, tt*3.) : tt < .66 ? mix(mid, high, (tt-.33)*3.) : mix(high, punch, (tt-.66)*3.);
-    float lvl = clamp(.25 + sig*.9 + (hash(vec2(bi, floor(uFx2Ph*2.)))-.5)*.25, .12, 1.); float yy = vUv.y / lvl;
-    if(yy > 1.){ col = P0; } else { vec3 b = texture(tBase, vec2(uv.x, yy)).rgb; float lb = clamp((luma(b)-.05)*1.2,0.,1.); col = gmap(lb, uPalA); }
-    float cap = exp(-abs(vUv.y - lvl)*uRes.y*.3); col += P3*cap*.8; float gapb = step(fract(vUv.x*nb), .04); col = mix(col, P0, gapb); }
-  else if(m==13){ // INK PUMP: one ink, one paper; the threshold breathes with the bass so the picture floods black and drains back; kicks invert
-    float th = .36 - bass*.3 - punch*.08; float soft = .06 + .1*fbm(vUv*8.); float ink = 1.-smoothstep(th-soft, th+soft, l + (bayer(gl_FragCoord.xy)-.5)*.08);
-    float inv = step(.5, hash(vec2(floor(uFx2Ph*2.), 4.4))) * step(.6, kick); ink = mix(ink, 1.-ink, inv);
-    col = mix(P0, P1, ink); col = mix(col, P2, ink*step(.9, bass)*.5); }
+  float kick = uFx2Kick, bass = uFx2Sig.x, mid = uFx2Sig.y, high = uFx2Sig.z, punch = uFx2Sig.w, ph = uFx2Ph, fr = fract(ph); float px = 1./uRes.y;
+  if(m==1){ // REFRAME: every beat a new hard crop fills the whole frame — a camera that re-decides its framing on the beat; kicks pump the zoom
+    float sz = .42 + bh(1.1, ph)*.4; float x0 = bh(2.3, ph)*(1.-sz), y0 = bh(3.7, ph)*(1.-sz); sz *= 1. - kick*.06;
+    vec2 cu = vec2(x0, y0) + uv*sz; vec3 b = texture(tBase, clamp(cu, 0., 1.)).rgb;
+    col = b; if(fr < .08) col = mix(col, P3, .25*(1.-fr/.08)); }   // a flash of the palette's light on the cut
+  else if(m==2){ // PILLAR: a narrow vertical slab of the picture at full brightness; the rest is the same picture crushed dark. Width and position re-roll per beat, kicks widen it
+    float w = .22 + bh(1.3, ph)*.3 + kick*.18; float x0 = bh(2.1, ph)*(1.-w); bool in_ = uv.x > x0 && uv.x < x0 + w;
+    vec3 dark = mix(P0, gmap(l, uPalA), .3)*.55; col = in_ ? base : dark;
+    float e = min(abs(uv.x-x0), abs(uv.x-x0-w))*uRes.x; col = mix(col, P3, (1.-smoothstep(0.,1.6,e))*.9); }
+  else if(m==3){ // WIPE CUT: a hard line sweeps across every beat; ahead of it the last frame stays frozen, behind it the live picture — the cut arrives as a wipe
+    float dirk = bh(1.7, ph); float pos = fr*1.15 - .05; float q = dirk < .25 ? uv.x : dirk < .5 ? 1.-uv.x : dirk < .75 ? uv.y : 1.-uv.y;
+    bool live = q < pos; vec3 held = texture(tPrev, vUv).rgb; col = live ? base : held;
+    float d = abs(q - pos); col = mix(col, P3, (1.-smoothstep(0., 2.5*px, d))*.95); col = mix(col, P2, exp(-d*uRes.y*.05)*.25); }
+  else if(m==4){ // ECHO FRAME: a window holds the frame from the moment it opened (a still of a beat ago) over the live picture; it re-opens somewhere else every beat
+    float w = .3 + bh(1.9, ph)*.35, h = .2 + bh(2.9, ph)*.35; float x0 = bh(3.1, ph)*(1.-w), y0 = bh(4.1, ph)*(1.-h);
+    bool in_ = uv.x > x0 && uv.x < x0+w && uv.y > y0 && uv.y < y0+h; vec3 held = texture(tPrev, vUv).rgb;
+    col = in_ ? (fr < .04 ? base : mix(held, gmap(luma(held), uPalA), .35)) : base;
+    float e = min(min(abs(uv.x-x0), abs(uv.x-x0-w))*uRes.x, min(abs(uv.y-y0), abs(uv.y-y0-h))*uRes.y); if(in_) col = mix(col, P3, (1.-smoothstep(0.,1.5,e))*.9); }
+  else if(m==5){ // SPOTLIGHT: a hard-edged circle of light on a dark stage, moving per beat; a kick throws the whole frame open
+    vec2 c = vec2(.2 + bh(1.3, ph)*.6, .25 + bh(2.7, ph)*.5); float r = .16 + high*.1 + bh(3.3, ph)*.1; float d = length((uv - c)*vec2(asp, 1.));
+    float inside = 1.-smoothstep(r, r + 2.*px, d); float open = step(.55, kick)*kick; vec3 dark = mix(P0, gmap(l, uPalA), .25)*.4;
+    col = mix(dark, base, max(inside, open)); col += P3*exp(-abs(d-r)*uRes.y*.1)*.2*(1.-open); }
+  else if(m==6){ // SLICE SHIFT: the frame in horizontal slabs, each pushed sideways by its own amount for the first part of the beat, then everything snaps back into place
+    float n = 5. + floor(bh(1.1, ph)*5.); float si = floor(uv.y*n); float live = fr < .45 ? 1. : 0.; float amt = (bh(si*1.7+2.2, ph)-.5)*.3*live*(1.-fr/.45);
+    vec2 su = vec2(fract(uv.x + amt), uv.y); col = texture(tBase, su).rgb; float gap = step(fract(uv.y*n), 1.5*px*n); col = mix(col, P3, gap*live*.6); }
+  else if(m==7){ // MIRROR SNAP: the picture folds over an axis that jumps each beat; on kicks it folds both ways
+    float ax = .3 + bh(1.5, ph)*.4, ay = .3 + bh(2.5, ph)*.4; bool flipX = bh(3.5, ph) < .5; vec2 mu = uv;
+    if(flipX ? uv.x > ax : uv.x < ax) mu.x = 2.*ax - uv.x; if(kick > .5 && uv.y > ay) mu.y = 2.*ay - uv.y;
+    col = texture(tBase, clamp(mu, 0., 1.)).rgb; float e = abs(uv.x-ax)*uRes.x; col = mix(col, P3, (1.-smoothstep(0.,1.2,e))*.7); }
+  else if(m==8){ // ZOOM LADDER: the same picture nested three times, each level zoomed in; the ladder breathes with the kick
+    float k = 1. + kick*.25; vec2 cz = vec2(.5 + (bh(1.2, ph)-.5)*.3, .5 + (bh(2.2, ph)-.5)*.3);
+    float s1 = .66, s2 = .4; vec2 d = abs(uv - .5); vec3 c0 = base; vec3 c1 = texture(tBase, clamp((uv-.5)/s1*1./ (1.+.4*k) + cz, 0., 1.)).rgb; vec3 c2 = texture(tBase, clamp((uv-.5)/s2*1./(1.+1.2*k) + cz, 0., 1.)).rgb;
+    col = c0; float e = 0.; if(d.x < s1*.5 && d.y < s1*.5){ col = mix(c1, gmap(luma(c1), uPalA), .25); e = max(e, 1.-smoothstep(0., 1.5, min(abs(d.x-s1*.5), abs(d.y-s1*.5))*uRes.y)); }
+    if(d.x < s2*.5 && d.y < s2*.5){ col = c2; e = max(e, 1.-smoothstep(0., 1.5, min(abs(d.x-s2*.5), abs(d.y-s2*.5))*uRes.y)); } col = mix(col, P3, e*.9); }
+  else if(m==9){ // DOUBLE EXPOSE: the picture screened with a mirrored, palette-mapped copy of itself that slides on the beat
+    vec2 off = (vec2(bh(1.4, ph), bh(2.4, ph))-.5)*.35; vec2 du = clamp(vec2(1.-uv.x, uv.y) + off, 0., 1.); vec3 b2 = texture(tBase, du).rgb; vec3 g2 = gmap(clamp((luma(b2)-.05)*1.2,0.,1.), uPalA);
+    float w = .5 + bass*.3; col = 1. - (1.-base)*(1.-g2*w); }
+  else if(m==10){ // CHROMA LAG: red is now, green is the last frame, blue the one before — the colour comes apart wherever anything moves, by the bass
+    float a = (.004 + bass*.02)*(1.+kick); vec3 pv = texture(tPrev, vUv + vec2(a, 0.)).rgb; vec3 pv2 = texture(tPrev, vUv - vec2(a*1.6, a*.4)).rgb;
+    col = vec3(base.r, pv.g, pv2.b); col = mix(col, gmap(luma(col), uPalA), .2); }
+  else if(m==11){ // SHUTTER: horizontal slats that open on the kick and close again; closed slats show the picture crushed dark
+    float n = 7. + floor(bh(1.6, ph)*6.); float open = clamp(.12 + kick*1.2 + high*.35, 0., 1.); float f = fract(uv.y*n); bool on = f < open;
+    vec3 dark = mix(P0, gmap(l, uPalA), .3)*.45; col = on ? base : dark; col = mix(col, P3, (1.-smoothstep(0., 1.5*px*n, abs(f-open)))*.8); }
+  else if(m==12){ // BOUNCE: the picture shrunk to a tile that bounces around a dark stage, kicks launch it upward; a faint ghost fills the stage behind it
+    float s = .62 - kick*.06; float vx = .31 + bh(9.9, 0.)*.2; float xx = abs(fract(uTime*vx + uFx2Seed)*2.-1.)*(1.-s); float yy = (1.-s)*(1.-pow(abs(fract(ph*.5)*2.-1.), 1.6)) ;
+    vec2 tu = (uv - vec2(xx, yy))/s; bool in_ = tu.x > 0. && tu.x < 1. && tu.y > 0. && tu.y < 1.;
+    vec3 ghost = mix(P0, gmap(l, uPalA), .35)*.3; col = in_ ? texture(tBase, tu).rgb : ghost; if(in_){ float e = min(min(tu.x, 1.-tu.x), min(tu.y, 1.-tu.y))*s*uRes.y; col = mix(col, P3, (1.-smoothstep(0.,1.5,e))*.9); } }
   else if(m==14){ // PHOTOCOPY: a scanner bar sweeps down each bar; above it the page is frozen from the pass, below it the world is live
     float bar = fract(uFx2Ph); float frozen = step(bar, 1.-vUv.y) ; // bar sweeps from top (vUv.y=1) down
     vec3 live = base; float lb = clamp((l-.08)*1.35,0.,1.); vec3 copy = mix(P0, P3, step(.5 + (bayer(gl_FragCoord.xy)-.5)*.45, lb)); copy += (hash(vUv*uRes*.9)-.5)*.08;
