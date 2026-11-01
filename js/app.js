@@ -67,7 +67,7 @@ function resizeAll(w, h){ if (w === W && h === H) return; W = w; H = h; SC = Mat
   for (let i = 0; i < 2; i++){ gl.bindFramebuffer(gl.FRAMEBUFFER, fbo[i]); gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT); } gl.bindFramebuffer(gl.FRAMEBUFFER, null); patKey = -1; }
 function lumOf(src){ const c = mk(12, 20), x = c.getContext('2d'); try { x.drawImage(src, 0, 0, 12, 20); const d = x.getImageData(0, 0, 12, 20).data; let s = 0;
   for (let i = 0; i < d.length; i += 4) s += d[i]*.299 + d[i+1]*.587 + d[i+2]*.114; return clamp(s / (d.length / 4) / 255, .15, .85); } catch(e){ return .5; } }
-async function fitBitmap(src){ let w = src.width || src.videoWidth, h = src.height || src.videoHeight; const mx = 1100;
+async function fitBitmap(src, mx = 1100){ let w = src.width || src.videoWidth, h = src.height || src.videoHeight;
   if (Math.max(w, h) > mx){ const k = mx / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
   return createImageBitmap(src, {resizeWidth: w, resizeHeight: h, resizeQuality: 'medium'}); }
 function thumbOf(m){ const c = mk(72, 128); drawCover(c.getContext('2d'), m, 0, 0, 0, 72, 128, 1, 0, 0, false); return c.toDataURL('image/jpeg', .7); }
@@ -123,33 +123,47 @@ async function addGIF(file, isSample){
   if (frames.length < 2) return finish({type: 'image', frames, name: file.name, sample: !!isSample});
   return finish({type: 'clip', frames, name: file.name, kind: 'gif', sample: !!isSample, fps: 1000 / (g.frames[0].delay || 100)});
 }
-function addVideo(file, isSample){
+// Long footage is cut into parts: each part is its own item in the deck, so every part of the video gets used (not 24 frames from the whole thing).
+const LONG_CLIP = 14, PART_LEN = 13, MAX_PARTS = 24;
+function addVideo(file, isSample, onProgress){
   // Bursts: short runs of consecutive frames grabbed from random points in the clip, so cuts can land anywhere and still show real motion.
-  // Every wait here is capped: a clip whose metadata, data or seek events never fire must not stall the app.
+  // Every wait here is capped: a clip whose metadata, data or seek events never fire must not stall the app. Resolves to an array of items.
   return new Promise((res, rej) => {
     const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto';
     const url = URL.createObjectURL(file); v.src = url;
-    const frames = [], BURST = 6, BFPS = 15; let D = 0, settled = false;
+    const BURST = 6, BFPS = 15; let D = 0, settled = false;
     const close = () => { try { URL.revokeObjectURL(url); } catch(e){} try { v.src = ''; v.load(); } catch(e){} };
     const ok = m => { if (settled) return; settled = true; close(); res(m); };
     const fail = e => { if (settled) return; settled = true; close(); rej(e); };
     const once = (set, ms) => new Promise(r => { let fired = false; const go = v2 => { if (fired) return; fired = true; clearTimeout(tm); r(v2); }; const tm = setTimeout(() => go(true), ms); set(go); });
     // resolves true when the seek never landed; two stalls in a row means this clip will not seek at all
     const seekTo = t => once(go => { v.onseeked = () => go(false); try { v.currentTime = t; } catch(e){ go(true); } }, 2500);
-    let stalls = 0;
+    let stalls = 0, dead = false;
     const metaTimer = setTimeout(() => fail(new Error('timed out reading ' + file.name)), 15000);
+    const grab = async (bursts, mx) => { const frames = [];
+      for (const t0 of bursts){ if (dead) break; for (let i = 0; i < BURST; i++){
+        if (await seekTo(Math.min(D - .03, t0 + i / BFPS))){ if (++stalls >= 2){ dead = true; break; } } else stalls = 0;
+        try { frames.push(await fitBitmap(v, mx)); } catch(e){ /* one unreadable frame does not sink the clip */ } } }
+      return frames; };
     v.onloadedmetadata = async () => { clearTimeout(metaTimer); try { D = v.duration; if (!isFinite(D) || D <= 0){ D = 2; }
       if (v.readyState < 2) await once(go => { v.onloadeddata = go; }, 8000);
-      const total = Math.max(BURST, Math.min(state.clipFrames, Math.round(D * BFPS))), nB = Math.max(1, Math.round(total / BURST)), span = (BURST - 1) / BFPS;
-      let seed = 0; for (const ch of file.name) seed = (seed * 31 + ch.charCodeAt(0)) | 0; const r = mulberry32(seed || 1); const bursts = [];
-      for (let b = 0; b < nB; b++){ const lo = b / nB * D, hi = (b + 1) / nB * D; bursts.push(clamp(lo + r() * Math.max(0, hi - lo - span), 0, Math.max(0, D - span - .05))); }
-      grab: for (const t0 of bursts) for (let i = 0; i < BURST; i++){
-        if (await seekTo(Math.min(D - .03, t0 + i / BFPS))){ if (++stalls >= 2) break grab; } else stalls = 0;
-        try { frames.push(await fitBitmap(v)); } catch(e){ /* one unreadable frame does not sink the clip */ } }
-      // seeks stalled before any frame landed: salvage whatever the decoder is showing so the clip still exists
-      if (!frames.length){ try { frames.push(await fitBitmap(v)); } catch(e){} }
-      if (!frames.length) return fail(new Error('No readable frames in ' + file.name));
-      ok(finish({type: 'clip', frames, name: file.name, kind: 'video', sample: !!isSample, fps: BFPS, burst: BURST, bursts: nB})); } catch(e){ fail(e); } };
+      let seed = 0; for (const ch of file.name) seed = (seed * 31 + ch.charCodeAt(0)) | 0; const r = mulberry32(seed || 1); const span = (BURST - 1) / BFPS;
+      const place = (lo, hi, nB) => { const out = []; for (let b = 0; b < nB; b++){ const a = lo + b / nB * (hi - lo), z = lo + (b + 1) / nB * (hi - lo); out.push(clamp(a + r() * Math.max(0, z - a - span), 0, Math.max(0, D - span - .05))); } return out; };
+      if (D <= LONG_CLIP){
+        const total = Math.max(BURST, Math.min(state.clipFrames, Math.round(D * BFPS))), nB = Math.max(1, Math.round(total / BURST));
+        const frames = await grab(place(0, D, nB), 1100);
+        // seeks stalled before any frame landed: salvage whatever the decoder is showing so the clip still exists
+        if (!frames.length){ try { frames.push(await fitBitmap(v)); } catch(e){} }
+        if (!frames.length) return fail(new Error('No readable frames in ' + file.name));
+        return ok([finish({type: 'clip', frames, name: file.name, kind: 'video', sample: !!isSample, fps: BFPS, burst: BURST, bursts: nB})]); }
+      // long footage: parts of ~13 s, two or more bursts each, a little smaller per frame so a 5-minute video stays light on memory
+      const nP = clamp(Math.round(D / PART_LEN), 2, MAX_PARTS), nB = clamp(Math.round(state.clipFrames / 2 / BURST), 2, 4), out = [];
+      for (let k = 0; k < nP && !dead; k++){ onProgress && onProgress(k + 1, nP);
+        const frames = await grab(place(k / nP * D, (k + 1) / nP * D, nB), 960);
+        if (frames.length) out.push(finish({type: 'clip', frames, name: file.name + ' · ' + (k + 1) + '/' + nP, src: file.name, part: k + 1, parts: nP, kind: 'video', sample: !!isSample, fps: BFPS, burst: BURST, bursts: Math.round(frames.length / BURST) || 1})); }
+      if (!out.length){ try { out.push(finish({type: 'clip', frames: [await fitBitmap(v)], name: file.name, kind: 'video', sample: !!isSample, fps: BFPS})); } catch(e){} }
+      if (!out.length) return fail(new Error('No readable frames in ' + file.name));
+      ok(out); } catch(e){ fail(e); } };
     v.onerror = () => { clearTimeout(metaTimer); fail(new Error('Could not read ' + file.name)); };
   });
 }
@@ -738,16 +752,16 @@ const SEQ_IDS = new Set(['cutRate','clipWeight','clipHold','flashCuts','minHold'
 function rebuildIf(id){ if (SEQ_IDS.has(id)) rebuild(); else if (!playing) frame(); }
 function renderThumbs(){ const box = $('#thumbs'); box.innerHTML = '';
   state.media.forEach((m, i) => { const d = document.createElement('div'); d.className = 'thumb'; d.style.backgroundImage = 'url(' + m.thumb + ')'; const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove');
-    x.onclick = () => { const [gone] = state.media.splice(i, 1); if (gone && gone.key) IDB.del('media', gone.key); renderThumbs(); rebuild(); }; d.append(x); if (m.type === 'clip'){ const v = document.createElement('span'); v.className = 'v'; v.textContent = m.kind === 'gif' ? 'GIF ' + m.frames.length : 'CLIP ' + (m.bursts || 1) + '×' + (m.burst || m.frames.length); d.append(v); } box.append(d); });
+    x.onclick = () => { const gone = state.media[i]; if (gone && gone.key && gone.parts){ state.media = state.media.filter(z => z.key !== gone.key); } else state.media.splice(i, 1); if (gone && gone.key) IDB.del('media', gone.key); renderThumbs(); rebuild(); }; if (m.parts) x.title = 'Remove the whole video (' + m.parts + ' parts)'; d.append(x); if (m.type === 'clip'){ const v = document.createElement('span'); v.className = 'v'; v.textContent = m.kind === 'gif' ? 'GIF ' + m.frames.length : m.parts ? 'PART ' + m.part + '/' + m.parts : 'CLIP ' + (m.bursts || 1) + '×' + (m.burst || m.frames.length); d.append(v); } box.append(d); });
   (state.failed || []).forEach(F => { const d = document.createElement('div'); d.className = 'thumb bad'; d.title = F.name + ' — did not load';
     const lab = document.createElement('span'); lab.className = 'v'; lab.textContent = F.name.slice(0, 14); d.append(lab);
     const rt = document.createElement('button'); rt.className = 'x rt'; rt.textContent = '↻'; rt.setAttribute('aria-label', 'Retry ' + F.name);
     rt.onclick = async () => { rt.textContent = '…'; const gen = state.libGen;
       try { const rows = await IDB.all('media') || []; const row = rows.find(r => r.key === F.key);
         if (!row) throw new Error('gone');
-        const m = await loadOne(new File([row.val.blob], row.val.name, {type: row.val.type})); m.key = F.key;
+        const ms = await loadOne(new File([row.val.blob], row.val.name, {type: row.val.type})); ms.forEach(m => m.key = F.key);
         if (gen !== state.libGen) return;
-        state.media.push(m); state.failed = state.failed.filter(z => z.key !== F.key); renderThumbs(); rebuild(); toast(F.name + ' loaded'); }
+        state.media.push(...ms); state.failed = state.failed.filter(z => z.key !== F.key); renderThumbs(); rebuild(); toast(F.name + ' loaded'); }
       catch(e){ rt.textContent = '↻'; toast(F.name + ' still will not decode'); } };
     const x = document.createElement('button'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Delete ' + F.name);
     x.onclick = () => { state.failed = state.failed.filter(z => z.key !== F.key); IDB.del('media', F.key); renderThumbs(); };
@@ -771,17 +785,19 @@ const IDB = {
   clear(store){ return this.tx(store, 'readwrite', os => os.clear()); },
   async all(store){ const rows = []; await this.tx(store, 'readonly', os => { const c = os.openCursor(); c.onsuccess = () => { const cur = c.result; if (cur){ rows.push({key: cur.key, val: cur.value}); cur.continue(); } }; }); return rows; },
 };
-async function loadOne(f){ if (/gif/i.test(f.type) || /\.gif$/i.test(f.name)) return addGIF(f); if (f.type.startsWith('video') || /\.(mp4|mov|webm)$/i.test(f.name)) return addVideo(f); return addImage(await createImageBitmap(f), f.name); }
+async function loadOne(f, onProgress){ if (/gif/i.test(f.type) || /\.gif$/i.test(f.name)) return [await addGIF(f)]; if (f.type.startsWith('video') || /\.(mp4|mov|webm)$/i.test(f.name)) return addVideo(f, false, onProgress); return [await addImage(await createImageBitmap(f), f.name)]; }
+// a long video can take a while to cut into parts: the time cap grows with the file (about 1 s per MB on top of 30 s)
+const loadCap = f => 30000 + Math.min(240000, (f.size || 0) / 1e6 * 1000);
 async function addFiles(files){ if (state.exporting){ toast('Export in progress — drop files after it finishes'); return; }
   const list = [...files].filter(f => /^(image|video)\//.test(f.type) || /\.(gif|mp4|mov|webm|png|jpe?g|webp)$/i.test(f.name)); if (!list.length) return;
   if (state.media.some(m => m.sample)) state.media = state.media.filter(m => !m.sample);
   toast('Reading ' + list.length + ' file' + (list.length > 1 ? 's' : '') + '…');
   const gen = state.libGen;
   let n = 0; for (const f of list){
-    try { const m = await loadOne(f);
+    try { const ms = await loadOne(f, (k, N) => toast('Cutting ' + f.name + ' into parts… ' + k + '/' + N));
       if (gen !== state.libGen) return; // footage was cleared while this import was running: drop it, do not resurrect it
-      m.key = Date.now() + '-' + (n++) + '-' + f.name; state.media.push(m);
-      await IDB.put('media', m.key, {name: f.name, type: f.type, blob: f, order: Date.now() + n}); }
+      const key = Date.now() + '-' + (n++) + '-' + f.name; ms.forEach(m => { m.key = key; state.media.push(m); }); if (ms.length > 1) toast(f.name + ': ' + ms.length + ' parts added');
+      await IDB.put('media', key, {name: f.name, type: f.type, blob: f, order: Date.now() + n}); }
     catch(e){ console.warn(e); toast('Skipped ' + f.name + ': the browser could not read it'); }
     if (gen !== state.libGen) return;
     renderThumbs(); }
@@ -956,8 +972,8 @@ async function boot(){
     for (const {key, val} of rows){ $('#badge').textContent = 'Loading your footage… ' + (++n) + '/' + rows.length + ' · ' + val.name;
       try { const f = new File([val.blob], val.name, {type: val.type});
         // hard cap per file: a clip that will not decode cannot hold up the whole app
-        const m = await Promise.race([loadOne(f), new Promise((_, rj) => setTimeout(() => rj(new Error('SLOW')), 30000))]);
-        m.key = key; state.media.push(m); restored++; }
+        const ms = await Promise.race([loadOne(f, (k, N) => { $('#badge').textContent = 'Loading your footage… ' + n + '/' + rows.length + ' · ' + val.name + ' part ' + k + '/' + N; }), new Promise((_, rj) => setTimeout(() => rj(new Error('SLOW')), loadCap(f)))]);
+        ms.forEach(m => { m.key = key; state.media.push(m); }); restored++; }
       catch(e){ // never delete the user's footage here: a file that would not decode this time is kept and shown as retryable
         slow++; console.warn('restore failed, keeping the file:', val.name, e); state.failed.push({key, name: val.name}); } }
     if (slow) setTimeout(() => toast(slow + ' file' + (slow > 1 ? 's' : '') + ' did not load — still in your library, tap ↻ to retry'), 1200); } catch(e){ console.warn(e); }
