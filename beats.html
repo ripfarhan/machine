@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ganYEET bars</title>
+<link rel="stylesheet" href="css/fonts.css">
+<style>
+:root{
+  --ink:#f4ede2; --dim:#a79cab; --faint:#6d6172; --bg:#140f17; --rubber:#211a26; --rubber2:#2c2333; --edge:#3a2f42; --pink:#ff2e88; --brass:#ffc53d; --voice:#2ce5c8;
+  --kendrick:#ff6a5c; --cole:#ffb547; --smino:#b896ff; --seige:#62bdff; --stan:#ff5fae; --vijay:#62e08f; --kai:#ddd6c9;
+  --f:'Barlow Condensed','Arial Narrow','Roboto Condensed',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:17px;line-height:1.25}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--rubber2);border:1px solid var(--edge);border-radius:5px;padding:7px 12px;cursor:pointer;font-weight:500}
+button:hover{border-color:var(--dim)} button:disabled{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--voice);outline-offset:2px}
+button.lit{background:var(--pink);border-color:var(--pink);color:#160510;font-weight:600}
+select{background:var(--rubber2);border:1px solid var(--edge);border-radius:5px;padding:6px 8px;width:100%}
+input[type=range]{width:100%;accent-color:var(--pink);height:20px}
+h2{font-size:18px;font-weight:600;margin-bottom:6px}
+small,.dim{color:var(--dim);font-size:15px}
+#app{height:100vh;min-height:680px;display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;padding:8px}
+#top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#logo{font-weight:800;font-size:26px;transform:scaleY(1.28);margin-right:8px;white-space:nowrap}
+#play{min-width:92px;background:var(--ink);color:#140f17;border-color:var(--ink);font-weight:600}
+.spin{display:inline-flex;align-items:center;gap:4px}
+.spin b{min-width:58px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+.spin button{padding:5px 9px}
+.sp{flex:1}
+#main{display:grid;grid-template-columns:minmax(250px,21vw) minmax(0,1fr) minmax(270px,23vw);gap:8px;min-height:0}
+.col{background:var(--rubber);border-radius:8px;padding:12px;min-height:0;overflow:auto}
+#centre{display:grid;grid-template-rows:minmax(120px,1fr) auto minmax(150px,.9fr) auto auto;gap:8px;min-height:0}
+/* the word: stretched to fill its box, the way the reels stretch their type */
+#stage{position:relative;overflow:hidden;background:var(--bg);border-radius:8px;min-height:0}
+#word{position:absolute;left:0;top:0;transform-origin:0 0;font-weight:800;line-height:1;white-space:nowrap;text-transform:lowercase}
+#bar{position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--rubber2)} #barFill{height:100%;width:0;background:var(--pink)}
+#sing{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:center;padding:0 2px}
+#chord{font-size:34px;font-weight:800;line-height:1;white-space:nowrap}
+#chord i{font-style:normal;font-size:18px;font-weight:500;color:var(--dim);margin-left:10px}
+#notes{display:grid;grid-template-columns:repeat(12,1fr);gap:3px}
+.nt{text-align:center;padding:5px 0;border-radius:4px;background:var(--bg);color:var(--faint);font-weight:500;border:2px solid transparent}
+.nt.sc{color:var(--dim);background:var(--rubber2)} .nt.ch{color:#1c1405;background:var(--brass);font-weight:600} .nt.me{border-color:var(--voice)}
+#singTxt{grid-column:1/-1;color:var(--dim);font-size:15px;min-height:19px}
+#grid{background:var(--bg);border-radius:8px;min-height:0;overflow:hidden} #grid canvas{display:block;width:100%;height:100%}
+#pads{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.pad{height:clamp(62px,9vh,92px);font-size:21px;font-weight:600;border-radius:8px;background:var(--rubber2);box-shadow:inset 0 -5px 0 rgba(0,0,0,.28);text-align:left;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px}
+.pad small{font-size:13px;font-weight:500;color:var(--dim)}
+.pad.lit small{color:#30071c} .pad.next{border-color:var(--brass);box-shadow:inset 0 0 0 2px var(--brass)}
+.pad:active{transform:translateY(2px);box-shadow:none}
+#perf{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:14px;align-items:center}
+.btns{display:flex;gap:5px}
+#dials{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+#dials label{display:block;font-size:15px;color:var(--dim)}
+.who{display:grid;grid-template-columns:62px minmax(0,1fr) 34px;align-items:center;gap:6px;padding:1px 0}
+.who label{font-size:15px;white-space:nowrap;overflow:hidden;cursor:pointer}
+.who output{text-align:right;font-size:14px;color:var(--dim);font-variant-numeric:tabular-nums}
+.role{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;align-items:center;padding:4px 0;border-top:1px solid var(--edge)}
+.role b{display:block;font-weight:500;font-size:14px;color:var(--dim)}
+.role span{display:block;font-weight:600;line-height:1.1;font-size:16px}
+.role em{font-style:normal;font-size:14px;font-weight:500}
+.role button{padding:3px 7px;font-size:14px}
+.role button.kept{border-color:var(--brass);color:var(--brass)}
+#vu{height:12px;background:var(--bg);border-radius:3px;overflow:hidden;margin:6px 0} #vuF{height:100%;width:0;background:var(--voice)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.row label{display:flex;gap:6px;align-items:center;cursor:pointer}
+#rec{width:100%;height:58px;font-size:22px;font-weight:600;background:var(--rubber2);margin:8px 0;border-radius:8px}
+#rec.on{background:var(--pink);color:#160510;border-color:var(--pink)}
+.take{border-top:1px solid var(--edge);padding:8px 0}
+.take .row button{padding:4px 8px;font-size:15px}
+#msg{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);background:var(--ink);color:#140f17;padding:8px 14px;border-radius:6px;font-weight:500;display:none;z-index:9;max-width:90vw}
+#saved{max-width:170px}
+@media (max-width:980px){
+  #app{height:auto} #main{grid-template-columns:1fr} #centre{order:-1;grid-template-rows:150px auto 170px auto auto} #pads{grid-template-columns:repeat(3,1fr)} #perf{grid-template-columns:1fr} #dials{grid-template-columns:repeat(2,1fr)}
+}
+@media (prefers-reduced-motion:reduce){ .pad:active{transform:none} }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="top">
+    <div id="logo">ganYEET bars</div>
+    <button id="play">Play</button>
+    <button id="new" title="N">New beat</button>
+    <span class="spin" title="Tempo you feel. Trap and drill feel half their club tempo: 72 here is 144 there."><small>Tempo</small><button id="bpmD" aria-label="Slower">−</button><b id="bpm">–</b><button id="bpmU" aria-label="Faster">+</button></span>
+    <span class="spin" title="Move the whole beat to fit your voice"><small>Key</small><button id="keyD" aria-label="Key down">−</button><b id="key">–</b><button id="keyU" aria-label="Key up">+</button></span>
+    <div class="sp"></div>
+    <button id="save">Save beat</button>
+    <select id="saved" aria-label="Saved beats"><option value="">Saved beats</option></select>
+    <button id="export">Save song as WAV</button>
+  </header>
+  <div id="main">
+    <aside class="col" id="left">
+      <h2>The mix</h2>
+      <small>How much of each artist goes into the next new beat. Tap a name to hear only that artist.</small>
+      <div id="whos" style="margin:8px 0"></div>
+      <button id="even" style="width:100%;margin-bottom:10px">Even mix</button>
+      <h2>What this beat took from who</h2>
+      <div id="roles"></div>
+      <div class="row" style="margin-top:8px"><label><input type="checkbox" id="showB"> Show the beat switch instead</label></div>
+    </aside>
+    <main id="centre">
+      <div id="stage"><div id="word">press play</div><div id="bar"><div id="barFill"></div></div></div>
+      <div id="sing"><div id="chord">–</div><div id="notes"></div><div id="singTxt"></div></div>
+      <div id="grid"><canvas id="gridCv"></canvas></div>
+      <div id="pads"></div>
+      <div id="perf">
+        <div class="btns"><label class="dim" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="auto" checked> Follow the song</label></div>
+        <div class="btns"><button data-mute="drums">Drop drums</button><button data-mute="bass">Drop bass</button><button data-mute="keys">Drop keys</button></div>
+        <div id="dials">
+          <label>Hit<input type="range" min="0" max="100" value="55" data-macro="energy"></label>
+          <label>Bounce<input type="range" min="0" max="200" value="100" data-macro="bounce"></label>
+          <label>Dust<input type="range" min="0" max="100" value="25" data-macro="y"></label>
+          <label>Room<input type="range" min="0" max="100" value="50" data-macro="space"></label>
+        </div>
+      </div>
+    </main>
+    <aside class="col" id="right">
+      <h2>Your voice</h2>
+      <button id="mic" style="width:100%">Turn on mic</button>
+      <div id="micBox" hidden>
+        <select id="micSel" aria-label="Microphone" style="margin-top:6px"></select>
+        <div id="vu"><div id="vuF"></div></div>
+        <div class="row"><label><input type="checkbox" id="mon"> Hear myself</label><small id="lat"></small></div>
+        <small id="monHint">Wear wired headphones first. Speakers feed back, and Bluetooth arrives too late to sing to.</small>
+        <div class="row" style="margin-top:8px"><small>Voice sound</small><select id="fx" style="flex:1;width:auto"><option value="dry">Dry</option><option value="room" selected>Small room</option><option value="slap">Slap echo</option><option value="big">Big hall</option></select></div>
+        <label class="dim" style="display:block">Beat level<input type="range" min="0" max="100" value="100" id="beatG"></label>
+        <label class="dim" style="display:block">Voice level<input type="range" min="0" max="150" value="100" id="voxG"></label>
+        <div class="row"><label><input type="checkbox" id="listens" checked> Beat listens to me</label></div>
+        <small>While you sing, the keys thin out and make room. When you stop, the hook answers.</small>
+      </div>
+      <button id="rec">Record</button>
+      <small id="recTxt">Records from the next bar, voice and beat together.</small>
+      <div id="takes" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:14px"><label class="dim"><input type="checkbox" id="steady"> Steady audio (use if it crackles, adds delay)</label></div>
+    </aside>
+  </div>
+</div>
+<div id="msg" role="status"></div>
+<script src="js/engine/00-util.js"></script>
+<script src="js/engine/10-dsp.js"></script>
+<script src="js/engine/20-drums.js"></script>
+<script src="js/engine/21-synth.js"></script>
+<script src="js/engine/22-fx.js"></script>
+<script src="js/engine/23-fx2.js"></script>
+<script src="js/engine/24-synth2.js"></script>
+<script src="js/engine/25-inst.js"></script>
+<script src="js/engine/30-mixer.js"></script>
+<script src="js/engine/40-theory.js"></script>
+<script src="js/engine/50-parts.js"></script>
+<script src="js/engine/51-parts2.js"></script>
+<script src="js/engine/52-acid.js"></script>
+<script src="js/engine/55-composer.js"></script>
+<script src="js/engine/56-moves.js"></script>
+<script src="js/engine/58-target.js"></script>
+<script src="js/engine/59-norm.js"></script>
+<script src="js/engine/60-worlds.js"></script>
+<script src="js/engine/61-worlds2.js"></script>
+<script src="js/engine/62-ghosts.js"></script>
+<script src="js/engine/63-ao.js"></script>
+<script src="js/engine/80-engine.js"></script>
+<script src="js/beats/10-sounds.js"></script>
+<script src="js/beats/20-dna.js"></script>
+<script src="js/beats/30-parts.js"></script>
+<script src="js/beats/40-composer.js"></script>
+<script src="js/beats/host.js"></script>
+<script src="js/beats/app.js"></script>
+</body>
+</html>
