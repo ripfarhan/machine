@@ -78,8 +78,7 @@ function AWZ_B_VOICES(A){
       const J = 1 + (r() - .5) * .16;
       if (k === 'grinder'){ this.len = .13 * J * sr; this.rate = 160 / sr; this.a.set(6200 * J, 1.4, sr); this.b.set(3100 * J, 1.1, sr); }
       else if (k === 'bottle'){ this.len = .16 * J * sr; this.rate = 90 / sr; this.a.set(1500 * J, 2.2, sr); this.b.set(3100 * J, 1.4, sr); this.f = 900 * J; }
-      else if (k === 'cowbell'){ const t = i / sr; this.p1 += 540 / sr; if (this.p1 >= 1) this.p1 -= 1; this.p2 += 800 / sr; if (this.p2 >= 1) this.p2 -= 1; const x = (this.p1 < .5 ? 1 : -1) + (this.p2 < .5 ? 1 : -1); this.a.run(x * .5); this.b.run(x * .5); y = (this.a.bp * .9 + this.b.bp * .4) * (.72 * Math.exp(-t / .009) + .28 * Math.exp(-t / .085)) * Math.min(1, i / 24); }
-        else if (k === 'clink'){ this.len = .24 * sr; this.a.set(2840 * J, 34, sr); this.b.set(5210 * J, 30, sr); this.c.set(7360 * J, 24, sr); }
+      else if (k === 'clink'){ this.len = .24 * sr; this.a.set(2840 * J, 34, sr); this.b.set(5210 * J, 30, sr); this.c.set(7360 * J, 24, sr); }
       else if (k === 'crumple'){ this.len = .09 * J * sr; this.rate = 300 / sr; this.a.set(1400 * J, .9, sr); this.b.set(3600 * J, .8, sr); }
       else if (k === 'cowbell'){ this.len = .34 * sr; this.a.set(1750, 1.4, sr); this.b.set(3300, 1.6, sr); this.p1 = 0; this.p2 = 0; }
       else { this.len = .16 * sr; this.f = (ev.freq || 245) * J; this.a.set(2100, .8, sr); } }
