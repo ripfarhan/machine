@@ -1,0 +1,5 @@
+// level of each track per section and stems as WAV: node tools/beats/solo.js SCENE seed outdir
+const R = require('./render.js'), A = R.A, sr = R.sr, [scene, seed, dir] = process.argv.slice(2), fs = require('fs');
+const e0 = new A.BeatEngine(sr), g = scene.startsWith('S_') ? e0.loadScene(scene, +seed) : (x => { e0.load(x); return x; })(A.makeGenome(scene, +seed)); const slots = e0.slots.slice(); console.log(scene, g.bpm, A.NOTE[g.tonic], g.mode, g.family, 'loop', e0.comp.loop.chords.map(c => c.name).join(' '));
+const db = x => (20 * Math.log10(x + 1e-9)).toFixed(1).padStart(6);
+for (const s of slots){ const r = R.render({secs: 20, scene, seed: +seed, fromBars: 24, solo: s}); let pk = 0, ss = 0; for (let i = 0; i < r.L.length; i++){ const a = Math.abs(r.L[i]); if (a > pk) pk = a; ss += r.L[i] * r.L[i]; } if (pk < 1e-3) continue; console.log(s.padEnd(7), r.g.patches[s].padEnd(12), 'peak', db(pk), 'rms', db(Math.sqrt(ss / r.L.length))); if (dir){ fs.mkdirSync(dir, {recursive: true}); R.wav(dir + '/' + scene + '_' + s + '.wav', r.L, r.R); } }
