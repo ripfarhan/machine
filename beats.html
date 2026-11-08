@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ganYEET bars</title>
+<meta name="description" content="Live experimental hip-hop beats made from math. Pick a scene, press play, sing over it.">
 <link rel="stylesheet" href="css/fonts.css">
 <style>
 :root{
   --ink:#f4ede2; --dim:#a79cab; --faint:#6d6172; --bg:#140f17; --rubber:#211a26; --rubber2:#2c2333; --edge:#3a2f42; --pink:#ff2e88; --brass:#ffc53d; --voice:#2ce5c8;
-  --kendrick:#ff6a5c; --cole:#ffb547; --smino:#b896ff; --seige:#62bdff; --stan:#ff5fae; --vijay:#62e08f; --kai:#ddd6c9;
   --f:'Barlow Condensed','Arial Narrow','Roboto Condensed',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -45,24 +45,20 @@ small,.dim{color:var(--dim);font-size:15px}
 .nt.sc{color:var(--dim);background:var(--rubber2)} .nt.ch{color:#1c1405;background:var(--brass);font-weight:600} .nt.me{border-color:var(--voice)}
 #singTxt{grid-column:1/-1;color:var(--dim);font-size:15px;min-height:19px}
 #grid{background:var(--bg);border-radius:8px;min-height:0;overflow:hidden} #grid canvas{display:block;width:100%;height:100%}
-#pads{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+#pads{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .pad{height:clamp(62px,9vh,92px);font-size:21px;font-weight:600;border-radius:8px;background:var(--rubber2);box-shadow:inset 0 -5px 0 rgba(0,0,0,.28);text-align:left;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px}
 .pad small{font-size:13px;font-weight:500;color:var(--dim)}
 .pad.lit small{color:#30071c} .pad.next{border-color:var(--brass);box-shadow:inset 0 0 0 2px var(--brass)}
 .pad:active{transform:translateY(2px);box-shadow:none}
-#perf{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:14px;align-items:center}
+#perf{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center}
 .btns{display:flex;gap:5px}
 #dials{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 #dials label{display:block;font-size:15px;color:var(--dim)}
-.who{display:grid;grid-template-columns:62px minmax(0,1fr) 34px;align-items:center;gap:6px;padding:1px 0}
-.who label{font-size:15px;white-space:nowrap;overflow:hidden;cursor:pointer}
-.who output{text-align:right;font-size:14px;color:var(--dim);font-variant-numeric:tabular-nums}
-.role{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px;align-items:center;padding:4px 0;border-top:1px solid var(--edge)}
-.role b{display:block;font-weight:500;font-size:14px;color:var(--dim)}
-.role span{display:block;font-weight:600;line-height:1.1;font-size:16px}
-.role em{font-style:normal;font-size:14px;font-weight:500}
-.role button{padding:3px 7px;font-size:14px}
-.role button.kept{border-color:var(--brass);color:var(--brass)}
+.scene{display:block;width:100%;text-align:left;margin:0 0 6px;padding:9px 11px;border-radius:7px}
+.scene b{display:block;font-size:20px;font-weight:600}
+.scene span{display:block;font-size:14px;color:var(--dim);line-height:1.2;margin-top:2px}
+.scene em{display:block;font-style:normal;font-size:13px;color:var(--faint);margin-top:3px}
+.scene.lit span,.scene.lit em{color:#30071c}
 #vu{height:12px;background:var(--bg);border-radius:3px;overflow:hidden;margin:6px 0} #vuF{height:100%;width:0;background:var(--voice)}
 .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
 .row label{display:flex;gap:6px;align-items:center;cursor:pointer}
@@ -87,19 +83,14 @@ small,.dim{color:var(--dim);font-size:15px}
     <span class="spin" title="Tempo you feel. Trap and drill feel half their club tempo: 72 here is 144 there."><small>Tempo</small><button id="bpmD" aria-label="Slower">−</button><b id="bpm">–</b><button id="bpmU" aria-label="Faster">+</button></span>
     <span class="spin" title="Move the whole beat to fit your voice"><small>Key</small><button id="keyD" aria-label="Key down">−</button><b id="key">–</b><button id="keyU" aria-label="Key up">+</button></span>
     <div class="sp"></div>
-    <button id="save">Save beat</button>
-    <select id="saved" aria-label="Saved beats"><option value="">Saved beats</option></select>
+    <button id="share">Copy link to this beat</button>
     <button id="export">Save song as WAV</button>
   </header>
   <div id="main">
     <aside class="col" id="left">
-      <h2>The mix</h2>
-      <small>How much of each artist goes into the next new beat. Tap a name to hear only that artist.</small>
-      <div id="whos" style="margin:8px 0"></div>
-      <button id="even" style="width:100%;margin-bottom:10px">Even mix</button>
-      <h2>What this beat took from who</h2>
-      <div id="roles"></div>
-      <div class="row" style="margin-top:8px"><label><input type="checkbox" id="showB"> Show the beat switch instead</label></div>
+      <h2>Scene</h2>
+      <div id="scenes"></div>
+      <small>Same engine as Maut ki Awaaz: every press of New beat is a new song in that scene. Math only, no samples.</small>
     </aside>
     <main id="centre">
       <div id="stage"><div id="word">press play</div><div id="bar"><div id="barFill"></div></div></div>
@@ -107,13 +98,12 @@ small,.dim{color:var(--dim);font-size:15px}
       <div id="grid"><canvas id="gridCv"></canvas></div>
       <div id="pads"></div>
       <div id="perf">
-        <div class="btns"><label class="dim" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="auto" checked> Follow the song</label></div>
-        <div class="btns"><button data-mute="drums">Drop drums</button><button data-mute="bass">Drop bass</button><button data-mute="keys">Drop keys</button></div>
+                <div class="btns"><button data-mute="drums">Drop drums</button><button data-mute="bass">Drop bass</button><button data-mute="keys">Drop keys</button></div>
         <div id="dials">
-          <label>Hit<input type="range" min="0" max="100" value="55" data-macro="energy"></label>
-          <label>Bounce<input type="range" min="0" max="200" value="100" data-macro="bounce"></label>
-          <label>Dust<input type="range" min="0" max="100" value="25" data-macro="y"></label>
-          <label>Room<input type="range" min="0" max="100" value="50" data-macro="space"></label>
+          <label title="Dense and aggressive at the right, sparse and tender at the left">Hard to open<input type="range" min="0" max="100" value="50" data-dial="hard"></label>
+          <label title="How syncopated the kick is and how much swing">Bounce<input type="range" min="0" max="100" value="50" data-dial="bounce"></label>
+          <label title="Drive, tape and grit; the sub stays clean">Dirt<input type="range" min="0" max="100" value="30" data-dial="dirt"></label>
+          <label>Room<input type="range" min="0" max="100" value="45" data-dial="space"></label>
         </div>
       </div>
     </main>
@@ -129,7 +119,7 @@ small,.dim{color:var(--dim);font-size:15px}
         <label class="dim" style="display:block">Beat level<input type="range" min="0" max="100" value="100" id="beatG"></label>
         <label class="dim" style="display:block">Voice level<input type="range" min="0" max="150" value="100" id="voxG"></label>
         <div class="row"><label><input type="checkbox" id="listens" checked> Beat listens to me</label></div>
-        <small>While you sing, the keys thin out and make room. When you stop, the hook answers.</small>
+        <small>While you sing, the melody waits and the keys make room. When you stop, it comes back.</small>
       </div>
       <button id="rec">Record</button>
       <small id="recTxt">Records from the next bar, voice and beat together.</small>
@@ -161,10 +151,9 @@ small,.dim{color:var(--dim);font-size:15px}
 <script src="js/engine/62-ghosts.js"></script>
 <script src="js/engine/63-ao.js"></script>
 <script src="js/engine/80-engine.js"></script>
-<script src="js/beats/10-sounds.js"></script>
-<script src="js/beats/20-dna.js"></script>
-<script src="js/beats/30-parts.js"></script>
-<script src="js/beats/40-composer.js"></script>
+<script src="js/beats/10-voices.js"></script>
+<script src="js/beats/20-scenes.js"></script>
+<script src="js/beats/30-engine.js"></script>
 <script src="js/beats/host.js"></script>
 <script src="js/beats/app.js"></script>
 </body>

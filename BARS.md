@@ -1,14 +1,15 @@
 # ganYEET bars
 
-Live rap beats you can sing over. Open `beats.html` in Chrome or Edge. It lives next to Maut ki Awaaz and shares its engine files without changing them.
+Live experimental hip-hop beats made from math, to sing over. Open `beats.html` in Chrome or Edge. It runs on the Maut ki Awaaz engine files without changing them.
 
-1. **Play.** Press **New beat** until one feels right. Tap an artist's name to hear only them, or set the sliders. **Change** swaps one part, **Keep** holds it for the next new beat.
-2. **Key** and **Tempo** move the beat to your voice.
-3. Pads or keys 1–6 jump to a section on the next bar. Untick **Follow the song** to stay on one section.
-4. **Turn on mic**, wired headphones, **Hear myself**. The yellow notes are safe on the current chord.
-5. **Record** starts on the next bar. Each take saves as mix, dry vocal (24-bit) or beat. If the vocal sits late or early, move it with the slider.
-6. **Save beat** keeps it here; the page address also holds it. **Save song as WAV** renders the whole form.
+1. Pick a scene: Dust, Wonky, Blown, Haze, Float or Yatra. Press **Play**. **New beat** makes a new song in that scene.
+2. **Tempo** and **Key** move the beat to your voice.
+3. Pads or keys 1–5: Verse, Hook, Break, Drop, Outro. They land on the next bar.
+4. Dials: **Hard to open**, **Bounce**, **Dirt**, **Room**.
+5. **Turn on mic** with wired headphones and **Hear myself**. While you sing, the melody waits.
+6. **Record** starts on the next bar. Save each take as mix, dry vocal or beat.
+7. **Copy link to this beat** shares the exact beat; **Save song as WAV** renders the whole song.
 
-Keys: Space play, N new beat, R record, 1–6 sections.
+Keys: Space play, N new beat, R record, 1–5 sections.
 
-For developers: `js/beats/` engine and screen · `tools/beats/render.js` offline render · `check.js` engine checks · `browser-test.js` headless page test · `measure.py` balance · `research/10-rap.md` sources.
+For developers: `js/beats/` (voices, scenes, engine, host, screen) · `tools/beats/render.js` offline render · `solo.js` per-track levels · `browser-test.js` headless page test · `measure.py` balance.
