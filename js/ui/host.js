@@ -37,10 +37,13 @@ class AwaazProcessor extends AudioWorkletProcessor {
 registerProcessor('awaaz', AwaazProcessor);`; }
 function awzDataURL(src){ const bytes = new TextEncoder().encode(src); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return 'data:application/javascript;base64,' + btoa(bin); }
 
+// iPhone: the ring/silent switch mutes Web Audio unless the page plays as media. Ask for the playback session and keep a silent media
+// element playing; both must happen inside the tap that starts audio.
+function awzUnlockIOS(){ try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e){} try { if (window.__awzSilent) { window.__awzSilent.play().catch(() => {}); return; } const sr = 8000, n = sr, b = new ArrayBuffer(44 + n * 2), v = new DataView(b), w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }; w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true); const a = document.createElement('audio'); a.src = URL.createObjectURL(new Blob([b], {type: 'audio/wav'})); a.loop = true; a.setAttribute('playsinline', ''); a.setAttribute('x-webkit-airplay', 'deny'); a.play().catch(() => {}); window.__awzSilent = a; } catch (e){} }
 class AwaazHost {
   constructor(){ this.ctx = null; this.node = null; this.handlers = []; this.recChunks = null; this.src = null; this.url = null; this.playing = false; this.tsFilt = null; this.avOffset = 0; }
   on(fn){ this.handlers.push(fn); }
-  async start(){ const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C({latencyHint: 'playback', sampleRate: 48000});
+  async start(){ awzUnlockIOS(); const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C({latencyHint: 'playback', sampleRate: 48000});
     this.src = awzWorkletSource(); this.url = awzDataURL(this.src);
     try { await this.ctx.audioWorklet.addModule(this.url); }
     catch (err){ const blob = URL.createObjectURL(new Blob([this.src], {type: 'application/javascript'})); await this.ctx.audioWorklet.addModule(blob); this.url = blob; }

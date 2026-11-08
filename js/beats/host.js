@@ -32,11 +32,14 @@ class BarsProcessor extends AudioWorkletProcessor {
 registerProcessor('bars', BarsProcessor);`; }
 function barsDataURL(src){ const bytes = new TextEncoder().encode(src); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return 'data:application/javascript;base64,' + btoa(bin); }
 
+// iPhone: the ring/silent switch mutes Web Audio unless the page plays as media. Ask for the playback session and keep a silent media
+// element playing; both must happen inside the tap that starts audio.
+function awzUnlockIOS(){ try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e){} try { if (window.__awzSilent) { window.__awzSilent.play().catch(() => {}); return; } const sr = 8000, n = sr, b = new ArrayBuffer(44 + n * 2), v = new DataView(b), w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }; w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true); const a = document.createElement('audio'); a.src = URL.createObjectURL(new Blob([b], {type: 'audio/wav'})); a.loop = true; a.setAttribute('playsinline', ''); a.setAttribute('x-webkit-airplay', 'deny'); a.play().catch(() => {}); window.__awzSilent = a; } catch (e){} }
 class BarsHost {
   constructor(){ this.ctx = null; this.node = null; this.handlers = []; this.tsFilt = null; this.micStream = null; this.micSrc = null; this.chunks = null; this.recDone = null; }
   on(fn){ this.handlers.push(fn); }
   emit(m){ for (const h of this.handlers) h(m); }
-  async start(steady){ const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C({latencyHint: steady ? 'playback' : 'interactive', sampleRate: 48000}); this.src = barsWorkletSource();
+  async start(steady){ awzUnlockIOS(); const C = window.AudioContext || window.webkitAudioContext; this.ctx = new C({latencyHint: steady ? 'playback' : 'interactive', sampleRate: 48000}); this.src = barsWorkletSource();
     const blob = URL.createObjectURL(new Blob([this.src], {type: 'application/javascript'})); try { await this.ctx.audioWorklet.addModule(blob); this.url = blob; } catch (err){ this.url = barsDataURL(this.src); await this.ctx.audioWorklet.addModule(this.url); }
     this.node = new AudioWorkletNode(this.ctx, 'bars', {numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 1, channelCountMode: 'explicit'}); this.node.connect(this.ctx.destination);
     this.node.port.onmessage = ev => this.recv(ev.data); this.node.onprocessorerror = () => this.emit({type: 'error', msg: 'The audio engine stopped.'}); await this.ctx.resume(); }
