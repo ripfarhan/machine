@@ -217,14 +217,12 @@
           caches = {};
           self.postMessage({ type: 'analysis', token: m.token, an: { f0: an.f0, midi: an.midi, conf: an.conf, rms: an.rms, hop: an.hop, frames: an.frames, sr: an.sr } });
         } else if (m.type === 'render') {
-          const res = [], tr = [];
           for (const id of Object.keys(caches)) if (!m.voices.some(v => v.id === id)) delete caches[id];
-          for (const v of m.voices) {
+          // one message per voice, lead first, so the main vocal updates before the stacks are done
+          m.voices.forEach((v, i) => {
             const patches = D.renderVoice(prep, v, caches[v.id] || (caches[v.id] = {}));
-            for (const p of patches) tr.push(p.data.buffer);
-            res.push({ id: v.id, patches });
-          }
-          self.postMessage({ type: 'rendered', token: m.token, seq: m.seq, res }, tr);
+            self.postMessage({ type: 'rendered', token: m.token, seq: m.seq, id: v.id, patches, last: i === m.voices.length - 1 }, patches.map(p => p.data.buffer));
+          });
         }
       } catch (err) { self.postMessage({ type: 'error', message: String((err && err.stack) || err) }); }
     };
@@ -428,14 +426,13 @@
     worker.postMessage({ type: 'render', token: S.token, seq: ++S.seq, voices });
   }
   function onRendered(m) {
+    const buf = S.bufs[m.id];
     let changed = false;
-    for (const r of m.res) {
-      const buf = S.bufs[r.id]; if (!buf) continue;
-      const ch = buf.getChannelData(0);
-      for (const p of r.patches) { ch.set(p.data, p.start); changed = true; }
+    if (buf) { const ch = buf.getChannelData(0); for (const p of m.patches) { ch.set(p.data, p.start); changed = true; } }
+    if (m.last) {
+      S.rendering = false; $('status').classList.remove('work');
+      if (S.renderDirty) { S.renderDirty = false; doRender(); }
     }
-    S.rendering = false; $('status').classList.remove('work');
-    if (S.renderDirty) { S.renderDirty = false; doRender(); }
     if (changed && S.play.playing && !rec) play(currentPos());
   }
   const renderIdle = () => new Promise(res => { const chk = () => (S.rendering || S.renderDirty || renderPending) ? setTimeout(chk, 50) : res(); chk(); });
@@ -577,9 +574,26 @@
     slider(s, Object.assign({ label: 'Vocal', min: -30, max: 12, step: 0.5, def: 0, fmt: dB }, M('vocal', 'level')));
     slider(s, Object.assign({ label: 'Vocal pan', min: -1, max: 1, step: 0.02, def: 0, fmt: v => Math.abs(v) < 0.01 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100) }, M('vocal', 'pan')));
     slider(s, Object.assign({ label: 'Beat', min: -40, max: 6, step: 0.5, def: -4, fmt: dB }, M('beat', 'level')));
-    slider(s, { label: 'Vocal start', min: -4, max: 4, step: 0.005, def: 0, kind: 'offset', fmt: v => (v >= 0 ? '+' : '') + v.toFixed(3) + ' s',
-      tip: 'Slides the vocal against the beat. Positive = vocal comes in later.',
-      get: () => D.clamp(S.vStart - S.bStart, -4, 4), set: v => { if (v >= 0) { S.vStart = v; S.bStart = 0; } else { S.vStart = 0; S.bStart = -v; } } });
+    // vocal against beat: typed in seconds, nudged in 10 ms steps
+    {
+      const row = el('label', 'ctl'), inp = el('input', 'num'), nud = el('span', 'rowb');
+      row.title = 'Slides the vocal against the beat. Positive = the vocal comes in later.';
+      inp.type = 'number'; inp.step = '0.01';
+      const setOff = v => { if (v >= 0) { S.vStart = v; S.bStart = 0; } else { S.vStart = 0; S.bStart = -v; } };
+      const sync = () => { inp.value = (S.vStart - S.bStart).toFixed(3); };
+      inp.addEventListener('change', () => { setOff(parseFloat(inp.value) || 0); sync(); changed('offset'); commit(); });
+      [['−', -0.01], ['+', 0.01]].forEach(([t, d]) => { const b = el('button', 'btn sm icon', t); b.type = 'button'; b.title = (d > 0 ? 'Later' : 'Earlier') + ' by 10 ms'; b.addEventListener('click', e => { e.preventDefault(); setOff(S.vStart - S.bStart + d); sync(); changed('offset'); commit(); }); nud.append(b); });
+      const wrap = el('span', 'rowb'); wrap.append(inp, nud);
+      row.append(el('span', 'n', 'Vocal start'), wrap, el('span', 'v', 's')); s.append(row); syncers.push(sync);
+    }
+    {
+      const row = el('label', 'ctl'), inp = el('input', 'num');
+      row.title = 'Tempo read from the beat. Used by the tempo-locked delay. Correct it here if it was read wrong (half / double time).';
+      inp.type = 'number'; inp.step = '0.1'; inp.min = '40'; inp.max = '240';
+      const sync = () => { inp.disabled = !S.beat; inp.value = S.beat && S.beat.bpm ? S.beat.bpm : ''; };
+      inp.addEventListener('change', () => { if (S.beat) { S.beat.bpm = D.clamp(parseFloat(inp.value) || 0, 40, 240); S.bpmUser = S.beat.bpm; applyMix(); } sync(); });
+      row.append(el('span', 'n', 'Beat tempo'), inp, el('span', 'v', 'BPM')); s.append(row); syncers.push(sync);
+    }
     slider(s, Object.assign({ label: 'Input trim', min: -12, max: 12, step: 0.5, def: 0, fmt: dB,
       tip: 'The take is levelled automatically before the chain; this is a manual trim on top.' }, M('input', 'gain')));
     slider(s, Object.assign({ label: 'Master', min: -24, max: 6, step: 0.5, def: 0, fmt: dB }, M('master', 'level')));
@@ -953,7 +967,7 @@
     const t = e.target, typing = t && (t.tagName === 'SELECT' || (t.tagName === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox'));
     if (typing) return;
     const mod = e.ctrlKey || e.metaKey, k = e.key;
-    if (k === ' ') { e.preventDefault(); S.play.playing ? pause() : play(); }
+    if (k === ' ') { e.preventDefault(); if (t && t.blur && t.tagName === 'BUTTON') t.blur(); S.play.playing ? pause() : play(); }
     else if (mod && k.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (mod && k.toLowerCase() === 'y') { e.preventDefault(); redo(); }
     else if (mod && k.toLowerCase() === 'a') { e.preventDefault(); S.notes.forEach(n => S.sel.add(n.id)); renderNotePanel(); editor.draw(); }
@@ -975,6 +989,8 @@
     else if (k === '+' || k === '=') editor.zoom(1.4);
     else if (k === '-') editor.zoom(1 / 1.4);
   });
+  // Space is the transport everywhere: stop it from also pressing whatever button has focus
+  document.addEventListener('keyup', e => { if (e.key === ' ' && e.target && e.target.tagName === 'BUTTON') e.preventDefault(); });
   window.addEventListener('beforeunload', () => { if (S.last) put('state', S.last); });
 
   applyStyle('pop', true);

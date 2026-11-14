@@ -8,6 +8,12 @@ frame by frame with the GPU, at 720×1280 or 1080×1920.
 
 No build step, no server, no dependencies. Open `index.html` in Chrome or Edge.
 
+## Machine Studio
+
+`studio/` holds a second tool built the same way: a vocal tuner and mini-DAW (auto-tune with a note
+editor, a vocal mix chain, doubles and harmonies, WAV export). Open `studio/index.html`. See
+[`studio/README.md`](studio/README.md).
+
 ## How it works
 
 1. **Analysis** (`js/analysis.js`): offline FFT at 100 frames/s → band energies,

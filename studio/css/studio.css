@@ -101,7 +101,9 @@ input[type=range]:hover::-webkit-slider-thumb{background:var(--hot)}
 .status .work::after{content:'  · rendering…';color:var(--lime)}
 .status{display:flex;justify-content:space-between;gap:16px;padding:5px 12px;background:var(--panel);border-top:1px solid var(--line);font:11px var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden}
 .status .hint{color:var(--dim);overflow:hidden;text-overflow:ellipsis}
-.num{background:var(--panel);border:1px solid var(--line2);padding:4px 6px;width:74px;font:500 12px var(--mono);border-radius:3px}
+.num{background:var(--panel);border:1px solid var(--line2);padding:4px 6px;width:78px;font:500 12px var(--mono);border-radius:3px}
+.ctl .rowb{flex-wrap:nowrap;gap:4px}
+.ctl .btn.icon{min-width:26px;padding:3px 0}
 
 @media (max-width:900px){
   body{overflow:auto}

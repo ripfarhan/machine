@@ -229,18 +229,22 @@
       }
       const n = env.length; if (n < 400) return 0;
       let mean = 0; for (const v of env) mean += v; mean /= n;
-      const fps = r / hop; let best = 0, bestBpm = 0;
-      for (let bpm = 70; bpm <= 180; bpm += 0.25) {
+      const fps = r / hop;
+      const score = bpm => {
         const lag = 60 / bpm * fps; let acc = 0;
         for (const mult of [1, 2, 4]) {
           const L = lag * mult, li = Math.floor(L), fr = L - li; let a = 0;
           for (let i = 0; i + li + 1 < n; i++) a += (env[i] - mean) * ((env[i + li] - mean) * (1 - fr) + (env[i + li + 1] - mean) * fr);
           acc += a / (n - li) / mult;
         }
-        const pref = Math.exp(-0.5 * Math.pow(Math.log2(bpm / 120) / 0.9, 2));   // mild pull to mid tempos
-        if (acc * pref > best) { best = acc * pref; bestBpm = bpm; }
-      }
-      return Math.round(bestBpm * 2) / 2;
+        return acc * Math.exp(-0.5 * Math.pow(Math.log2(bpm / 120) / 0.9, 2));   // mild pull to mid tempos
+      };
+      let best = 0, bestBpm = 0;
+      for (let bpm = 70; bpm <= 180; bpm += 0.5) { const v = score(bpm); if (v > best) { best = v; bestBpm = bpm; } }
+      const coarse = bestBpm;
+      for (let bpm = coarse - 0.5; bpm <= coarse + 0.5; bpm += 0.05) { const v = score(bpm); if (v > best) { best = v; bestBpm = bpm; } }
+      // most beats are made at a whole-number tempo
+      return Math.abs(bestBpm - Math.round(bestBpm)) < 0.3 ? Math.round(bestBpm) : Math.round(bestBpm * 10) / 10;
     };
 
     // ---------- WAV ----------

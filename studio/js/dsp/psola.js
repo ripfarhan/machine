@@ -127,24 +127,40 @@
         if (i < 0) return arr[0]; if (i + 1 >= frames) return arr[frames - 1];
         const fr = fi - i; return arr[i] * (1 - fr) + arr[i + 1] * fr;
       };
-      // one grain: analysis mark i, written around output time t with weight g
+      // one grain: analysis mark i, written around output time t with weight g.
+      // The read position advances in whole 1/PHASES steps (fixed point) and the Hann window is
+      // stepped with a two-term cosine recurrence, so the inner loop is just the 16-tap interpolation.
       const grain = (i, t, f, g, tab) => {
         const L = i > 0 ? marks[i] - marks[i - 1] : marks[1] - marks[0];
         const R = i + 1 < K ? marks[i + 1] - marks[i] : L;
-        const n0 = Math.ceil(t - L / f), n1 = Math.floor(t + R / f), mi = marks[i];
-        const piL = Math.PI / L, piR = Math.PI / R;
-        for (let nn = n0; nn <= n1; nn++) {
-          const u = (nn - t) * f;
-          const w = g * (u < 0 ? 0.5 + 0.5 * Math.cos(u * piL) : 0.5 + 0.5 * Math.cos(u * piR));
-          const pos = mi + u; let ip = Math.floor(pos), ph = Math.round((pos - ip) * PHASES);
-          if (ph === PHASES) { ph = 0; ip++; }
-          let s;
-          if (ph === 0 && f === 1) s = xp[ip + PAD];
-          else {
-            const tb = ph * TAPS, xb = ip + PAD - (HALF - 1);
-            s = 0; for (let k = 0; k < TAPS; k++) s += xp[xb + k] * tab[tb + k];
+        const stepQ = Math.max(1, Math.round(f * PHASES)), fq = stepQ / PHASES;
+        const stepI = Math.floor(stepQ / PHASES), stepP = stepQ - stepI * PHASES;
+        const n0 = Math.ceil(t - L / fq), n1 = Math.floor(t + R / fq);
+        const pos0 = marks[i] + (n0 - t) * fq;
+        let ip = Math.floor(pos0), ph = Math.round((pos0 - ip) * PHASES);
+        if (ph === PHASES) { ph = 0; ip++; }
+        let xb = ip + PAD - (HALF - 1), o = n0 - lo;
+        const nL = Math.min(n1, Math.ceil(t) - 1), copy = ph === 0 && stepP === 0 && stepI === 1;
+        for (let half = 0; half < 2; half++) {
+          const from = half ? nL + 1 : n0, to = half ? n1 : nL, pi = fq * Math.PI / (half ? R : L);
+          if (to < from) continue;
+          const a0 = (from - t) * pi, k2 = 2 * Math.cos(pi);
+          let c0 = Math.cos(a0), c1 = Math.cos(a0 + pi);
+          if (copy) {
+            for (let nn = from; nn <= to; nn++) {
+              const w = g * (0.5 + 0.5 * c0);
+              y[o] += w * xp[xb + HALF - 1]; ws[o] += w; o++; xb++;
+              const c2 = k2 * c1 - c0; c0 = c1; c1 = c2;
+            }
+          } else {
+            for (let nn = from; nn <= to; nn++) {
+              const w = g * (0.5 + 0.5 * c0), tb = ph * TAPS;
+              let sm = 0; for (let k = 0; k < TAPS; k++) sm += xp[xb + k] * tab[tb + k];
+              y[o] += w * sm; ws[o] += w; o++;
+              xb += stepI; ph += stepP; if (ph >= PHASES) { ph -= PHASES; xb++; }
+              const c2 = k2 * c1 - c0; c0 = c1; c1 = c2;
+            }
           }
-          y[nn - lo] += w * s; ws[nn - lo] += w;
         }
       };
       let t = marks[0], i = 0;
@@ -156,7 +172,7 @@
         const tab = sincTable(f > 1 ? 1 / f : 1);
         // blend the two nearest grains: repeating or skipping whole grains is what makes big shifts sound rough
         let al = i + 1 < K ? (t - marks[i]) / R : 0;
-        if (al < 1e-7) al = 0; else if (al > 1 - 1e-7) al = 1;
+        if (al < 0.03) al = 0; else if (al > 0.97) al = 1;       // close enough to one grain: skip the blend
         if (al < 1) grain(i, t, f, 1 - al, tab);
         if (al > 0) grain(i + 1, t, f, al, tab);
         t += Math.max(1, R / r);
