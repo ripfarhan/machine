@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Machine Studio — Vocal Tune</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/studio.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><b>MACHINE</b><span>STUDIO</span></div>
+
+  <div class="grp">
+    <button class="btn" id="btnVocal" title="Load a vocal recording (wav, mp3, m4a, flac, ogg)">Load vocal</button>
+    <button class="btn rec" id="btnRec" title="Record a vocal with your microphone. If a beat is loaded it plays while you record — use headphones.">● Rec</button>
+    <button class="btn" id="btnBeat" title="Load a beat to sing over and mix against">Load beat</button>
+    <input type="file" id="fileVocal" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.aif,.aiff" hidden>
+    <input type="file" id="fileBeat" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.aif,.aiff" hidden>
+  </div>
+
+  <div class="grp transport">
+    <button class="btn icon" id="btnStart" title="Back to start (Home)">⏮</button>
+    <button class="btn icon play" id="btnPlay" title="Play / pause (Space)">▶</button>
+    <button class="btn icon" id="btnLoop" title="Loop the selected notes or the dragged ruler range (L)">⟲</button>
+    <span class="time" id="time">0:00.0 / 0:00.0</span>
+  </div>
+
+  <div class="grp">
+    <label class="lbl" for="selKey">Key</label>
+    <select id="selKey" title="Root note of the song"></select>
+    <select id="selScale" title="Scale the vocal is pulled to"></select>
+    <button class="btn sm" id="btnAutoKey" title="Detect the key again from the vocal (or from the beat if one is loaded)">Auto</button>
+  </div>
+
+  <div class="grp">
+    <label class="lbl" for="selStyle">Style</label>
+    <select id="selStyle" title="One-click starting points: tuning feel + mix + stacks"></select>
+  </div>
+
+  <div class="grp right">
+    <button class="btn sm" id="btnAB" title="Hear the untouched recording (B)">Original</button>
+    <button class="btn icon sm" id="btnUndo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="btn icon sm" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
+    <div class="meter" title="Output level"><i id="meterL"></i><i id="meterR"></i></div>
+    <div class="menu">
+      <button class="btn primary" id="btnExport">Export ▾</button>
+      <div class="pop" id="popExport" hidden>
+        <button data-x="mix">Full mix (vocal + FX + beat)</button>
+        <button data-x="vocal">Vocal with FX</button>
+        <button data-x="dry">Tuned vocal, dry (for another DAW)</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="stage" id="stage">
+    <canvas id="ed" tabindex="0" aria-label="Pitch editor"></canvas>
+    <div class="edtools">
+      <button class="btn sm icon" id="zoomOut" title="Zoom out">−</button>
+      <button class="btn sm icon" id="zoomIn" title="Zoom in">+</button>
+      <button class="btn sm" id="zoomFit" title="Show the whole take">Fit</button>
+      <span class="legend"><i class="lg orig"></i>sung <i class="lg tuned"></i>tuned <i class="lg note"></i>note</span>
+    </div>
+    <div class="empty" id="empty">
+      <h1>Drop a vocal here</h1>
+      <p>It is read, the key is found, every note is pulled into tune, and a vocal chain is set up. Then tweak anything.</p>
+      <div class="row">
+        <button class="btn primary" id="emptyLoad">Choose a file</button>
+        <button class="btn rec" id="emptyRec">● Record</button>
+        <button class="btn" id="emptyDemo" title="A synthetic singer, deliberately out of tune, to try the tools on">Try the demo take</button>
+      </div>
+      <p class="fine">wav · mp3 · m4a · flac · ogg &nbsp;—&nbsp; everything runs in this browser tab, nothing is uploaded.</p>
+    </div>
+    <div class="busy" id="busy" hidden><div class="bbox"><span id="busyText">Working…</span><div class="pbar"><i id="busyBar"></i></div></div></div>
+    <div class="recbox" id="recbox" hidden>
+      <span class="dot"></span><span id="recTime">0:00.0</span>
+      <div class="meter wide"><i id="recMeter"></i></div>
+      <button class="btn primary" id="recStop">Stop &amp; tune</button>
+      <button class="btn sm" id="recCancel">Cancel</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <nav class="tabs" id="tabs">
+      <button data-tab="tune" class="on">Tune</button>
+      <button data-tab="note">Notes</button>
+      <button data-tab="mix">Mix</button>
+      <button data-tab="stack">Stack</button>
+    </nav>
+    <div class="tab on" id="tab-tune"></div>
+    <div class="tab" id="tab-note"></div>
+    <div class="tab" id="tab-mix"></div>
+    <div class="tab" id="tab-stack"></div>
+  </aside>
+</main>
+
+<footer class="status"><span id="status">Ready.</span><span id="hint" class="hint">Space play · drag a note to re-pitch · double-click to split · M merge · Del tune off · R reset · Ctrl+wheel zoom</span></footer>
+
+<script src="js/dsp/core.js"></script>
+<script src="js/dsp/pitch.js"></script>
+<script src="js/dsp/tune.js"></script>
+<script src="js/dsp/psola.js"></script>
+<script src="js/dsp/synth.js"></script>
+<script src="js/dsp/index.js"></script>
+<script src="js/mix.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
